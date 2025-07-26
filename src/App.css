@@ -1,0 +1,35 @@
+
+html, body, #root, .App {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #111;
+  color: #fff;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1200px) {
+  html, body, #root, .App {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 900px) {
+  html, body, #root, .App {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  html, body, #root, .App {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 500px) {
+  html, body, #root, .App {
+    font-size: 12px;
+  }
+}
