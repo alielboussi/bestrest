@@ -6,10 +6,7 @@
   color: white;
   padding: 30px;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
   box-sizing: border-box;
-  border-radius: 12px;
   max-width: 98vw;
   margin: 0 auto;
 }
@@ -132,12 +129,27 @@
 }
 .delete-btn:hover { background-color: #b71c1c; }
 
-.locations-footer {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-  margin-top: auto;
-  padding-top: 20px;
+
+
+.back-dashboard-btn {
+  position: fixed;
+  right: 2.5rem;
+  bottom: 2.5rem;
+  z-index: 1000;
+  background: #00b4d8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.7rem 2.2rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 12px rgba(0,180,216,0.18);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.back-dashboard-btn:hover {
+  background: #0090a8 !important;
+  box-shadow: 0 4px 18px rgba(0,180,216,0.28);
 }
 
 

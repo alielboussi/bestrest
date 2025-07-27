@@ -1,4 +1,25 @@
 
+.back-dashboard-btn {
+  position: fixed;
+  right: 2.5rem;
+  bottom: 2.5rem;
+  z-index: 1000;
+  background: #00b4d8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.7rem 2.2rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 12px rgba(0,180,216,0.18);
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.back-dashboard-btn:hover {
+  background: #0090a8 !important;
+  box-shadow: 0 4px 18px rgba(0,180,216,0.28);
+}
+
 .categories-page-container {
   font-family: Arial, sans-serif;
   background-color: #111;

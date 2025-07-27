@@ -94,74 +94,81 @@ const Locations = () => {
   };
 
   return (
-    <div className="locations-page-container">
-      <h1 className="locations-title">Locations</h1>
-      <form className="location-form" onSubmit={handleSubmit}>
-        <input
-          name="name"
-          type="text"
-          placeholder="Location Name"
-          value={form.name}
-          onChange={handleChange}
-          required
-        />
-        <input
-          name="address"
-          type="text"
-          placeholder="Address"
-          value={form.address}
-          onChange={handleChange}
-        />
-        <input
-          name="city"
-          type="text"
-          placeholder="City"
-          value={form.city}
-          onChange={handleChange}
-        />
-        <button type="submit" disabled={saving} className="save-btn">
-          {editingId ? 'Update' : 'Add'}
-        </button>
-        {editingId && (
-          <button type="button" onClick={handleCancelEdit} className="cancel-btn">Cancel</button>
-        )}
-      </form>
-      {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
-      <div className="locations-table-wrapper">
-        <table className="locations-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Address</th>
-              <th>City</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="4">Loading...</td></tr>
-            ) : locations.length === 0 ? (
-              <tr><td colSpan="4">No locations found.</td></tr>
-            ) : (
-              locations.map((location) => (
-                <tr key={location.id} className={editingId === location.id ? 'editing-row' : ''}>
-                  <td>{location.name}</td>
-                  <td>{location.address}</td>
-                  <td>{location.city}</td>
-                  <td>
-                    <button className="edit-btn" onClick={() => handleEdit(location)} disabled={saving}>Edit</button>
-                    <button className="delete-btn" onClick={() => handleDelete(location.id)} disabled={saving}>Delete</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+    <>
+      <div className="locations-page-container">
+        <h1 className="locations-title">Locations</h1>
+        <form className="location-form" onSubmit={handleSubmit}>
+          <input
+            name="name"
+            type="text"
+            placeholder="Location Name"
+            value={form.name}
+            onChange={handleChange}
+            required
+          />
+          <input
+            name="address"
+            type="text"
+            placeholder="Address"
+            value={form.address}
+            onChange={handleChange}
+          />
+          <input
+            name="city"
+            type="text"
+            placeholder="City"
+            value={form.city}
+            onChange={handleChange}
+          />
+          <button type="submit" disabled={saving} className="save-btn">
+            {editingId ? 'Update' : 'Add'}
+          </button>
+          {editingId && (
+            <button type="button" onClick={handleCancelEdit} className="cancel-btn">Cancel</button>
+          )}
+        </form>
+        {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
+        <div className="locations-table-wrapper">
+          <table className="locations-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Address</th>
+                <th>City</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="4">Loading...</td></tr>
+              ) : locations.length === 0 ? (
+                <tr><td colSpan="4">No locations found.</td></tr>
+              ) : (
+                locations.map((location) => (
+                  <tr key={location.id} className={editingId === location.id ? 'editing-row' : ''}>
+                    <td>{location.name}</td>
+                    <td>{location.address}</td>
+                    <td>{location.city}</td>
+                    <td>
+                      <button className="edit-btn" onClick={() => handleEdit(location)} disabled={saving}>Edit</button>
+                      <button className="delete-btn" onClick={() => handleDelete(location.id)} disabled={saving}>Delete</button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <footer className="locations-footer">
-        <button type="button" className="back-dashboard-btn" onClick={handleBack}>Back to Dashboard</button>
-      </footer>
-    </div>
+      <button
+        type="button"
+        className="back-dashboard-btn"
+        onClick={handleBack}
+        aria-label="Back to Dashboard"
+      >
+        <span style={{marginRight: 8}}>&larr;</span>Back to Dashboard
+      </button>
+    </>
   );
 };
 
