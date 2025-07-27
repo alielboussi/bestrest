@@ -178,53 +178,65 @@ const Transfer = () => {
       <h1>{id ? 'Edit Transfer' : 'Stock Transfer'}</h1>
       <div className="transfer-form">
         {loading ? <div>Loading...</div> : <>
-        <label>Date of Transfer:</label>
-        <input type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} required />
-        <label>From Location:</label>
-        <select value={fromLocation} onChange={e => setFromLocation(e.target.value)} required disabled={!!id}>
-          <option value="">-- Select --</option>
-          {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-        </select>
-        <label>To Location:</label>
-        <select value={toLocation} onChange={e => setToLocation(e.target.value)} required>
-          <option value="">-- Select --</option>
-          {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-        </select>
-        <label>Delivery #:</label>
-        <input type="text" value={deliveryNumber} onChange={e => setDeliveryNumber(e.target.value)} />
-        <label>Search Products:</label>
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, SKU, or Price" />
-        <table className="transfer-table">
-          <thead>
-            <tr><th>Product</th><th>SKU</th><th>Price</th><th>Qty</th></tr>
-          </thead>
-          <tbody>
-            {filteredProducts.map(p => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>{p.sku}</td>
-                <td>{p.price}</td>
-                <td>
-                  <input
-                    type="number"
-                    min="0"
-                    value={selectedProducts.find(r => r.product_id === p.id)?.qty || ''}
-                    onChange={e => handleQtyChange(p.id, e.target.value)}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={handleSubmit} disabled={saving}>{id ? 'Save Changes' : 'Process Transfer'}</button>
-        {error && <div className="transfer-error">{error}</div>}
-        <button
-          type="button"
-          className="back-dashboard-btn"
-          onClick={() => navigate('/dashboard')}
-        >
-          ← Back to Dashboard
-        </button>
+          <div className="transfer-form-row">
+            <label>Date of Transfer:</label>
+            <input type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} required />
+          </div>
+          <div className="transfer-form-row">
+            <label>From Location:</label>
+            <select value={fromLocation} onChange={e => setFromLocation(e.target.value)} required disabled={!!id}>
+              <option value="">-- Select --</option>
+              {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+            </select>
+          </div>
+          <div className="transfer-form-row">
+            <label>To Location:</label>
+            <select value={toLocation} onChange={e => setToLocation(e.target.value)} required>
+              <option value="">-- Select --</option>
+              {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+            </select>
+          </div>
+          <div className="transfer-form-row">
+            <label>Delivery #:</label>
+            <input type="text" value={deliveryNumber} onChange={e => setDeliveryNumber(e.target.value)} />
+          </div>
+          <div className="transfer-form-row">
+            <label>Search Products:</label>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, SKU, or Price" />
+          </div>
+          <div className="transfer-table-wrapper">
+            <table className="transfer-table">
+              <thead>
+                <tr><th>Product</th><th>SKU</th><th>Price</th><th>Qty</th></tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map(p => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{p.sku}</td>
+                    <td>{p.price}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        value={selectedProducts.find(r => r.product_id === p.id)?.qty || ''}
+                        onChange={e => handleQtyChange(p.id, e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button className="transfer-submit-btn" onClick={handleSubmit} disabled={saving}>{id ? 'Save Changes' : 'Process Transfer'}</button>
+          {error && <div className="transfer-error">{error}</div>}
+          <button
+            type="button"
+            className="back-dashboard-btn"
+            onClick={() => navigate('/dashboard')}
+          >
+            ← Back to Dashboard
+          </button>
         </>}
       </div>
     </div>
