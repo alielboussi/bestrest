@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { FaCog, FaUsers } from 'react-icons/fa'; // Import React Icons
-import LoginPage from './LoginPage'; // Login Page Component
-import Dashboard from './Dashboard'; // Correctly import Dashboard Component
-import CompanySettings from './CompanySettings'; // Import Company Settings page
-import Customers from './Customers'; // Import Customers page
-import Locations from './Locations'; // Import Locations page
+import UserAccessControl from './UserAccessControl';
+import LaybyManagement from "./LaybyManagement";
+import LoginPage from './LoginPage';
+import Dashboard from './Dashboard';
+import POS from './POS';
+import CompanySettings from './CompanySettings';
+import Customers from './Customers';
+import Locations from './Locations';
 import Products from './Products';
 import Categories from './Categories';
 import UnitsOfMeasure from './UnitsOfMeasure';
@@ -17,6 +19,11 @@ import supabase from './supabase';
 import VarianceReport from './VarianceReport';
 import StockViewer from './StockViewer';
 import Sets from "./Sets";
+import SalesReport from './SalesReport';
+import StockReport from './StockReport';
+import LaybyReport from './LaybyReport';
+import StocktakeReport from './StocktakeReport';
+import FactoryResetAziliButton from './FactoryResetAziliButton';
 
 // Wrapper to extract query params for VarianceReport
 function VarianceReportWrapper() {
@@ -31,167 +38,112 @@ function VarianceReportWrapper() {
 function App() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true); // Manage loading state
-  const [error, setError] = useState(''); // For managing errors
-  const navigate = useNavigate(); // For navigating after login
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [permissions, setPermissions] = useState({});
+  const [permsLoading, setPermsLoading] = useState(true);
+  const navigate = useNavigate();
 
-
-  // Check if the user is logged in on mount
   useEffect(() => {
-    console.log("useEffect triggered: Checking for stored user data...");
-    const loggedInUser = localStorage.getItem('user'); // Checking localStorage for user session
-    const role = localStorage.getItem('userRole'); // Fetch role from localStorage
-    console.log(`LoggedInUser: ${loggedInUser}, UserRole: ${role}`);
-
+    const loggedInUser = localStorage.getItem('user');
+    const role = localStorage.getItem('userRole');
     if (loggedInUser) {
-      setUser(JSON.parse(loggedInUser)); // Parse and set user
-      setUserRole(role); // Set the user role
-      console.log("User found in localStorage. Setting state.");
-    } else {
-      console.log("No user data found in localStorage.");
+      setUser(JSON.parse(loggedInUser));
+      setUserRole(role);
     }
-
-    setLoading(false); // Stop loading once session check is complete
+    setLoading(false);
   }, []);
 
-  // If data is still loading, show loading screen
-  if (loading) {
-    console.log("Loading screen active...");
+  // Fetch permissions for the logged-in user
+  useEffect(() => {
+    async function fetchPerms() {
+      if (!user) return;
+      // List of modules/pages
+      const MODULES = [
+        'Products', 'Categories', 'Customers', 'Sales', 'Laybys', 'Stocktake', 'Stock Transfers', 'Reports', 'Company Settings', 'Variance Report', 'Sets', 'Units of Measure', 'Stock Viewer', 'Transfer List', 'Closing Stock', 'Locations'
+      ];
+      // Get user role
+      const { data: userRoleData } = await supabase.from('user_roles').select('role_id').eq('user_id', user.id).single();
+      const roleId = userRoleData?.role_id;
+      let perms = {};
+      if (roleId) {
+        const { data: permsData } = await supabase.from('permissions').select('*').eq('role_id', roleId);
+        for (const mod of MODULES) {
+          const found = permsData?.find(p => p.module === mod);
+          perms[mod] = found ? !!found.can_view : false;
+        }
+      }
+      setPermissions(perms);
+      setPermsLoading(false);
+    }
+    fetchPerms();
+  }, [user]);
+
+  if (loading || permsLoading) {
     return <div>Loading...</div>;
   }
 
-  // Handle login after form submission
-  const handleLogin = async (email, password) => {
-    console.log(`Attempting login with email: ${email}`);
+  // Helper to check permission for a module
+  const canView = (module) => {
+    if (user && user.role === 'admin') return true;
+    return permissions[module];
+  };
 
+  // ...existing code...
+  // handleLogin must be defined before use
+  const handleLogin = async (email, password) => {
     try {
-      // Query the 'users' table for the entered email and password
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('email', email) // Check if email matches
-        .eq('password', password) // Check if password matches
-        .single(); // Ensure it returns only one user record
-
-      // Debug logging for Supabase response
-      console.log("Supabase query result:", data);
-      console.log("Supabase query error:", error);
-
-      // Handle error or no matching data
+        .eq('email', email)
+        .eq('password', password)
+        .single();
       if (error || !data) {
-        console.error("Login Error:", error); // Log the error for debugging
         setError('Invalid credentials, please try again.');
         return;
       }
-
-      // If login is successful, save user data and role to localStorage
-      console.log("Login successful. Storing user data in localStorage.");
       localStorage.setItem('user', JSON.stringify(data));
       localStorage.setItem('userRole', data.role);
       setUser(data);
       setUserRole(data.role);
-
-      console.log("User data and role saved to localStorage. Navigating to dashboard.");
-      // Redirect to dashboard after successful login
       navigate('/dashboard');
     } catch (err) {
-      console.error("Unexpected Error:", err); // Log unexpected errors
       setError('An unexpected error occurred.');
     }
   };
 
-  console.log("App rendering... Current User:", user);
-
   return (
     <div className="App">
       <Routes>
-        {/* Login Page Route */}
         <Route path="/login" element={<LoginPage handleLogin={handleLogin} />} />
-
-        {/* Dashboard Route for logged-in users */}
-        <Route
-          path="/dashboard"
-          element={user ? (
-            <Dashboard user={user} userRole={userRole} />
-          ) : (
-            <Navigate to="/login" />
-          )}
-        />
-
-        {/* Company Settings Route */}
-        <Route
-          path="/company-settings"
-          element={user ? <CompanySettings /> : <Navigate to="/login" />} 
-        />
-
-        {/* Customers Route */}
-        <Route
-          path="/customers"
-          element={user ? <Customers /> : <Navigate to="/login" />}
-        />
-
-        {/* Locations Route */}
-        <Route
-          path="/locations"
-          element={user ? <Locations /> : <Navigate to="/login" />}
-        />
-
-        {/* Categories Route */}
-        <Route
-          path="/categories"
-          element={user ? <Categories /> : <Navigate to="/login" />}
-        />
-
-        {/* Products Route */}
-        <Route
-          path="/products"
-          element={user ? <Products /> : <Navigate to="/login" />}
-        />
-
-        {/* Units of Measure Route */}
-        <Route
-          path="/units-of-measure"
-          element={user ? <UnitsOfMeasure /> : <Navigate to="/login" />}
-        />
-
-        {/* Opening Stock Route */}
-        <Route
-          path="/opening-stock"
-          element={user ? <OpeningStock /> : <Navigate to="/login" />}
-        />
-
-        {/* Closing Stock Route */}
-        <Route
-          path="/closing-stock"
-          element={user ? <ClosingStock /> : <Navigate to="/login" />}
-        />
-
-        {/* Transfer Route */}
-        <Route
-          path="/transfer"
-          element={user ? <Transfer /> : <Navigate to="/login" />}
-        />
-
-        {/* Stock Viewer Route */}
-        <Route
-          path="/stock-viewer"
-          element={user ? <StockViewer /> : <Navigate to="/login" />}
-        />
-
-        {/* Sets Route */}
-        <Route
-          path="/sets"
-          element={user ? <Sets /> : <Navigate to="/login" />}
-        />
-
-        {/* Admin Route based on userRole */}
-        {userRole === 'admin' && (
-          <Route path="/admin" element={<div>Admin Page: Accessible only by Admin</div>} />
-        )}
-
+        <Route path="/dashboard" element={user ? (<Dashboard user={user} userRole={userRole} />) : (<Navigate to="/login" />)} />
+        <Route path="/pos" element={user && canView('Sales') ? <POS /> : <Navigate to="/dashboard" />} />
+        <Route path="/layby-management" element={user && canView('Laybys') ? <LaybyManagement /> : <Navigate to="/dashboard" />} />
+        <Route path="/company-settings" element={user && canView('Company Settings') ? <CompanySettings /> : <Navigate to="/dashboard" />} />
+        <Route path="/customers" element={user && canView('Customers') ? <Customers /> : <Navigate to="/dashboard" />} />
+        <Route path="/locations" element={user && canView('Locations') ? <Locations /> : <Navigate to="/dashboard" />} />
+        <Route path="/categories" element={user && canView('Categories') ? <Categories /> : <Navigate to="/dashboard" />} />
+        <Route path="/products" element={user && canView('Products') ? <Products /> : <Navigate to="/dashboard" />} />
+        <Route path="/units-of-measure" element={user && canView('Units of Measure') ? <UnitsOfMeasure /> : <Navigate to="/dashboard" />} />
+        <Route path="/opening-stock" element={user && canView('Stocktake') ? <OpeningStock /> : <Navigate to="/dashboard" />} />
+        <Route path="/closing-stock" element={user && canView('Closing Stock') ? <ClosingStock /> : <Navigate to="/dashboard" />} />
+        <Route path="/transfer" element={user && canView('Stock Transfers') ? <Transfer /> : <Navigate to="/dashboard" />} />
+        <Route path="/stock-viewer" element={user && canView('Stock Viewer') ? <StockViewer /> : <Navigate to="/dashboard" />} />
+        <Route path="/sets" element={user && canView('Sets') ? <Sets /> : <Navigate to="/dashboard" />} />
+        {/* Reports: Only show if user has Reports view permission */}
+        <Route path="/sales-report" element={user && canView('Reports') ? <SalesReport /> : <Navigate to="/dashboard" />} />
+        <Route path="/stock-report" element={user && canView('Reports') ? <StockReport /> : <Navigate to="/dashboard" />} />
+        <Route path="/layby-report" element={user && canView('Reports') ? <LaybyReport /> : <Navigate to="/dashboard" />} />
+        <Route path="/stocktake-report" element={user && canView('Reports') ? <StocktakeReport /> : <Navigate to="/dashboard" />} />
+        {/* Variance Report: Only show if user has permission */}
+        <Route path="/variance-report" element={user && canView('Variance Report') ? <VarianceReportWrapper /> : <Navigate to="/dashboard" />} />
+        {/* User Access Control Route (admin only) */}
+        <Route path="/user-access-control" element={user && user.role === 'admin' ? <UserAccessControl /> : <Navigate to="/dashboard" />} />
         {/* Default route: Redirect to login */}
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
+      <FactoryResetAziliButton />
     </div>
   );
 }

@@ -1,19 +1,117 @@
+
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
-import { FaBox, FaChartLine, FaUsers, FaCogs, FaMapMarkerAlt, FaTags, FaFlask, FaRegEdit, FaExchangeAlt } from 'react-icons/fa'; // Import React Icons
-import './Dashboard.css'; // Import the CSS file
+import { FaBox, FaChartLine, FaUsers, FaCogs, FaMapMarkerAlt, FaTags, FaFlask, FaRegEdit, FaExchangeAlt, FaCashRegister } from 'react-icons/fa';
+import UserAccessControlBtn from './UserAccessControlBtn';
+import './Dashboard.css';
+
+// List of modules/pages and their dashboard routes
+const MODULES = [
+  { name: 'Products', route: '/products' },
+  { name: 'Categories', route: '/categories' },
+  { name: 'Customers', route: '/customers' },
+  { name: 'Sales', route: '/pos' },
+  { name: 'Laybys', route: '/layby-management' },
+  { name: 'Stocktake', route: '/opening-stock' },
+  { name: 'Stock Transfers', route: '/transfer' },
+  { name: 'Reports', route: '/sales-report' },
+  { name: 'Company Settings', route: '/company-settings' },
+  { name: 'Variance Report', route: '/variance-report' },
+  { name: 'Sets', route: '/sets' },
+  { name: 'Units of Measure', route: '/units-of-measure' },
+  { name: 'Stock Viewer', route: '/stock-viewer' },
+  { name: 'Transfer List', route: '/transfers' },
+  { name: 'Closing Stock', route: '/closing-stock' },
+];
 
 const Dashboard = ({ user }) => {
+  const [permissions, setPermissions] = useState({});
+  const [loadingPerms, setLoadingPerms] = useState(true);
+
+  // Fetch permissions for the logged-in user
+  useEffect(() => {
+    async function fetchPerms() {
+      if (!user) return;
+      // If admin, allow all
+      if (user.role === 'admin') {
+        let perms = {};
+        for (const mod of MODULES) {
+          perms[mod.name] = true;
+        }
+        setPermissions(perms);
+        setLoadingPerms(false);
+        return;
+      }
+      // Get user role
+      const { data: userRoleData } = await supabase.from('user_roles').select('role_id').eq('user_id', user.id).single();
+      const roleId = userRoleData?.role_id;
+      let perms = {};
+      if (roleId) {
+        const { data: permsData } = await supabase.from('permissions').select('*').eq('role_id', roleId);
+        for (const mod of MODULES) {
+          const found = permsData?.find(p => p.module === mod.name);
+          perms[mod.name] = found ? !!found.can_view : false;
+        }
+      }
+      setPermissions(perms);
+      setLoadingPerms(false);
+    }
+    fetchPerms();
+  }, [user]);
+  // Secret key sequence for showing the factory reset button
+  const [showReset, setShowReset] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const secret = 'azili';
+  const [typed, setTyped] = useState('');
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (showResetConfirm && e.key === 'Escape') {
+        setShowReset(false);
+        setShowResetConfirm(false);
+        setTyped('');
+        return;
+      }
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      let next = (typed + e.key).slice(-secret.length);
+      setTyped(next);
+      if (next === secret) setShowReset(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line
+  }, [typed, showResetConfirm]);
+
+  // Factory reset handler
+  async function handleFactoryReset() {
+    setShowResetConfirm(true);
+  }
+
+  async function confirmFactoryReset() {
+    // List of all tables to clear
+    const tables = [
+      'stocktakes', 'laybys', 'sales_payments', 'sales_items', 'sales', 'combo_items', 'combos', 'products', 'categories', 'locations', 'customers', 'company_settings', 'units_of_measure'
+    ];
+    for (const table of tables) {
+      await supabase.from(table).delete().neq('id', 0); // delete all rows
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    alert('App has been reset to factory state. Please refresh.');
+    window.location.reload();
+  }
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [companyLogo, setCompanyLogo] = useState('');
   const [locations, setLocations] = useState([]);
   const [locationFilter, setLocationFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [productStats, setProductStats] = useState({ qty: 0, costK: 0, cost$: 0 });
   const [lastStockDate, setLastStockDate] = useState(null);
   const [canShowVarianceReport, setCanShowVarianceReport] = useState(false);
+  const [dueTotals, setDueTotals] = useState({ K: 0, $: 0 });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,13 +131,13 @@ const Dashboard = ({ user }) => {
       setCanShowVarianceReport(!!(closingStock && closingStock.length > 0));
     }
     checkClosingStock();
-  }, [locationFilter, dateFilter]);
+  }, [locationFilter, dateFrom, dateTo]);
   // Fetch locations for filter
   useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
   }, []);
 
-  // Fetch product stats and last stocktake date when filters change
+  // Fetch product stats, last stocktake date, and due totals when filters change
   useEffect(() => {
     const fetchStats = async () => {
       let query = supabase.from('products').select('*');
@@ -64,11 +162,63 @@ const Dashboard = ({ user }) => {
       if (locationFilter) {
         stocktakeQuery = stocktakeQuery.eq('location_id', locationFilter);
       }
-      const { data: stocktakes } = await stocktakeQuery;
-      setLastStockDate(stocktakes && stocktakes[0] && stocktakes[0].ended_at ? stocktakes[0].ended_at : null);
+      // Calculate dueK and due$
+      let dueK = 0, due$ = 0;
+      let laybyQuery = supabase
+        .from('laybys')
+        .select('id, sale_id, total_amount, paid_amount, status')
+        .not('status', 'eq', 'completed');
+      // Filter laybys by date range if set
+      if (dateFrom) laybyQuery = laybyQuery.gte('created_at', dateFrom);
+      if (dateTo) laybyQuery = laybyQuery.lte('created_at', dateTo);
+      const { data: laybys } = await laybyQuery;
+      if (laybys && laybys.length) {
+        // Fetch sales for currency info
+        const saleIds = laybys.map(l => l.sale_id).filter(Boolean);
+        let salesMap = {};
+        if (saleIds.length) {
+          let salesQuery = supabase
+            .from('sales')
+            .select('id, currency, down_payment, sale_date');
+          if (dateFrom) salesQuery = salesQuery.gte('sale_date', dateFrom);
+          if (dateTo) salesQuery = salesQuery.lte('sale_date', dateTo);
+          const { data: sales } = await salesQuery.in('id', saleIds);
+          salesMap = (sales || []).reduce((acc, s) => {
+            acc[s.id] = s;
+            return acc;
+          }, {});
+        }
+        for (const layby of laybys) {
+          const sale = salesMap[layby.sale_id] || {};
+          const paid = Number(layby.paid_amount || 0) + Number(sale.down_payment || 0);
+          const outstanding = Number(layby.total_amount) - paid;
+          if (sale.currency === 'K') dueK += outstanding > 0 ? outstanding : 0;
+          if (sale.currency === '$') due$ += outstanding > 0 ? outstanding : 0;
+        }
+      }
+      setDueTotals({ K: dueK, $: due$ });
     };
     fetchStats();
-  }, [locationFilter, dateFilter]);
+  }, [locationFilter, dateFrom, dateTo]);
+
+  // Fetch total sales for the date filter
+  const [totalSales, setTotalSales] = useState(0);
+  useEffect(() => {
+    async function fetchTotalSales() {
+      let salesQuery = supabase.from('sales').select('total_amount, sale_date');
+      if (dateFrom) salesQuery = salesQuery.gte('sale_date', dateFrom);
+      if (dateTo) salesQuery = salesQuery.lte('sale_date', dateTo);
+      const { data: sales } = await salesQuery;
+      let total = 0;
+      if (sales && sales.length) {
+        for (const s of sales) {
+          total += Number(s.total_amount || 0);
+        }
+      }
+      setTotalSales(total);
+    }
+    fetchTotalSales();
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     if (user) {
@@ -99,8 +249,28 @@ const Dashboard = ({ user }) => {
     navigate('/locations');
   };
 
+  if (loadingPerms) return <div>Loading dashboard...</div>;
+
   return (
     <div className="dashboard-container">
+      {/* Secret Factory Reset Button */}
+      {showReset && !showResetConfirm && (
+        <button
+          style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, background: '#b71c1c', color: '#fff', fontWeight: 'bold', padding: '14px 28px', borderRadius: 8, border: 'none', fontSize: 18, boxShadow: '0 2px 8px #0008', cursor: 'pointer' }}
+          onClick={handleFactoryReset}
+        >
+          FACTORY RESET
+        </button>
+      )}
+      {showReset && showResetConfirm && (
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000, background: '#fff', color: '#b71c1c', fontWeight: 'bold', padding: '22px 32px', borderRadius: 10, border: '2px solid #b71c1c', fontSize: 18, boxShadow: '0 2px 12px #000a', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ marginBottom: 16, textAlign: 'center' }}>Are you absolutely sure?<br/>This will <span style={{ color: '#b71c1c', fontWeight: 'bold' }}>delete ALL data</span> and cannot be undone!</div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <button style={{ background: '#b71c1c', color: '#fff', fontWeight: 'bold', padding: '10px 22px', borderRadius: 8, border: 'none', fontSize: 17, cursor: 'pointer' }} onClick={confirmFactoryReset}>Yes, Reset</button>
+            <button style={{ background: '#888', color: '#fff', fontWeight: 'bold', padding: '10px 22px', borderRadius: 8, border: 'none', fontSize: 17, cursor: 'pointer' }} onClick={() => { setShowReset(false); setShowResetConfirm(false); setTyped(''); }}>Cancel (Esc)</button>
+          </div>
+        </div>
+      )}
       <div className="dashboard-banner">
         <span>Welcome{fullName ? `, ${fullName}` : ''}!</span>
       </div>
@@ -108,124 +278,221 @@ const Dashboard = ({ user }) => {
         <h1>Dashboard</h1>
         <button className="logout-btn" onClick={handleLogout}>Logout</button>
       </div>
-
-      {/* Filters */}
-      <div className="dashboard-filters-row">
-        <label>Location:
-          <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)}>
-            <option value="">All Locations</option>
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
-        </label>
-        <label>Date:
-          <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
-        </label>
+      {/* Filters and Company Settings - only one set */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 16 }}>
+        <button className="dashboard-page-btn gray" onClick={handleCompanySettings} style={{ marginRight: 8 }}>
+          <FaCogs size={24} style={{ marginRight: 6 }} />
+          Company Settings
+        </button>
+        <div className="dashboard-filters-row" style={{ marginBottom: 0, display: 'flex', alignItems: 'center', gap: 24, width: '100%' }}>
+          <label style={{ display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: 16, marginRight: 0 }}>
+            Location:
+            <select value={locationFilter} onChange={e => setLocationFilter(e.target.value)} style={{ marginLeft: 8, minWidth: 160, height: 44, fontSize: 15, boxSizing: 'border-box' }}>
+              <option value="">All Locations</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: 16, marginRight: 0 }}>
+            From:
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ marginLeft: 8, height: 44, fontSize: 15, minWidth: 160, boxSizing: 'border-box', width: 160 }} />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: 16, marginRight: 0 }}>
+            To:
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ marginLeft: 8, height: 44, fontSize: 15, minWidth: 160, boxSizing: 'border-box', width: 160 }} />
+          </label>
+          {/* Show User Access Control button for admin only, next to To date */}
+          {user?.role === 'admin' && (
+            <div style={{ marginLeft: 12 }}>
+              <UserAccessControlBtn />
+            </div>
+          )}
+        </div>
       </div>
-      <div className="statistics-container">
-        <div>
-          <FaBox size={40} color="#00bfff" />
-          <h2>Products Quantity</h2>
+
+      {/* Statistics with Links */}
+      <div className="statistics-container" style={{ width: '100%', margin: '0 auto', maxWidth: 1200 }}>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaBox size={28} color="#00bfff" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Products Quantity</h2>
           <p>{productStats.qty}</p>
         </div>
-        <div>
-          <FaBox size={40} color="#4CAF50" />
-          <h2>Products Total Cost (K)</h2>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaBox size={28} color="#4CAF50" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Products Total Cost (K)</h2>
           <p>{productStats.costK} K</p>
         </div>
-        <div>
-          <FaBox size={40} color="#ff4d4d" />
-          <h2>Products Total Cost ($)</h2>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaBox size={28} color="#ff4d4d" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Products Total Cost ($)</h2>
           <p>{productStats.cost$} $</p>
         </div>
-        <div>
-          <FaRegEdit size={40} color="#00b4d8" />
-          <h2>Last Stocktake</h2>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaRegEdit size={28} color="#00b4d8" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Last Stocktake</h2>
           <p>{lastStockDate ? new Date(lastStockDate).toLocaleString() : 'No stocktake yet'}</p>
         </div>
+        {/* Customer Due Totals (K & $) */}
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaCashRegister size={28} color="#00bfff" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Customer Due Total (K)</h2>
+          <p>{dueTotals.K.toLocaleString()} K</p>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaCashRegister size={28} color="#4CAF50" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Customer Due Total ($)</h2>
+          <p>{dueTotals.$.toLocaleString()} $</p>
+        </div>
+        {/* Total Sales Stat */}
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', wordBreak: 'break-word' }}>
+          <FaChartLine size={28} color="#FFD700" />
+          <h2 style={{ fontSize: 15, textAlign: 'center', margin: '6px 0 2px 0' }}>Total Sales</h2>
+          <p>{totalSales.toLocaleString()} K</p>
+        </div>
+        {/* Add more stats/links as needed from your app */}
       </div>
 
-      <div className="dashboard-pages-row">
-        <button className="dashboard-page-btn gray" onClick={handleCompanySettings}>
-          <FaCogs size={32} />
-          <span>Company Settings</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={handleCustomers}>
-          <FaUsers size={32} />
-          <span>Customers</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={handleLocations}>
-          <FaMapMarkerAlt size={32} />
-          <span>Locations</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/categories')}>
-          <FaBox size={32} />
-          <span>Categories</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/products')}>
-          <FaTags size={32} />
-          <span>Products</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/units-of-measure')}>
-          <FaFlask size={32} />
-          <span>Units of Measure</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/opening-stock')}>
-          <FaRegEdit size={32} />
-          <span>Opening Stock</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/closing-stock')}>
-          <FaRegEdit size={32} />
-          <span>Closing Stock</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/transfer')}>
-          <FaExchangeAlt size={32} />
-          <span>New Transfer</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/transfers')}>
-          <FaExchangeAlt size={32} />
-          <span>Edit Transfers</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/sets')}>
-          <FaBox size={32} />
-          <span>Create Kit/Set</span>
-        </button>
-        <button className="dashboard-page-btn gray" onClick={() => navigate('/stock-viewer')}>
-          <FaChartLine size={32} />
-          <span>Stock Viewer</span>
-        </button>
-        <button
-          className="dashboard-page-btn gray"
-          style={{ opacity: canShowVarianceReport ? 1 : 0.5, pointerEvents: canShowVarianceReport ? 'auto' : 'none' }}
-          onClick={async () => {
-            // Find the latest opening and closing stocktake IDs for the selected location
-            const { data: opening } = await supabase
-              .from('stocktakes')
-              .select('id')
-              .eq('location_id', locationFilter)
-              .eq('type', 'opening')
-              .order('started_at', { ascending: false })
-              .limit(1);
-            const { data: closing } = await supabase
-              .from('stocktakes')
-              .select('id')
-              .eq('location_id', locationFilter)
-              .eq('type', 'closing')
-              .order('ended_at', { ascending: false })
-              .limit(1);
-            if (opening && opening.length && closing && closing.length) {
-              navigate(`/variance-report?locationId=${locationFilter}&openingStockId=${opening[0].id}&closingStockId=${closing[0].id}`);
-            }
-          }}
-          disabled={!canShowVarianceReport}
-        >
-          <FaChartLine size={32} />
-          <span>Variance Report</span>
-        </button>
+      {/* Main Icon Rows - Arranged as requested */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18, marginBottom: 8 }}>
+        {/* Line 1: Example, only show buttons if user has can_view for the module */}
+        <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%' }}>
+          {permissions['Locations'] !== false && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleLocations}>
+              <FaMapMarkerAlt size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Locations</span>
+            </button>
+          )}
+          {permissions['Categories'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/categories')}>
+              <FaBox size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Categories</span>
+            </button>
+          )}
+          {permissions['Products'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/products')}>
+              <FaTags size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Products</span>
+            </button>
+          )}
+          {permissions['Sets'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sets')}>
+              <FaBox size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Sets</span>
+            </button>
+          )}
+          {permissions['Units of Measure'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/units-of-measure')}>
+              <FaFlask size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Units of Measure</span>
+            </button>
+          )}
+          {permissions['Stocktake'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/opening-stock')}>
+              <FaRegEdit size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Opening Stock</span>
+            </button>
+          )}
+          {permissions['Stock Transfers'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfer')}>
+              <FaExchangeAlt size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Stock Transfer</span>
+            </button>
+          )}
+          {permissions['Transfer List'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfers')}>
+              <FaExchangeAlt size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>New Transfers</span>
+            </button>
+          )}
+          {permissions['Closing Stock'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/closing-stock')}>
+              <FaRegEdit size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Closing Stock</span>
+            </button>
+          )}
+        </div>
+        {/* Line 2: Only show if user has can_view for the module */}
+        <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%', maxWidth: 1100, margin: '0 auto' }}>
+          {permissions['Customers'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleCustomers}>
+              <FaUsers size={32} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Customers</span>
+            </button>
+          )}
+          {permissions['Sales'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/pos')} title="Point of Sale">
+              <span style={{ fontSize: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="1.7em" height="1.7em" viewBox="0 0 24 24" fill="none"><path d="M3 19V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm2 0h14V7H5v12Zm2-8h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z" fill="#fff"/></svg>
+                <span style={{ fontSize: 13, marginTop: 2 }}>POS</span>
+              </span>
+            </button>
+          )}
+          {permissions['Laybys'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-management')} title="Layby Management">
+              <FaCashRegister size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Layby Management</span>
+            </button>
+          )}
+          {/* User Access Control Button: Only show for admins, handled elsewhere */}
+          {permissions['Reports'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sales-report')} title="Sales Report">
+              <FaChartLine size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Sales Report</span>
+            </button>
+          )}
+          {permissions['Reports'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stock-report')} title="Stock Report">
+              <FaBox size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Stock Report</span>
+            </button>
+          )}
+          {permissions['Reports'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-report')} title="Layby Report">
+              <FaCashRegister size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Layby Report</span>
+            </button>
+          )}
+          {permissions['Reports'] && (
+            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stocktake-report')} title="Stocktake Report">
+              <FaRegEdit size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Stocktake Report</span>
+            </button>
+          )}
+          {permissions['Variance Report'] && (
+            <button
+              className="dashboard-page-btn gray"
+              style={{ width: 130, height: 70, opacity: canShowVarianceReport ? 1 : 0.5, pointerEvents: canShowVarianceReport ? 'auto' : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }}
+              onClick={async () => {
+                const { data: opening } = await supabase
+                  .from('stocktakes')
+                  .select('id')
+                  .eq('location_id', locationFilter)
+                  .eq('type', 'opening')
+                  .order('started_at', { ascending: false })
+                  .limit(1);
+                const { data: closing } = await supabase
+                  .from('stocktakes')
+                  .select('id')
+                  .eq('location_id', locationFilter)
+                  .eq('type', 'closing')
+                  .order('ended_at', { ascending: false })
+                  .limit(1);
+                if (opening && opening.length && closing && closing.length) {
+                  navigate(`/variance-report?locationId=${locationFilter}&openingStockId=${opening[0].id}&closingStockId=${closing[0].id}`);
+                }
+              }}
+              disabled={!canShowVarianceReport}
+              title="Variance Report"
+            >
+              <FaChartLine size={22} style={{ marginBottom: 2 }} />
+              <span style={{ fontSize: 13, marginTop: 2 }}>Variance Report</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default Dashboard;

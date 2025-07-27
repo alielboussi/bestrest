@@ -1,0 +1,9 @@
+/* UserAccessControlBtn.css - minimal for button consistency */
+.dashboard-page-btn.gray {
+  background: #444;
+  color: #fff;
+}
+.dashboard-page-btn.gray:hover {
+  background: #222;
+  color: #fff;
+}
