@@ -194,7 +194,7 @@ function Products() {
   });
 
   return (
-    <div className="products-container">
+    <div className="products-container" style={{maxWidth: '100vw', maxHeight: '100vh', overflow: 'auto', padding: '0 1vw'}}>
       <button
         className="back-to-dashboard-btn"
         style={{
@@ -290,7 +290,7 @@ function Products() {
         onChange={e => setSearch(e.target.value)}
         style={{marginBottom: '1.5rem'}}
       />
-      <div className="products-list" style={{overflowX: 'auto', width: '100%'}}>
+      <div className="products-list" style={{overflowX: 'auto', overflowY: 'auto', width: '100%', maxHeight: '60vh'}}>
         {loading ? (
           <div>Loading...</div>
         ) : filteredProducts.length === 0 ? (

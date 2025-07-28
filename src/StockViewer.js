@@ -53,7 +53,7 @@ export default function StockViewer() {
   const remainingProducts = products.filter(p => (productStock[p.id] || 0) > 0);
 
   return (
-    <div className="stock-viewer-container">
+    <div className="stock-viewer-container" style={{maxWidth: '100vw', maxHeight: '100vh', overflow: 'auto', padding: '0 1vw'}}>
       <button
         className="back-to-dashboard-btn"
         style={{
@@ -76,7 +76,7 @@ export default function StockViewer() {
       >Back to Dashboard</button>
       <h2>Stock Viewer</h2>
       <h3>Kits / Sets</h3>
-      <ul className="stock-viewer-list">
+      <ul className="stock-viewer-list" style={{overflowX: 'auto', overflowY: 'auto', maxHeight: '40vh'}}>
         {kits.filter(k => k.quantity > 0).map(kit => (
           <li className="kit" key={kit.id}>
             <b>{kit.combo_name}</b> — Qty: {kit.quantity} — Price: {kit.promotional_price || kit.standard_price}

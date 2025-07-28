@@ -29,7 +29,7 @@ export default function Sets() {
   // Fetch inventory for selected location
   useEffect(() => {
     if (selectedLocation) {
-      supabase.from("inventory").select("product_id, quantity, location_id").eq("location_id", selectedLocation).then(({ data }) => setInventory(data || []));
+      supabase.from("inventory").select("product_id, quantity, location").eq("location", selectedLocation).then(({ data }) => setInventory(data || []));
     } else {
       setInventory([]);
     }
@@ -106,7 +106,7 @@ export default function Sets() {
       // Subtract used qty from inventory in selected location
       const inv = inventory.find(i => i.product_id === item.product_id);
       if (inv) {
-        await supabase.from("inventory").update({ quantity: inv.quantity - item.quantity }).eq("product_id", item.product_id).eq("location_id", selectedLocation);
+        await supabase.from("inventory").update({ quantity: inv.quantity - item.quantity }).eq("product_id", item.product_id).eq("location", selectedLocation);
       }
     }
     // Insert set quantity for this location (store in a new table or in combos if you have location_id field)

@@ -38,6 +38,30 @@ const Statistics = () => {
         </div>
         <div className="stats-card">
           <h3>Most Sold Product</h3>
+  return (
+    <div className="statistics-container" style={{maxWidth: '100vw', maxHeight: '100vh', overflow: 'auto', padding: '0 1vw'}}>
+      <h1>Statistics</h1>
+      {/* Filters */}
+      <div className="filters" style={{overflowX: 'auto', overflowY: 'auto', maxHeight: '20vh'}}>
+        <label htmlFor="date">Filter by Date:</label>
+        <input type="date" id="date" value={dateFilter} onChange={handleDateChange} />
+        <label htmlFor="location">Filter by Location:</label>
+        <input
+          type="text"
+          id="location"
+          placeholder="Enter location"
+          value={locationFilter}
+          onChange={handleLocationChange}
+        />
+      </div>
+      {/* Statistics Cards */}
+      <div className="stats-cards" style={{overflowX: 'auto', overflowY: 'auto', maxHeight: '60vh'}}>
+        <div className="stats-card">
+          <h3>Total Sales</h3>
+          <p>$5000</p>
+        </div>
+        <div className="stats-card">
+          <h3>Most Sold Product</h3>
           <p>Product A</p>
         </div>
         <div className="stats-card">
@@ -55,6 +79,3 @@ const Statistics = () => {
       </div>
     </div>
   );
-};
-
-export default Statistics;

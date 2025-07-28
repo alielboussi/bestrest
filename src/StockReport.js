@@ -19,9 +19,48 @@ const StockReport = () => {
   }, []);
 
   useEffect(() => {
-    let query = supabase.from('products').select('*');
-    if (location) query = query.eq('location_id', location);
-    query.then(({ data }) => setProducts(data || []));
+    async function fetchStock() {
+      if (!location) {
+        // All locations: aggregate quantity and total cost per product
+        const { data: inventoryRows, error } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, products(name, cost_price)');
+        if (error) return setProducts([]);
+        // Aggregate by product_id
+        const productMap = {};
+        inventoryRows.forEach(row => {
+          if (!productMap[row.product_id]) {
+            productMap[row.product_id] = {
+              id: row.product_id,
+              name: row.products?.name || '',
+              cost_price: row.products?.cost_price || 0,
+              quantity: 0,
+              total_cost: 0
+            };
+          }
+          productMap[row.product_id].quantity += row.quantity || 0;
+          productMap[row.product_id].total_cost += (row.quantity || 0) * (row.products?.cost_price || 0);
+        });
+        setProducts(Object.values(productMap));
+      } else {
+        // Specific location: show products and quantity for that location
+        const { data: inventoryRows, error } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, products(name, cost_price)')
+          .eq('location', location);
+        if (error) return setProducts([]);
+        setProducts(
+          inventoryRows.map(row => ({
+            id: row.product_id,
+            name: row.products?.name || '',
+            cost_price: row.products?.cost_price || 0,
+            quantity: row.quantity || 0,
+            total_cost: (row.quantity || 0) * (row.products?.cost_price || 0)
+          }))
+        );
+      }
+    }
+    fetchStock();
   }, [location]);
 
   // Only search by product name for stock report
@@ -47,7 +86,7 @@ const StockReport = () => {
       body: filteredProducts.map(p => [
         p.name,
         p.quantity,
-        p.cost_price
+        p.total_cost
       ]),
       startY: y + 10,
       styles: { fontSize: 10, cellPadding: 4 },
@@ -64,7 +103,7 @@ const StockReport = () => {
     const rows = filteredProducts.map(p => [
       p.name,
       p.quantity,
-      p.cost_price
+      p.total_cost
     ]);
     const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -109,7 +148,7 @@ const StockReport = () => {
             <tr key={p.id}>
               <td>{p.name}</td>
               <td>{p.quantity}</td>
-              <td>{p.cost_price}</td>
+              <td>{p.total_cost}</td>
             </tr>
           ))}
         </tbody>
