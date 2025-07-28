@@ -6,9 +6,9 @@ import supabase from "./supabase";
 const initialForm = {
   name: "",
   sku: "",
-  sku_type: "auto",
+  sku_type: "auto", // default to "auto" (will be mapped to boolean)
   cost_price: "",
-  standard_price: "",
+  price: "",
   promotional_price: "",
   promo_start_date: "",
   promo_end_date: "",
@@ -48,7 +48,7 @@ function Products() {
     setLoading(true);
     try {
       const [{ data: products }, { data: categories }, { data: locations }] = await Promise.all([
-        supabase.from("products").select("name,sku,sku_type,cost_price,standard_price,promotional_price,promo_start_date,promo_end_date,currency,category_id,unit_of_measure_id").order("created_at", { ascending: false }),
+        supabase.from("products").select("id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at").order("created_at", { ascending: false }),
         supabase.from("categories").select("id, name"),
         supabase.from("locations").select("id, name"),
       ]);
@@ -79,9 +79,9 @@ function Products() {
     setForm({
       name: product.name || "",
       sku: product.sku || "",
-      sku_type: product.sku_type || "auto",
+      sku_type: product.sku_type ? "auto" : "manual", // map boolean to string
       cost_price: product.cost_price || "",
-      standard_price: product.standard_price || "",
+      price: product.price || "",
       promotional_price: product.promotional_price || "",
       promo_start_date: product.promo_start_date || "",
       promo_end_date: product.promo_end_date || "",
@@ -125,15 +125,15 @@ function Products() {
       const productData = {
         name: form.name,
         sku: form.sku,
-        sku_type: form.sku_type,
+        sku_type: form.sku_type === "auto", // true for "auto", false for "manual"
         cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
-        standard_price: form.standard_price ? parseFloat(form.standard_price) : null,
+        price: form.price ? parseFloat(form.price) : null,
         promotional_price: form.promotional_price ? parseFloat(form.promotional_price) : null,
         promo_start_date: form.promo_start_date || null,
         promo_end_date: form.promo_end_date || null,
         currency: form.currency,
-        category_id: form.category_id || null,
-        unit_of_measure_id: form.unit_of_measure_id || null,
+        category_id: form.category_id ? parseInt(form.category_id) : null,
+        unit_of_measure_id: form.unit_of_measure_id ? parseInt(form.unit_of_measure_id) : null,
       };
       let result;
       if (editingId) {
@@ -224,7 +224,7 @@ function Products() {
           <option value="manual">Manual SKU</option>
         </select>
         <input name="cost_price" type="number" step="0.01" placeholder="Cost Price" value={form.cost_price} onChange={handleChange} />
-        <input name="standard_price" type="number" step="0.01" placeholder="Standard Price" value={form.standard_price} onChange={handleChange} />
+        <input name="price" type="number" step="0.01" placeholder="Price" value={form.price} onChange={handleChange} />
         <input name="promotional_price" type="number" step="0.01" placeholder="Promotional Price" value={form.promotional_price} onChange={handleChange} />
         <input name="promo_start_date" type="date" value={form.promo_start_date} onChange={handleChange} />
         <input name="promo_end_date" type="date" value={form.promo_end_date} onChange={handleChange} />
@@ -305,7 +305,7 @@ function Products() {
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Category</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Unit</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Locations</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Price</th>
+        <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Price</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Promo</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Actions</th>
               </tr>
@@ -323,7 +323,7 @@ function Products() {
                   <td>{categories.find((c) => c.id === product.category_id)?.name || '-'}</td>
                   <td>{units.find((u) => u.id === product.unit_of_measure_id)?.abbreviation || units.find((u) => u.id === product.unit_of_measure_id)?.name || '-'}</td>
                   <td>{product.product_locations && product.product_locations.length > 0 ? product.product_locations.map((pl) => locations.find((l) => l.id === pl.location_id)?.name).join(", ") : '-'}</td>
-                  <td>{product.standard_price} {product.currency === 'K' ? 'K' : product.currency === '$' ? '$' : ''}</td>
+                  <td>{product.price} {product.currency === 'K' ? 'K' : product.currency === '$' ? '$' : ''}</td>
                   <td>{product.promotional_price ? `${product.promotional_price} (${product.promo_start_date} to ${product.promo_end_date})` : '-'}</td>
                   <td>
                     <button className="edit-btn" onClick={() => handleEdit(product)} disabled={saving}>Edit</button>
