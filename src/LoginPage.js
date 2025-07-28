@@ -38,21 +38,11 @@ const LoginPage = () => {
         return;
       }
 
-      // Fetch all permissions for this role
-      const { data: permissions, error: permError } = await supabase
-        .from('permissions')
-        .select('*')
-        .eq('role_id', userRoleRow.role_id);
-
-      if (permError) {
-        setError('Could not fetch permissions.');
-        return;
-      }
-
       // Save user, role, and permissions to localStorage
       localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem('userRoleId', userRoleRow.role_id);
-      localStorage.setItem('permissions', JSON.stringify(permissions));
+          localStorage.setItem('userRoleId', userRoleRow.role_id);
+          // Save user to localStorage
+          localStorage.setItem('user', JSON.stringify(user));
       setError('');
       navigate('/dashboard');
     } catch (err) {

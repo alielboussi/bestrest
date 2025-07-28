@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
 import { FaBox, FaChartLine, FaUsers, FaCogs, FaMapMarkerAlt, FaTags, FaFlask, FaRegEdit, FaExchangeAlt, FaCashRegister } from 'react-icons/fa';
-import UserAccessControlBtn from './UserAccessControlBtn';
 import './Dashboard.css';
 
 // List of modules/pages and their dashboard routes
@@ -27,7 +26,7 @@ const MODULES = [
 
 const Dashboard = () => {
   // All hooks at the top level
-  const [permissions, setPermissions] = useState([]);
+  // Remove permissions state
   const [user, setUser] = useState(null);
   const [showReset, setShowReset] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -47,11 +46,9 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Get user and permissions from localStorage
+    // Get user from localStorage
     const userData = localStorage.getItem('user');
-    const permsData = localStorage.getItem('permissions');
     if (userData) setUser(JSON.parse(userData));
-    if (permsData) setPermissions(JSON.parse(permsData));
   }, []);
 
   useEffect(() => {
@@ -92,10 +89,9 @@ const Dashboard = () => {
   }, [locationFilter, dateFrom, dateTo]);
 
   // Helper: can access module if any permission is true
+  // Admins can access all modules, others can only view dashboard
   const canAccessModule = (moduleName) => {
-    if (user && user.role === 'admin') return true;
-    const perm = permissions.find(p => p.module === moduleName);
-    return perm && (perm.can_view || perm.can_add || perm.can_edit || perm.can_delete);
+    return user && user.role === 'admin';
   };
 
   // Fetch locations for filter
