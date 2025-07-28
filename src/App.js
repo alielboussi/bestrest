@@ -104,7 +104,7 @@ function App() {
         <Route path="/stocktake-report" element={user ? <StocktakeReport /> : <Navigate to="/dashboard" />} />
         <Route path="/variance-report" element={user ? <VarianceReportWrapper /> : <Navigate to="/dashboard" />} />
         {/* User Access Control Route (admin only) */}
-        <Route path="/user-access-control" element={user && user.role === 'admin' ? <UserAccessControl /> : <Navigate to="/dashboard" />} />
+        {/* UserAccessControl route removed */}
         {/* Default route: Redirect to login */}
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>

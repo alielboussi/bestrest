@@ -284,7 +284,7 @@ const Dashboard = () => {
           {/* Show User Access Control button for admin only, next to To date */}
           {user?.role === 'admin' && (
             <div style={{ marginLeft: 12 }}>
-              <UserAccessControlBtn />
+              {/* UserAccessControlBtn removed */}
             </div>
           )}
         </div>
