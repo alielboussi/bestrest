@@ -25,45 +25,34 @@ const MODULES = [
   { name: 'Closing Stock', route: '/closing-stock' },
 ];
 
-const Dashboard = ({ user }) => {
-  const [permissions, setPermissions] = useState({});
-  const [loadingPerms, setLoadingPerms] = useState(true);
-
-  // Fetch permissions for the logged-in user
-  useEffect(() => {
-    async function fetchPerms() {
-      if (!user) return;
-      // If admin, allow all
-      if (user.role === 'admin') {
-        let perms = {};
-        for (const mod of MODULES) {
-          perms[mod.name] = true;
-        }
-        setPermissions(perms);
-        setLoadingPerms(false);
-        return;
-      }
-      // Get user role
-      const { data: userRoleData } = await supabase.from('user_roles').select('role_id').eq('user_id', user.id).single();
-      const roleId = userRoleData?.role_id;
-      let perms = {};
-      if (roleId) {
-        const { data: permsData } = await supabase.from('permissions').select('*').eq('role_id', roleId);
-        for (const mod of MODULES) {
-          const found = permsData?.find(p => p.module === mod.name);
-          perms[mod.name] = found ? !!found.can_view : false;
-        }
-      }
-      setPermissions(perms);
-      setLoadingPerms(false);
-    }
-    fetchPerms();
-  }, [user]);
-  // Secret key sequence for showing the factory reset button
+const Dashboard = () => {
+  // All hooks at the top level
+  const [permissions, setPermissions] = useState([]);
+  const [user, setUser] = useState(null);
   const [showReset, setShowReset] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const secret = 'azili';
   const [typed, setTyped] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyLogo, setCompanyLogo] = useState('');
+  const [locations, setLocations] = useState([]);
+  const [locationFilter, setLocationFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [productStats, setProductStats] = useState({ qty: 0, costK: 0, cost$: 0 });
+  const [lastStockDate, setLastStockDate] = useState(null);
+  const [canShowVarianceReport, setCanShowVarianceReport] = useState(false);
+  const [dueTotals, setDueTotals] = useState({ K: 0, $: 0 });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Get user and permissions from localStorage
+    const userData = localStorage.getItem('user');
+    const permsData = localStorage.getItem('permissions');
+    if (userData) setUser(JSON.parse(userData));
+    if (permsData) setPermissions(JSON.parse(permsData));
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -83,37 +72,6 @@ const Dashboard = ({ user }) => {
     // eslint-disable-next-line
   }, [typed, showResetConfirm]);
 
-  // Factory reset handler
-  async function handleFactoryReset() {
-    setShowResetConfirm(true);
-  }
-
-  async function confirmFactoryReset() {
-    // List of all tables to clear
-    const tables = [
-      'stocktakes', 'laybys', 'sales_payments', 'sales_items', 'sales', 'combo_items', 'combos', 'products', 'categories', 'locations', 'customers', 'company_settings', 'units_of_measure'
-    ];
-    for (const table of tables) {
-      await supabase.from(table).delete().neq('id', 0); // delete all rows
-    }
-    localStorage.clear();
-    sessionStorage.clear();
-    alert('App has been reset to factory state. Please refresh.');
-    window.location.reload();
-  }
-  const [fullName, setFullName] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [companyLogo, setCompanyLogo] = useState('');
-  const [locations, setLocations] = useState([]);
-  const [locationFilter, setLocationFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [productStats, setProductStats] = useState({ qty: 0, costK: 0, cost$: 0 });
-  const [lastStockDate, setLastStockDate] = useState(null);
-  const [canShowVarianceReport, setCanShowVarianceReport] = useState(false);
-  const [dueTotals, setDueTotals] = useState({ K: 0, $: 0 });
-  const navigate = useNavigate();
-
   useEffect(() => {
     async function checkClosingStock() {
       if (!locationFilter) {
@@ -132,6 +90,14 @@ const Dashboard = ({ user }) => {
     }
     checkClosingStock();
   }, [locationFilter, dateFrom, dateTo]);
+
+  // Helper: can access module if any permission is true
+  const canAccessModule = (moduleName) => {
+    if (user && user.role === 'admin') return true;
+    const perm = permissions.find(p => p.module === moduleName);
+    return perm && (perm.can_view || perm.can_add || perm.can_edit || perm.can_delete);
+  };
+
   // Fetch locations for filter
   useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
@@ -249,7 +215,24 @@ const Dashboard = ({ user }) => {
     navigate('/locations');
   };
 
-  if (loadingPerms) return <div>Loading dashboard...</div>;
+  // Factory Reset Handlers
+  const handleFactoryReset = () => {
+    setShowResetConfirm(true);
+  };
+
+  const confirmFactoryReset = async () => {
+    // Example: Clear all tables and localStorage, then reload
+    // You should add confirmation and actual Supabase delete logic as needed
+    try {
+      // Optionally, call Supabase to delete all data (dangerous!)
+      // await supabase.from('products').delete().neq('id', 0);
+      // ...repeat for other tables as needed
+      localStorage.clear();
+      window.location.reload();
+    } catch (err) {
+      alert('Factory reset failed: ' + err.message);
+    }
+  };
 
   return (
     <div className="dashboard-container">
@@ -357,55 +340,55 @@ const Dashboard = ({ user }) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18, marginBottom: 8 }}>
         {/* Line 1: Example, only show buttons if user has can_view for the module */}
         <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%' }}>
-          {permissions['Locations'] !== false && (
+          {canAccessModule('Locations') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleLocations}>
               <FaMapMarkerAlt size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Locations</span>
             </button>
           )}
-          {permissions['Categories'] && (
+          {canAccessModule('Categories') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/categories')}>
               <FaBox size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Categories</span>
             </button>
           )}
-          {permissions['Products'] && (
+          {canAccessModule('Products') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/products')}>
               <FaTags size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Products</span>
             </button>
           )}
-          {permissions['Sets'] && (
+          {canAccessModule('Sets') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sets')}>
               <FaBox size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Sets</span>
             </button>
           )}
-          {permissions['Units of Measure'] && (
+          {canAccessModule('Units of Measure') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/units-of-measure')}>
               <FaFlask size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Units of Measure</span>
             </button>
           )}
-          {permissions['Stocktake'] && (
+          {canAccessModule('Stocktake') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/opening-stock')}>
               <FaRegEdit size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Opening Stock</span>
             </button>
           )}
-          {permissions['Stock Transfers'] && (
+          {canAccessModule('Stock Transfers') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfer')}>
               <FaExchangeAlt size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Stock Transfer</span>
             </button>
           )}
-          {permissions['Transfer List'] && (
+          {canAccessModule('Transfer List') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfers')}>
               <FaExchangeAlt size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>New Transfers</span>
             </button>
           )}
-          {permissions['Closing Stock'] && (
+          {canAccessModule('Closing Stock') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/closing-stock')}>
               <FaRegEdit size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Closing Stock</span>
@@ -414,13 +397,13 @@ const Dashboard = ({ user }) => {
         </div>
         {/* Line 2: Only show if user has can_view for the module */}
         <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%', maxWidth: 1100, margin: '0 auto' }}>
-          {permissions['Customers'] && (
+          {canAccessModule('Customers') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleCustomers}>
               <FaUsers size={32} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Customers</span>
             </button>
           )}
-          {permissions['Sales'] && (
+          {canAccessModule('Sales') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/pos')} title="Point of Sale">
               <span style={{ fontSize: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="1.7em" height="1.7em" viewBox="0 0 24 24" fill="none"><path d="M3 19V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm2 0h14V7H5v12Zm2-8h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z" fill="#fff"/></svg>
@@ -428,38 +411,38 @@ const Dashboard = ({ user }) => {
               </span>
             </button>
           )}
-          {permissions['Laybys'] && (
+          {canAccessModule('Laybys') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-management')} title="Layby Management">
               <FaCashRegister size={22} style={{ marginBottom: 2 }} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Layby Management</span>
             </button>
           )}
           {/* User Access Control Button: Only show for admins, handled elsewhere */}
-          {permissions['Reports'] && (
+          {canAccessModule('Reports') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sales-report')} title="Sales Report">
               <FaChartLine size={22} style={{ marginBottom: 2 }} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Sales Report</span>
             </button>
           )}
-          {permissions['Reports'] && (
+          {canAccessModule('Reports') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stock-report')} title="Stock Report">
               <FaBox size={22} style={{ marginBottom: 2 }} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Stock Report</span>
             </button>
           )}
-          {permissions['Reports'] && (
+          {canAccessModule('Reports') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-report')} title="Layby Report">
               <FaCashRegister size={22} style={{ marginBottom: 2 }} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Layby Report</span>
             </button>
           )}
-          {permissions['Reports'] && (
+          {canAccessModule('Reports') && (
             <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stocktake-report')} title="Stocktake Report">
               <FaRegEdit size={22} style={{ marginBottom: 2 }} />
               <span style={{ fontSize: 13, marginTop: 2 }}>Stocktake Report</span>
             </button>
           )}
-          {permissions['Variance Report'] && (
+          {canAccessModule('Variance Report') && (
             <button
               className="dashboard-page-btn gray"
               style={{ width: 130, height: 70, opacity: canShowVarianceReport ? 1 : 0.5, pointerEvents: canShowVarianceReport ? 'auto' : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }}
