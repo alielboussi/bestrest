@@ -16,7 +16,7 @@ const UnitsOfMeasure = () => {
   }, []);
 
   const fetchUnits = async () => {
-    const { data, error } = await supabase.from('units_of_measure').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('unit_of_measure').select('*').order('created_at', { ascending: false });
     if (error) setError('Failed to fetch units');
     else setUnits(data || []);
   };
@@ -26,9 +26,9 @@ const UnitsOfMeasure = () => {
     if (!name) return setError('Name is required');
     setError('');
     if (editingId) {
-      await supabase.from('units_of_measure').update({ name, abbreviation }).eq('id', editingId);
+      await supabase.from('unit_of_measure').update({ name, abbreviation }).eq('id', editingId);
     } else {
-      await supabase.from('units_of_measure').insert({ name, abbreviation });
+      await supabase.from('unit_of_measure').insert({ name, abbreviation });
     }
     setName('');
     setAbbreviation('');
@@ -44,7 +44,7 @@ const UnitsOfMeasure = () => {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this unit?')) return;
-    await supabase.from('units_of_measure').delete().eq('id', id);
+    await supabase.from('unit_of_measure').delete().eq('id', id);
     fetchUnits();
   };
 
