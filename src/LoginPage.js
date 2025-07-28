@@ -34,23 +34,8 @@ const LoginPage = () => {
         .single();
 
       if (roleError || !userRoleRow) {
-        setError('User role not found.');
-        return;
-      }
-
-      // Save user, role, and permissions to localStorage
-      localStorage.setItem('user', JSON.stringify(user));
-          localStorage.setItem('userRoleId', userRoleRow.role_id);
-          // Save user to localStorage
-          localStorage.setItem('user', JSON.stringify(user));
-      setError('');
-      navigate('/dashboard');
-    } catch (err) {
       setError('Login failed. Please try again.');
       console.error('Login Error:', err);
-    }
-  };
-
   return (
     <div className="login-container">
       <img src="/bestrest-logo.png" alt="Company Logo" className="logo" />
