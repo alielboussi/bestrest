@@ -122,4 +122,7 @@ const Statistics = () => {
         </div>
       )}
     </div>
-  
+  );
+}
+
+export default Statistics;
