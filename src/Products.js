@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Products.css";
@@ -49,7 +48,7 @@ function Products() {
     setLoading(true);
     try {
       const [{ data: products }, { data: categories }, { data: locations }] = await Promise.all([
-        supabase.from("products").select("*, product_images(image_url), product_locations(location_id)").order("created_at", { ascending: false }),
+        supabase.from("products").select("name,sku,sku_type,cost_price,standard_price,promotional_price,promo_start_date,promo_end_date,currency,category_id,unit_of_measure_id").order("created_at", { ascending: false }),
         supabase.from("categories").select("id, name"),
         supabase.from("locations").select("id, name"),
       ]);
