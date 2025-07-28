@@ -24,7 +24,7 @@ const Locations = () => {
       const { data, error } = await supabase.from('locations').select('*');
       if (error) throw error;
       setLocations(data || []);
-    } catch (err) {
+          <h2 style={{textAlign: 'center', fontWeight: 600, margin: '32px 0 24px 0', color: '#fff', fontSize: '2.2rem'}}>Locations</h2>
       setError('Failed to fetch locations.');
     } finally {
       setLoading(false);
@@ -73,7 +73,7 @@ const Locations = () => {
     });
     setEditingId(location.id);
   };
-
+            <button type="button" className="back-dashboard-btn" style={{position: 'absolute', right: 32, bottom: 32}} onClick={handleBack}>← Back to Dashboard</button>
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this location and all related data?')) return;
     setSaving(true);
@@ -117,7 +117,9 @@ const Locations = () => {
         />
         <button className="add-btn" onClick={handleSubmit}>{editingId ? 'Update' : 'Add'}</button>
       </div>
-      {error && <div className="error-message">{error}</div>}
+          {error && (!locations || locations.length === 0) && (
+            <div className="error-message">{error}</div>
+          )}
       <table className="locations-table">
         <thead>
           <tr>

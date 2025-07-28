@@ -10,6 +10,7 @@ const Categories = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [form, setForm] = useState(initialForm);
+  const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
@@ -89,23 +90,41 @@ const Categories = () => {
     setEditingId(null);
   };
 
+  // Filter categories by search
+  const filteredCategories = categories.filter(cat =>
+    cat.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div className="categories-page-container">
-      <h1 className="categories-title">Categories</h1>
+    <div className="categories-page">
+      <h2 className="categories-title">Categories</h2>
       <form className="category-form" onSubmit={handleSubmit}>
         <input
           name="name"
           type="text"
-          placeholder="Category Name"
-          value={form.name}
-          onChange={handleChange}
+          placeholder="Search or Add Category"
+          value={editingId ? form.name : search}
+          onChange={e => {
+            if (editingId) {
+              setForm({ ...form, name: e.target.value });
+            } else {
+              setSearch(e.target.value);
+              setForm({ ...form, name: e.target.value });
+            }
+          }}
           required
         />
         <button type="submit" disabled={saving} className="save-btn">
           {editingId ? 'Update' : 'Add'}
         </button>
         {editingId && (
-          <button type="button" onClick={handleCancelEdit} className="cancel-btn">Cancel</button>
+          <button
+            type="button"
+            onClick={handleCancelEdit}
+            className="cancel-btn"
+          >
+            Cancel
+          </button>
         )}
       </form>
       {error && <div className="categories-error">{error}</div>}
@@ -120,15 +139,17 @@ const Categories = () => {
           <tbody>
             {loading ? (
               <tr><td colSpan="2">Loading...</td></tr>
-            ) : categories.length === 0 ? (
+            ) : filteredCategories.length === 0 ? (
               <tr><td colSpan="2">No categories found.</td></tr>
             ) : (
-              categories.map((category) => (
+              filteredCategories.map((category) => (
                 <tr key={category.id} className={editingId === category.id ? 'editing-row' : ''}>
                   <td>{category.name}</td>
                   <td>
-                    <button className="edit-btn" onClick={() => handleEdit(category)} disabled={saving}>Edit</button>
-                    <button className="delete-btn" onClick={() => handleDelete(category.id)} disabled={saving}>Delete</button>
+                    <div className="actions-container">
+                      <button className="edit-btn" onClick={() => handleEdit(category)} disabled={saving}>Edit</button>
+                      <button className="delete-btn" onClick={() => handleDelete(category.id)} disabled={saving}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -136,9 +157,9 @@ const Categories = () => {
           </tbody>
         </table>
       </div>
-      <footer className="categories-footer">
-        <button type="button" className="back-dashboard-btn" onClick={handleBack}>Back to Dashboard</button>
-      </footer>
+      <div className="categories-footer">
+        <button type="button" className="back-dashboard-btn" onClick={handleBack}>← Back to Dashboard</button>
+      </div>
     </div>
   );
 };

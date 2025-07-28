@@ -22,14 +22,7 @@
   background: #181c20;
   color: #e0e6ed;
   padding: 2rem;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  max-width: 98vw;
-  margin: 2rem auto;
-  min-height: 90vh;
-  height: 100vh;
-  overflow-y: scroll;
-  overflow-x: auto;
+  border-radius: 4px;
 }
 
 .products-container h1 {
@@ -38,11 +31,13 @@
   padding-bottom: 0.5rem;
   margin-bottom: 2rem;
 }
-
 .products-list {
   width: 100%;
   margin-top: 2rem;
   min-width: 900px;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: auto;
 }
 .products-search-bar {
   width: 100%;
@@ -60,50 +55,74 @@
 .product-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem 2rem;
+  gap: 18px 24px;
   background: #23272f;
-  padding: 1.5rem;
-  border-radius: 8px;
+  padding: 2rem 2vw 2rem 2vw;
+  border-radius: 12px;
   margin-bottom: 2rem;
   align-items: center;
+  justify-content: center;
   width: 100%;
-  max-width: 100%;
+  max-width: 1200px;
+  box-sizing: border-box;
   position: static;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .product-form input,
 .product-form select {
   background: #181c20;
   color: #e0e6ed;
-  border: 1px solid #00b4d8;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
+  border: 1.5px solid #00b4d8;
+  border-radius: 6px;
+  padding: 0.9rem 1.2rem;
   margin-right: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   min-width: 0;
+  margin-bottom: 0;
 }
 
 .locations-checkbox-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
+  gap: 18px 24px;
   padding: 0.2rem 0;
+}
+
+@media (max-width: 900px) {
+  .product-form {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 1rem 1vw;
+  }
+  .product-form input,
+  .product-form select,
+  .product-form button {
+    width: 100%;
+    max-width: 100%;
+  }
+  .locations-checkbox-group {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 .product-form button {
   background: #00b4d8;
   color: #fff;
   border: none;
-  border-radius: 4px;
-  padding: 0.5rem 1.5rem;
+  border-radius: 6px;
+  padding: 0.9rem 2.2rem;
   cursor: pointer;
   transition: background 0.2s;
   width: 100%;
-  max-width: 300px;
+  max-width: 100%;
   margin-top: 0.5rem;
-  grid-column: span 2;
+  margin-bottom: 0.5rem;
 }
 .product-form button:hover {
   background: #0090a8;
