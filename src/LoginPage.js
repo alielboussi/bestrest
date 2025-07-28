@@ -14,26 +14,50 @@ const LoginPage = () => {
 
     try {
       // Query the 'users' table for the entered email and password
-      const { data, error } = await supabase
-        .from('users') // 'users' table in Supabase
-        .select('*') // Select all fields (you can limit it to email and password if needed)
-        .eq('email', email) // Match the email field
-        .eq('password', password) // Match the password field
-        .single(); // Ensure it returns only one user record
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', password)
+        .single();
 
-      if (error || !data) {
+      if (userError || !user) {
         setError('Invalid credentials, please try again.');
         return;
       }
 
-      // If login is successful, save user data and role to localStorage
-      localStorage.setItem('user', JSON.stringify(data));
-      localStorage.setItem('userRole', data.role);
-      setError(''); // Clear any previous errors
-      navigate('/dashboard'); // Redirect to dashboard after successful login
+      // Get the user's role_id from user_roles table
+      const { data: userRoleRow, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (roleError || !userRoleRow) {
+        setError('User role not found.');
+        return;
+      }
+
+      // Fetch all permissions for this role
+      const { data: permissions, error: permError } = await supabase
+        .from('permissions')
+        .select('*')
+        .eq('role_id', userRoleRow.role_id);
+
+      if (permError) {
+        setError('Could not fetch permissions.');
+        return;
+      }
+
+      // Save user, role, and permissions to localStorage
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('userRoleId', userRoleRow.role_id);
+      localStorage.setItem('permissions', JSON.stringify(permissions));
+      setError('');
+      navigate('/dashboard');
     } catch (err) {
       setError('Login failed. Please try again.');
-      console.error('Login Error:', err); // Log any unexpected errors
+      console.error('Login Error:', err);
     }
   };
 
