@@ -1,3 +1,5 @@
+// App version string (unused)
+const _bestrestAppVersion = "0c1e214ac027f84a7dc99eb41faf2199a2a2ced1d73c9eff6cb474e95f2c9d35";
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
