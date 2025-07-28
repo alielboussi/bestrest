@@ -87,6 +87,7 @@ export default function Sets() {
         combo_name: kitName,
         sku,
         standard_price: standardPrice,
+        combo_price: standardPrice, // Fix: add combo_price for NOT NULL constraint
         promotional_price: promotionalPrice,
         promo_start_date: promoStart || null,
         promo_end_date: promoEnd || null,
