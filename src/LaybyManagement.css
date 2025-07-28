@@ -1,0 +1,95 @@
+.layby-back-btn {
+  background: #181f2f;
+  color: #4cafef;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 8px 18px;
+  margin-bottom: 18px;
+  margin-right: 12px;
+  transition: background 0.2s;
+}
+.layby-back-btn:hover {
+  background: #222f44;
+  color: #00bfff;
+}
+.layby-mgmt-container {
+  max-width: 1100px;
+  margin: 32px auto;
+  background: #181818;
+  border-radius: 12px;
+  padding: 32px 28px 24px 28px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+  color: #fff;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+.layby-mgmt-container h2 {
+  text-align: center;
+  color: #4caf50;
+  margin-bottom: 24px;
+  font-size: 2.1rem;
+}
+.layby-mgmt-container table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #222;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.layby-mgmt-container th, .layby-mgmt-container td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #333;
+  text-align: left;
+  white-space: nowrap;
+}
+.layby-mgmt-container th {
+  background: #222;
+  color: #4caf50;
+  font-weight: 600;
+}
+.layby-mgmt-container tr {
+  background: #181818;
+  transition: background 0.2s;
+}
+.layby-mgmt-container tr:hover {
+  background: #222;
+}
+.layby-mgmt-container input[type="number"],
+.layby-mgmt-container input[type="date"],
+.layby-mgmt-container input[type="text"] {
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid #333;
+  background: #222;
+  color: #fff;
+  margin-right: 8px;
+  margin-bottom: 6px;
+}
+.layby-mgmt-container button {
+  background: #00bfff;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 8px 18px;
+  transition: background 0.2s;
+  margin-right: 6px;
+}
+.layby-mgmt-container button:hover {
+  background: #0099cc;
+}
+@media (max-width: 900px) {
+  .layby-mgmt-container {
+    padding: 2vw 1vw;
+    margin: 12px auto;
+  }
+  .layby-mgmt-container table {
+    font-size: 0.98rem;
+    min-width: 320px;
+  }
+}

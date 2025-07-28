@@ -1,0 +1,58 @@
+/* Black background, blue/green fields, modern look */
+.report-page {
+  background: #111;
+  color: #fff;
+  min-height: 100vh;
+  padding: 32px 0 0 0;
+}
+.report-page h2 {
+  color: #00bfff;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.report-filters {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.report-filters label {
+  color: #00ffb3;
+  font-weight: 500;
+  font-size: 17px;
+}
+.report-filters input,
+.report-filters select {
+  background: #222;
+  color: #00bfff;
+  border: 1.5px solid #00bfff;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 16px;
+  margin-left: 8px;
+}
+.report-table {
+  width: 90%;
+  margin: 0 auto;
+  border-collapse: collapse;
+  background: #181818;
+  color: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.report-table th, .report-table td {
+  border: 1px solid #00bfff;
+  padding: 10px 8px;
+  text-align: left;
+}
+.report-table th {
+  background: #00bfff;
+  color: #111;
+  font-weight: bold;
+}
+.report-table tr:nth-child(even) {
+  background: #222;
+}
+.report-table tr:hover {
+  background: #003366;
+}

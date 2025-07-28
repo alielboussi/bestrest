@@ -1,0 +1,50 @@
+.stocktake-container {
+  max-width: 900px;
+  margin: 2rem auto;
+  background: #23272f;
+  color: #e0e6ed;
+  border-radius: 1.2rem;
+  padding: 2rem 2.5rem 4rem 2.5rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  position: relative;
+}
+.stocktake-step {
+  margin-bottom: 2rem;
+}
+.stocktake-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5rem;
+}
+.stocktake-table th, .stocktake-table td {
+  border: 1px solid #00b4d8;
+  padding: 0.6rem 1rem;
+  text-align: left;
+}
+.stocktake-table th {
+  background: #1a222b;
+}
+.stocktake-error {
+  color: #ff4d4d;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+.back-dashboard-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: #00bfff;
+  color: #fff;
+  border: none;
+  border-radius: 2rem;
+  padding: 0.8rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  z-index: 1000;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.back-dashboard-btn:hover {
+  background: #0099cc;
+}
