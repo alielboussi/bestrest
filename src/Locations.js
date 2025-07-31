@@ -24,7 +24,7 @@ const Locations = () => {
       const { data, error } = await supabase.from('locations').select('*');
       if (error) throw error;
       setLocations(data || []);
-          <h2 style={{textAlign: 'center', fontWeight: 600, margin: '32px 0 24px 0', color: '#fff', fontSize: '2.2rem'}}>Locations</h2>
+    } catch (err) {
       setError('Failed to fetch locations.');
     } finally {
       setLoading(false);
@@ -39,21 +39,19 @@ const Locations = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    if (!form.name.trim() && !form.address.trim()) {
+      setError('Please enter at least one field (name or address).');
+      return;
+    }
     setSaving(true);
     try {
       if (editingId) {
-        const { error } = await supabase
-          .from('locations')
-          .update(form)
-          .eq('id', editingId);
-        if (error) throw error;
+        await supabase.from('locations').update(form).eq('id', editingId);
       } else {
-        const { error } = await supabase
-          .from('locations')
-          .insert([form]);
-        if (error) throw error;
+        await supabase.from('locations').insert([form]);
       }
       setForm(initialForm);
       setEditingId(null);
@@ -63,7 +61,7 @@ const Locations = () => {
     } finally {
       setSaving(false);
     }
-  };
+  }
 
   const handleEdit = (location) => {
     setForm({
@@ -73,7 +71,6 @@ const Locations = () => {
     });
     setEditingId(location.id);
   };
-            <button type="button" className="back-dashboard-btn" style={{position: 'absolute', right: 32, bottom: 32}} onClick={handleBack}>← Back to Dashboard</button>
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this location and all related data?')) return;
     setSaving(true);
@@ -147,6 +144,5 @@ const Locations = () => {
       </table>
     </div>
   );
-};
-
+}
 export default Locations;

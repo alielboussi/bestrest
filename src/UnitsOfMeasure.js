@@ -23,7 +23,9 @@ const UnitsOfMeasure = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name) return setError('Name is required');
+    if (!name.trim() && !abbreviation.trim()) {
+      return setError('Please enter at least one field (name or abbreviation).');
+    }
     setError('');
     if (editingId) {
       await supabase.from('unit_of_measure').update({ name, abbreviation }).eq('id', editingId);

@@ -13,9 +13,13 @@ export default function POS() {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
   const [customerForm, setCustomerForm] = useState({ name: "", phone: "", tpin: "", address: "", city: "" });
+  const [editCustomerForm, setEditCustomerForm] = useState({ id: null, name: "", phone: "", tpin: "", address: "", city: "" });
   const [customerError, setCustomerError] = useState("");
+  const [editCustomerError, setEditCustomerError] = useState("");
   const [customerLoading, setCustomerLoading] = useState(false);
+  const [editCustomerLoading, setEditCustomerLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutSuccess, setCheckoutSuccess] = useState("");
@@ -101,8 +105,8 @@ export default function POS() {
     e.preventDefault();
     setCustomerError("");
     setCustomerLoading(true);
-    if (!customerForm.name.trim() || !customerForm.phone.trim()) {
-      setCustomerError("Name and phone are required.");
+    if (!customerForm.name.trim() && !customerForm.phone.trim()) {
+      setCustomerError("Please enter at least one field (name or phone).");
       setCustomerLoading(false);
       return;
     }
@@ -126,6 +130,52 @@ export default function POS() {
       setCustomerForm({ name: "", phone: "", tpin: "", address: "", city: "" });
     }
     setCustomerLoading(false);
+  };
+
+  // Edit existing customer (modal logic)
+  const openEditCustomerModal = (customer) => {
+    setEditCustomerForm({
+      id: customer.id,
+      name: customer.name || "",
+      phone: customer.phone || "",
+      tpin: customer.tpin || "",
+      address: customer.address || "",
+      city: customer.city || ""
+    });
+    setEditCustomerError("");
+    setShowEditCustomerModal(true);
+  };
+
+  const handleEditCustomer = async (e) => {
+    e.preventDefault();
+    setEditCustomerError("");
+    setEditCustomerLoading(true);
+    if (!editCustomerForm.name.trim() && !editCustomerForm.phone.trim()) {
+      setEditCustomerError("Please enter at least one field (name or phone).");
+      setEditCustomerLoading(false);
+      return;
+    }
+    const { error } = await supabase
+      .from("customers")
+      .update({
+        name: editCustomerForm.name.trim(),
+        phone: editCustomerForm.phone.trim(),
+        tpin: editCustomerForm.tpin.trim(),
+        address: editCustomerForm.address.trim(),
+        city: editCustomerForm.city.trim()
+      })
+      .eq("id", editCustomerForm.id);
+    if (error) {
+      setEditCustomerError(error.message);
+    } else {
+      setCustomers((prev) => prev.map(c => c.id === editCustomerForm.id ? { ...c, ...editCustomerForm } : c));
+      setShowEditCustomerModal(false);
+      // If the edited customer is selected, update their info
+      if (selectedCustomer === editCustomerForm.id) {
+        setSelectedCustomer(editCustomerForm.id);
+      }
+    }
+    setEditCustomerLoading(false);
   };
 
   // Calculate totals (VAT is inclusive, not added)
@@ -207,7 +257,7 @@ export default function POS() {
         product_id: item.id,
         quantity: item.qty,
         unit_price: item.price,
-        currency: currency // Store the selected currency for each item
+        currency: item.currency || currency // Use item's currency if available, else selected currency
       }));
       const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
       if (itemsError) throw itemsError;
@@ -289,36 +339,75 @@ export default function POS() {
   return (
     <div className="pos-container">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-        <button onClick={() => navigate('/dashboard')} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', marginRight: 10, cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem' }}>Back to Dashboard</button>
         <h2 style={{ margin: 0, fontSize: '1.2rem' }}><FaCashRegister style={{ marginRight: 6, fontSize: '1.1rem' }} /> Point of Sale</h2>
       </div>
-      <div className="pos-row" style={{ gap: 6, marginBottom: 6 }}>
-        <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28 }}>
-          <option value="">Select Location</option>
-          {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-        </select>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ fontSize: '0.95rem', height: 28 }} />
-        <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28 }}>
-          <option value="K">K</option>
-          <option value="$">$</option>
-        </select>
-        <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28, minWidth: 140 }}>
-          <option value="">Select Customer</option>
-          {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
-        </select>
-        <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '0.95rem', padding: '2px 10px', height: 28 }}><FaUserPlus /> New Customer</button>
+      <div className="pos-row" style={{
+        display: 'flex',
+        alignItems: 'center',
+        marginBottom: 6,
+        maxWidth: 1000,
+        width: '100%',
+        justifyContent: 'space-between',
+      }}>
+        {/* Left controls */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required style={{ fontSize: '1rem', width: 180, height: 40, borderRadius: 6, boxSizing: 'border-box' }}>
+            <option value="">Select Location</option>
+            {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+          </select>
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            style={{
+              fontSize: '1rem',
+              width: 220,
+              height: 40,
+              borderRadius: 6,
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              background: '#222',
+              color: '#fff',
+              border: '1px solid #333',
+              outline: 'none',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              marginTop: '-7px',
+            }}
+          />
+          <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 100, height: 40, borderRadius: 6, boxSizing: 'border-box' }}>
+            <option value="K">K</option>
+            <option value="$">$</option>
+          </select>
+          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 220, height: 40, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginTop: '-16px' }}><FaUserPlus /> New Customer</button>
+        </div>
+        {/* Right controls: Select Customer and Edit button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '1rem', width: 180, height: 40, borderRadius: 6, boxSizing: 'border-box' }}>
+            <option value="">Select Customer</option>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+          </select>
+          {selectedCustomer && (
+            <button type="button" style={{ fontSize: '1rem', width: 80, height: 40, borderRadius: 6, boxSizing: 'border-box' }} onClick={() => {
+              const cust = customers.find(c => c.id === selectedCustomer);
+              if (cust) openEditCustomerModal(cust);
+            }}>Edit</button>
+          )}
+        </div>
       </div>
+      {/* ...rest of the component remains unchanged... */}
       <div className="pos-row" style={{ gap: 6, marginBottom: 6 }}>
         <input
           type="text"
           placeholder="Search product by name or SKU..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ fontSize: '0.95rem', height: 28, width: 180 }}
+          style={{ fontSize: '0.95rem', height: 40, width: 180, marginRight: 4, marginLeft: 10, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333' }}
         />
-        <button type="button" onClick={() => setShowAddProduct(true)} style={{ fontSize: '0.95rem', padding: '2px 10px', height: 28 }}><FaSearch /> Search</button>
+        <button type="button" onClick={() => setShowAddProduct(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 28, minWidth: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaSearch /> Search</button>
       </div>
-      <div className="pos-products" style={{ gap: 8 }}>
+      <div className="pos-products" style={{ gap: 0 }}>
         {/* Only show products/sets if search is not empty */}
         {search.trim() && [
           ...products.filter(p =>
@@ -352,27 +441,21 @@ export default function POS() {
           <tr>
             <th className="text-col" style={{ fontSize: '0.95rem', padding: 4 }}>SKU</th>
             <th className="text-col" style={{ fontSize: '0.95rem', padding: 4 }}>Name</th>
-            <th className="customer-col" style={{ fontSize: '0.95rem', padding: 4 }}>Customer Name</th>
             <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Qty</th>
             <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Amount</th>
             <th className="action-col" style={{ fontSize: '0.95rem', padding: 4 }}>Remove</th>
           </tr>
         </thead>
         <tbody>
-          {cart.map((item, idx) => {
-            // Find customer name by selectedCustomer
-            const customer = customers.find(c => c.id === selectedCustomer);
-            return (
-              <tr key={idx}>
-                <td className="text-col" style={{ padding: 4 }}>{item.sku}</td>
-                <td className="text-col" style={{ padding: 4 }}>{item.name}</td>
-                <td className="customer-col" style={{ padding: 4 }}>{customer ? customer.name : ''}</td>
-                <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
-                <td className="num-col" style={{ padding: 4 }}><input type="number" min="0" value={item.price} onChange={e => updateCartItem(idx, { price: e.target.value })} style={{ width: 64, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
-                <td className="action-col" style={{ padding: 4 }}><button onClick={() => removeCartItem(idx)} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24 }}>Remove</button></td>
-              </tr>
-            );
-          })}
+          {cart.map((item, idx) => (
+            <tr key={idx}>
+              <td className="text-col" style={{ padding: 4 }}>{item.sku}</td>
+              <td className="text-col" style={{ padding: 4 }}>{item.name}</td>
+              <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
+              <td className="num-col" style={{ padding: 4 }}><input type="number" min="0" value={item.price} onChange={e => updateCartItem(idx, { price: e.target.value })} style={{ width: 64, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
+              <td className="action-col" style={{ padding: 4 }}><button onClick={() => removeCartItem(idx)} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24 }}>Remove</button></td>
+            </tr>
+          ))}
         </tbody>
       </table>
       <div className="pos-summary" style={{ fontSize: '1rem', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', marginTop: 8, marginBottom: 8 }}>
