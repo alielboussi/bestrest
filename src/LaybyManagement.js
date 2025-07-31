@@ -258,10 +258,17 @@ export default function LaybyManagement() {
                       .from("sales_payments")
                       .select("amount, payment_date")
                       .eq("sale_id", layby.sale_id);
+                    // Fetch sale to get currency
+                    const { data: saleRows } = await supabase
+                      .from("sales")
+                      .select("currency")
+                      .eq("id", layby.sale_id)
+                      .single();
+                    const currency = saleRows?.currency || 'K';
                     const customer = layby.customerInfo || {};
                     const logoUrl = window.location.origin + '/bestrest-logo.png';
                     const companyName = 'BestRest';
-                    exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments });
+                    exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
                   }}>PDF</button>
                   <button style={{ background: '#4caf50', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={async () => {
                     const { data: saleItems } = await supabase

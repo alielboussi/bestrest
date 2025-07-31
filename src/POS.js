@@ -47,7 +47,7 @@ export default function POS() {
       // Fetch products
       supabase
         .from("inventory")
-        .select("product_id, quantity, product:products(id, name, sku, standard_price, promotional_price, currency)")
+        .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency)")
         .eq("location", selectedLocation)
         .then(({ data }) => {
           setProducts((data || []).map(row => ({ ...row.product, stock: row.quantity })));
@@ -55,7 +55,7 @@ export default function POS() {
       // Fetch sets/kits (combos)
       supabase
         .from("combo_inventory")
-        .select("combo_id, quantity, combo:combos(id, combo_name, sku, standard_price, promotional_price, currency)")
+        .select("combo_id, quantity, combo:combos(id, combo_name, sku, price:price, promotional_price, currency)")
         .eq("location_id", selectedLocation)
         .then(({ data }) => {
           setSets((data || []).map(row => ({
@@ -70,11 +70,26 @@ export default function POS() {
     }
   }, [selectedLocation]);
 
-  // Helper: get correct price (promo > standard)
+  // Helper: get correct price (use promo if present and > 0, else use price if present and > 0)
   const getBestPrice = (item) => {
-    if (item.promotional_price && Number(item.promotional_price) > 0) return Number(item.promotional_price);
-    if (item.standard_price && Number(item.standard_price) > 0) return Number(item.standard_price);
-    return 0;
+    // Defensive: handle null, undefined, empty string, string 'null', and string numbers
+    let std = item.price;
+    let promo = item.promotional_price;
+    if (std === null || std === undefined || std === '' || std === 'null') std = 0;
+    if (promo === null || promo === undefined || promo === '' || promo === 'null') promo = 0;
+    std = Number(std);
+    promo = Number(promo);
+    const hasStandard = !isNaN(std) && std > 0;
+    const hasPromo = !isNaN(promo) && promo > 0;
+    if (hasPromo) {
+      // Use promo if present and > 0
+      return promo;
+    } else if (hasStandard) {
+      // Use standard if promo is not present or not > 0
+      return std;
+    } else {
+      return 0;
+    }
   };
 
   // Add product or set to cart
@@ -436,6 +451,7 @@ export default function POS() {
             <button key={product.id} className="pos-product-btn" onClick={() => addToCart(product)}>
               {product.name} ({product.sku})<br />Stock: {product.stock}<br />
               <b>Price: {getBestPrice(product).toFixed(2)} {product.currency || currency}</b>
+              <div style={{fontSize:'0.8em',color:'#aaa'}}>std: {String(product.price)} | promo: {String(product.promotional_price)}</div>
             </button>
           )),
           ...sets.filter(s =>
@@ -589,6 +605,52 @@ export default function POS() {
               {customerError && <div style={{ color: "#ff5252", marginBottom: 8 }}>{customerError}</div>}
               <button type="submit" disabled={customerLoading}>{customerLoading ? "Adding..." : "Add Customer"}</button>
               <button type="button" style={{ background: '#888', marginTop: 8 }} onClick={() => { setShowCustomerModal(false); setCustomerError(""); }}>Cancel</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {showEditCustomerModal && (
+        <div className="pos-modal">
+          <div className="pos-modal-content">
+            <h3>Edit Customer</h3>
+            <form onSubmit={handleEditCustomer}>
+              <input
+                type="text"
+                placeholder="Customer Name"
+                value={editCustomerForm.name}
+                onChange={e => setEditCustomerForm(f => ({ ...f, name: e.target.value }))}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Phone Number"
+                value={editCustomerForm.phone}
+                onChange={e => setEditCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                required
+              />
+              <input
+                type="text"
+                placeholder="TPIN (optional)"
+                value={editCustomerForm.tpin}
+                onChange={e => setEditCustomerForm(f => ({ ...f, tpin: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="Address (optional)"
+                value={editCustomerForm.address}
+                onChange={e => setEditCustomerForm(f => ({ ...f, address: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="City (optional)"
+                value={editCustomerForm.city}
+                onChange={e => setEditCustomerForm(f => ({ ...f, city: e.target.value }))}
+              />
+              {editCustomerError && <div style={{ color: "#ff5252", marginBottom: 8 }}>{editCustomerError}</div>}
+              <button type="submit" disabled={editCustomerLoading}>{editCustomerLoading ? "Saving..." : "Save Changes"}</button>
+              <button type="button" style={{ background: '#888', marginTop: 8 }} onClick={() => { setShowEditCustomerModal(false); setEditCustomerError(""); }}>Cancel</button>
             </form>
           </div>
         </div>
