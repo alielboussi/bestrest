@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Stock View</string>
+    <string name="webview_content_desc">Displays the stock report web page</string>
+</resources>

@@ -177,11 +177,26 @@ const StocktakeReport = () => {
   }, [location, selectedPeriod]);
 
 
-  // Filter by product name or SKU, but always show all products if search is empty
+  // Filter: only show products with non-zero data for this location/period, or matching the search
   const filteredProducts = products.filter(p => {
-    if (!search || search.trim() === '') return true;
-    const s = search.toLowerCase();
-    return ((p.name && p.name.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    const hasData = (
+      (p.opening && p.opening !== 0) ||
+      (p.transfer && p.transfer !== 0) ||
+      (p.sales && p.sales !== 0) ||
+      (p.closing && p.closing !== 0) ||
+      (p.expectedStock && p.expectedStock !== 0) ||
+      (p.actualStock && p.actualStock !== 0) ||
+      (p.variance && p.variance !== 0) ||
+      (p.amount && p.amount !== 0)
+    );
+    if (search && search.trim() !== '') {
+      const s = search.toLowerCase();
+      return (
+        (p.name && p.name.toLowerCase().includes(s)) ||
+        (p.sku && p.sku.toLowerCase().includes(s))
+      );
+    }
+    return hasData;
   });
 
 

@@ -3,6 +3,16 @@
   .stock-report-header {
     display: none !important;  /* <--- Hides Stock View header on phones */
   }
+  h1, h2, header {
+    /* Hide any h1/h2/header containing 'Stock View' text on mobile */
+    /* This is a fallback for any header not using the class */
+    /* Will only hide if the text matches exactly, not partial */
+  }
+  h1:contains('Stock View'),
+  h2:contains('Stock View'),
+  header:contains('Stock View') {
+    display: none !important;
+  }
   .stock-report-controls {
     flex-direction: column;
     align-items: center;

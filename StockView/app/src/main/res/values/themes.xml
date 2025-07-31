@@ -1,0 +1,11 @@
+<resources>
+    <!-- Main App Theme -->
+    <style name="Theme.StockView" parent="Theme.Material3.Light">
+        <!-- Customize your main app theme here if needed -->
+    </style>
+
+    <!-- Splash Theme -->
+    <style name="Theme.StockView.Splash" parent="Theme.Material3.Light">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>
