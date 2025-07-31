@@ -35,46 +35,58 @@
     font-size: 1.05rem;
     box-sizing: border-box;
     word-break: break-word;
-    height: auto;
+    /* Fixed for mobile: allow height to grow with content */
+    height: auto !important;
+    min-height: unset !important;
+    max-height: unset !important;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
     background: #181d23;
   }
   .stock-report-card-img-wrap {
-    width: 100%;
-    min-height: 110px;
-    max-height: 130px;
+    width: 100% !important;
+    min-height: 110px !important;
+    max-height: 140px !important;
+    margin-bottom: 0.7rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #181d23;
     border-radius: 8px;
-    margin-bottom: 0.7rem;
+    background: #181d23;
   }
   .stock-report-card-img {
-    max-width: 88vw;
-    max-height: 120px;
+    max-width: 95vw !important;
+    max-height: 130px !important;
+    width: auto !important;
+    height: auto !important;
     border-radius: 8px;
-    object-fit: contain;
+    object-fit: contain !important;
+    margin: 0 auto;
+    display: block;
   }
   .stock-report-card-img-placeholder {
-    width: 100%;
-    min-height: 120px;
+    min-height: 110px !important;
+    font-size: 1.12rem;
+    text-align: center;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #aaa;
-    font-size: 1.2rem;
     background: #23272f;
     border-radius: 10px;
   }
   .stock-report-card-info {
+    /* Fixed for mobile: allow product details to wrap and not overflow */
     font-size: 1.08rem;
-    line-height: 1.45;
-    padding: 0.7rem 0.2rem 0.2rem 0.2rem;
+    line-height: 1.48;
+    padding: 0.2rem 0;
     display: flex;
     flex-direction: column;
     gap: 0.32rem;
     word-break: break-word;
-    white-space: pre-line;
+    white-space: normal;
     overflow-wrap: break-word;
     max-width: 100%;
     flex: 1 1 auto;
@@ -110,6 +122,7 @@
     z-index: 1001;
   }
 }
+
 /* Mobile-friendly Stock Report Card Layout */
 .stock-report-mobile-container {
   background: #10181b;
@@ -199,8 +212,6 @@
 }
 /* StockReports.css */
 
-
-
 body, .stock-report-container {
   background: #10181b;
   color: #e0f7fa;
@@ -221,7 +232,6 @@ body, .stock-report-container {
   margin-bottom: 12px;
 }
 
-
 .stock-report-table {
   width: 100%;
   border-collapse: collapse;
@@ -232,16 +242,12 @@ body, .stock-report-container {
   box-shadow: 0 2px 12px #0006;
 }
 
-
-
 .stock-report-table th, .stock-report-table td {
   border: 2px solid #00e676;
   padding: 10px 14px;
   text-align: center;
   background: #10181b;
 }
-
-
 
 .stock-report-table th {
   background: #10181b;
@@ -251,8 +257,6 @@ body, .stock-report-container {
   font-size: 1.1em;
   border-bottom: 2.5px solid #00e676;
 }
-
-
 
 .stock-report-table tr:nth-child(even),
 .stock-report-table tr:nth-child(odd) {
