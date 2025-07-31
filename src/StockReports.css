@@ -26,13 +26,16 @@
     align-items: center;
   }
   .stock-report-card {
-    width: 92vw;
-    max-width: 340px;
+    width: 94vw;
+    max-width: 350px;
     min-width: unset;
     margin: 0 auto;
     border-radius: 10px;
     padding: 0.7rem 0.4rem 1rem 0.4rem;
-    font-size: 1rem;
+    font-size: 0.98rem;
+    box-sizing: border-box;
+    word-break: break-word;
+    height: auto;
   }
   .stock-report-card-img-wrap {
     width: 100%;
@@ -63,8 +66,13 @@
     border-radius: 10px;
   }
   .stock-report-card-info {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     padding: 0.5rem 0.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    word-break: break-word;
+    white-space: pre-line;
   }
   /* Modal overlay for expanded image */
   .stock-report-modal {

@@ -30,7 +30,7 @@ const StockReport = () => {
       // Fetch all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, price, promotional_price, unit_of_measure_id');
+        .select('id, sku, name, price, promotional_price, unit_of_measure_id, currency');
       if (productsError || !productsData) {
         setProducts([]);
         return;
@@ -91,6 +91,7 @@ const StockReport = () => {
             standard_price,
             quantity,
             image_url: imageMap[prod.id] || null,
+            currency: prod.currency || '',
           };
         });
       setProducts(merged);
@@ -171,8 +172,8 @@ const StockReport = () => {
               <div>SKU: {p.sku || '-'}</div>
               <div>Unit: {p.unit_of_measure || '-'}</div>
               <div>Stock: <b>{p.quantity}</b></div>
-              <div>Standard Price: <b>{p.standard_price}</b></div>
-              <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? p.promotional_price : '-'}</b></div>
+              <div>Standard Price: <b>{p.currency ? `${p.currency} ` : ''}{p.standard_price}</b></div>
+              <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? `${p.currency ? `${p.currency} ` : ''}${p.promotional_price}` : '-'}</b></div>
             </div>
           </div>
         ))}
