@@ -81,7 +81,7 @@ const StockReport = () => {
 
   return (
     <div className="stock-report-mobile-container">
-      <h2 className="stock-report-header">Stock Report</h2>
+      <h2 className="stock-report-header">Available Stock</h2>
       <div className="stock-report-controls">
         <label>
           Location:
