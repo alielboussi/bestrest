@@ -10,7 +10,7 @@ import Locations from './Locations';
 import Products from './Products';
 import Categories from './Categories';
 import UnitsOfMeasure from './UnitsOfMeasure';
-import OpeningStock from './Stocktake';
+import OpeningStock from './OpeningStock';
 import ClosingStock from './ClosingStock';
 import Transfer from './Transfer';
 import TransferList from './TransferList';
@@ -20,6 +20,7 @@ import StockViewer from './StockViewer';
 import Sets from "./Sets";
 import SalesReport from './SalesReport';
 import StockReport from './StockReport';
+import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
 import Roneth113ResetButton from './Roneth113ResetButton';
 
@@ -82,6 +83,8 @@ function App() {
   return (
     <div className="App">
       <Routes>
+        {/* Public, view-only stock report for Android app */}
+        <Route path="/stock-app" element={<StockApp />} />
         <Route path="/login" element={<LoginPage handleLogin={handleLogin} />} />
         <Route path="/dashboard" element={user ? (<Dashboard user={user} />) : (<Navigate to="/login" />)} />
         <Route path="/pos" element={user ? <POS /> : <Navigate to="/dashboard" />} />

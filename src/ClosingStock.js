@@ -53,8 +53,15 @@ function ClosingStock() {
     setSaving(true);
     setError('');
     try {
-      // Create closing stocktake
-      const { data: stocktake, error: stError } = await supabase
+      // 1. End previous open period for this location (if any)
+      await supabase
+        .from('stocktakes')
+        .update({ ended_at: new Date().toISOString() })
+        .eq('location_id', selectedLocation)
+        .is('ended_at', null);
+
+      // 2. Create closing stocktake
+      const { data: closingStocktake, error: stError } = await supabase
         .from('stocktakes')
         .insert([
           {
@@ -69,18 +76,20 @@ function ClosingStock() {
         .select()
         .single();
       if (stError) throw stError;
-      // Prepare entries: all products, qty from entries or 0
+
+      // 3. Prepare entries: all products, qty from entries or 0
       const stockEntries = products.map(p => ({
-        stocktake_id: stocktake.id,
+        stocktake_id: closingStocktake.id,
         product_id: p.id,
         qty: Number(entries[p.id]) || 0
       }));
-      // Insert stocktake_entries
+      // Insert stocktake_entries for closing
       const { error: seError } = await supabase
         .from('stocktake_entries')
         .insert(stockEntries);
       if (seError) throw seError;
-      // Update inventory for each product at location
+
+      // 4. Update inventory for each product at location
       for (const entry of stockEntries) {
         await supabase
           .from('inventory')
@@ -91,6 +100,35 @@ function ClosingStock() {
             updated_at: new Date().toISOString()
           }, { onConflict: ['product_id', 'location'] });
       }
+
+      // 5. Create new opening stocktake for new period
+      const { data: openingStocktake, error: osError } = await supabase
+        .from('stocktakes')
+        .insert([
+          {
+            location_id: selectedLocation,
+            user_id: JSON.parse(localStorage.getItem('user')).id,
+            started_at: new Date().toISOString(),
+            ended_at: null,
+            type: 'opening',
+            name: `Opening Stock - ${new Date().toLocaleDateString()}`
+          }
+        ])
+        .select()
+        .single();
+      if (osError) throw osError;
+
+      // 6. Insert opening stocktake entries (same as closing)
+      const openingEntries = products.map(p => ({
+        stocktake_id: openingStocktake.id,
+        product_id: p.id,
+        qty: Number(entries[p.id]) || 0
+      }));
+      const { error: oeError } = await supabase
+        .from('stocktake_entries')
+        .insert(openingEntries);
+      if (oeError) throw oeError;
+
       setSaving(false);
       navigate('/dashboard');
     } catch (err) {

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
-import './Stocktake.css';
+import './OpeningStock.css';
 
-const Stocktake = () => {
+const OpeningStock = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1: select location, 2: enter name, 3: stocktake
   const [locations, setLocations] = useState([]);
@@ -182,4 +182,4 @@ const Stocktake = () => {
   );
 };
 
-export default Stocktake;
+export default OpeningStock;
