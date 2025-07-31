@@ -71,10 +71,10 @@ const StocktakeReport = () => {
         setProducts([]);
         return;
       }
-      // Fetch all products
+      // Fetch all products (include currency)
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, price, standard_price, promotional_price');
+        .select('id, sku, name, price, standard_price, promotional_price, currency');
       if (productsError || !productsData) {
         setProducts([]);
         return;
@@ -207,6 +207,25 @@ const StocktakeReport = () => {
     const pageWidth = doc.internal.pageSize.getWidth();
     let y = 20;
 
+    // Get stocktake id for anti-forgery header (use opening id)
+    const stocktakeId = selectedPeriod?.opening?.id || 'N/A';
+    // Function to draw anti-forgery header (start/end)
+    function drawAntiForgeryHeader(doc, pageWidth, type) {
+      doc.setFontSize(11);
+      doc.setTextColor(180);
+      let headerText = '';
+      if (type === 'start') {
+        headerText = `start : ${stocktakeId}`;
+      } else if (type === 'end') {
+        headerText = `------------------- :end`;
+      }
+      doc.text(headerText, pageWidth / 2, 10, { align: 'center' });
+      doc.setTextColor(0);
+    }
+
+    // Draw 'start' on first page
+    drawAntiForgeryHeader(doc, pageWidth, 'start');
+
     // Title
     doc.setFontSize(22);
     doc.text('Stocktake Report', pageWidth / 2, y, { align: 'center' });
@@ -275,17 +294,19 @@ const StocktakeReport = () => {
     const tableRows = filteredProducts.map(p => {
       // Use currency from sales_items if available, else fallback to product.currency, else blank
       const currency = productCurrencyMap[p.id] || p.currency || '';
-      // If promo price is available, show it and leave standard price blank
-      const showPromo = p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '';
-      const standardPrice = showPromo ? '' : (p.standard_price !== undefined && p.standard_price !== null && p.standard_price !== '' ? p.standard_price : (p.price !== undefined && p.price !== null && p.price !== '' ? p.price : 0));
-      const promoPrice = showPromo ? p.promotional_price : '';
-      // Format amount as 'K 4,800' or '$ 4,800' (currency before number, with comma)
-      let formattedAmount = '';
-      if (p.amount !== undefined && p.amount !== null) {
-        const num = Number(p.amount);
-        const numStr = num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        formattedAmount = currency ? `${currency} ${numStr}` : numStr;
-      }
+      // If promo price is available, use it for calculation and display, else use standard price
+      const hasPromo = p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '';
+      const usePrice = hasPromo
+        ? Number(p.promotional_price)
+        : (p.standard_price !== undefined && p.standard_price !== null && p.standard_price !== ''
+            ? Number(p.standard_price)
+            : (p.price !== undefined && p.price !== null && p.price !== '' ? Number(p.price) : 0));
+      const amount = (typeof p.variance === 'number' ? p.variance : 0) * usePrice;
+      const numStr = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const formattedAmount = currency ? `${currency} ${numStr}` : numStr;
+      // For display: if promo price is used, show it, else show standard price
+      const standardPrice = hasPromo ? '' : usePrice;
+      const promoPrice = hasPromo ? usePrice : '';
       return [
         p.sku || '-',
         p.name || '',
@@ -302,23 +323,25 @@ const StocktakeReport = () => {
       ];
     });
 
-    // Calculate total amount (sum of all variance amounts)
-    const totalAmount = filteredProducts.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-    // Add total row (bold, red for amount)
-    // Use the first available currency from the tableRows, else blank
+    // Calculate total amount (sum of all variance amounts, using correct price logic)
+    let totalAmount = 0;
     let totalCurrency = '';
-    for (let row of tableRows) {
-      const amt = row[11];
-      if (amt && typeof amt === 'string' && amt.trim().length > 0) {
-        // Match currency at the start (e.g., 'K 4,800.00')
-        const match = amt.match(/^([A-Za-z$]+)/);
-        if (match) { totalCurrency = match[1]; break; }
-      }
+    for (let p of filteredProducts) {
+      const currency = productCurrencyMap[p.id] || p.currency || '';
+      const hasPromo = p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '';
+      const usePrice = hasPromo
+        ? Number(p.promotional_price)
+        : (p.standard_price !== undefined && p.standard_price !== null && p.standard_price !== ''
+            ? Number(p.standard_price)
+            : (p.price !== undefined && p.price !== null && p.price !== '' ? Number(p.price) : 0));
+      const amount = (typeof p.variance === 'number' ? p.variance : 0) * usePrice;
+      totalAmount += amount;
+      if (!totalCurrency && currency) totalCurrency = currency;
     }
+    const totalNumStr = totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const totalRow = [
       '', 'TOTAL', '', '', '', '', '', '', '', '', '',
-      { content: `${totalCurrency ? totalCurrency + ' ' : ''}${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, styles: { textColor: [255,0,0], fontStyle: 'bold' } }
+      { content: `${totalCurrency ? totalCurrency + ' ' : ''}${totalNumStr}`, styles: { textColor: [255,0,0], fontStyle: 'bold' } }
     ];
 
     // Use autoTable with advanced options for multi-page, header, and total row
@@ -347,7 +370,18 @@ const StocktakeReport = () => {
         11: { textColor: [0,0,0], fontStyle: 'normal' }, // Amount
       },
       didDrawPage: function (data) {
-        // Shift header down if needed
+        // Only draw anti-forgery header on first page
+        const pageSize = doc.internal.pageSize;
+        const pageWidth = pageSize.getWidth();
+        if (doc.internal.getCurrentPageInfo().pageNumber === 1) {
+          drawAntiForgeryHeader(doc, pageWidth, 'start');
+        }
+        // Add page numbers at the bottom right
+        const pageCount = doc.internal.getNumberOfPages();
+        const pageHeight = pageSize.getHeight();
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        doc.text(`Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`, pageWidth - 20, pageHeight - 10, { align: 'right' });
       },
       margin: { left: 10, right: 10 },
       theme: 'grid',
@@ -363,15 +397,67 @@ const StocktakeReport = () => {
       },
     });
 
-    // Move signature lines 5cm (50mm) below the last table row
-    let finalY = doc.lastAutoTable.finalY || (y + 40);
-    finalY += 50;
+    // Add a new page for signatures
+    doc.addPage();
+    const sigPageWidth = doc.internal.pageSize.getWidth();
+    const sigPageHeight = doc.internal.pageSize.getHeight();
+    // Draw 'end' anti-forgery header on last page
+    drawAntiForgeryHeader(doc, sigPageWidth, 'end');
+    // Page number for signature page
+    const sigPageCount = doc.internal.getNumberOfPages();
+    doc.setFontSize(10);
+    doc.text(`Page ${sigPageCount} of ${sigPageCount}`, sigPageWidth - 20, sigPageHeight - 10, { align: 'right' });
+
+    // Centered header for signature/disclaimer page
+    const sigHeaderY = 30;
+    doc.setFontSize(18);
+    doc.text('Stocktake Authorization & Certification', sigPageWidth / 2, sigHeaderY, { align: 'center' });
+
+    // Signature boxes and name fields (rectangular, smaller, improved alignment)
+    const sigBoxWidth = 60; // wider
+    const sigBoxHeight = 35; // less tall
+    const marginX = 40;
+    const topY = sigHeaderY + 18; // space below header
+    const labelSpacing = 8;
+    const nameLineY = topY + 12;
+    const nameLineLength = sigBoxWidth - 10; // longer line
+    // Manager (left)
+    const managerX = marginX;
     doc.setFontSize(13);
-    doc.text('Manager', 30, finalY);
-    doc.text('Director', pageWidth - 60, finalY);
-    doc.setLineWidth(0.5);
-    doc.line(20, finalY + 5, 70, finalY + 5); // Manager signature line
-    doc.line(pageWidth - 70, finalY + 5, pageWidth - 20, finalY + 5); // Director signature line
+    doc.text('Manager', managerX + sigBoxWidth/2, topY, { align: 'center' });
+    doc.setFontSize(11);
+    doc.text('Name:', managerX, nameLineY);
+    // Connect line to 'Name:' and make it longer
+    const nameLabelWidth = doc.getTextWidth('Name: ');
+    doc.line(managerX + nameLabelWidth + 2, nameLineY + 1, managerX + nameLabelWidth + 2 + nameLineLength, nameLineY + 1);
+    doc.text('Signature:', managerX, nameLineY + labelSpacing + 10);
+    doc.rect(managerX, nameLineY + labelSpacing + 12, sigBoxWidth, sigBoxHeight);
+
+    // Director (right)
+    const directorX = sigPageWidth - marginX - sigBoxWidth;
+    doc.setFontSize(13);
+    doc.text('Director', directorX + sigBoxWidth/2, topY, { align: 'center' });
+    doc.setFontSize(11);
+    doc.text('Name:', directorX, nameLineY);
+    // Connect line to 'Name:' and make it longer
+    doc.line(directorX + nameLabelWidth + 2, nameLineY + 1, directorX + nameLabelWidth + 2 + nameLineLength, nameLineY + 1);
+    doc.text('Signature:', directorX, nameLineY + labelSpacing + 10);
+    doc.rect(directorX, nameLineY + labelSpacing + 12, sigBoxWidth, sigBoxHeight);
+
+    // Disclaimer footer
+    const disclaimer = [
+      'Disclaimer:',
+      'The names and signatures provided on this stocktake record are certified as accurate and valid by the undersigned.',
+      'By signing above, each party acknowledges that the information recorded is true and correct to the best of their knowledge,',
+      'and that their signature constitutes legal acceptance and approval of the stocktake results. These signatures are valid for all',
+      'legal and official purposes related to this document.'
+    ];
+    let discY = sigPageHeight - 80;
+    doc.setFontSize(11);
+    doc.setTextColor(80);
+    disclaimer.forEach((line, i) => {
+      doc.text(line, sigPageWidth/2, discY + i*13, { align: 'center' });
+    });
 
     doc.save(`stocktake_report_${location || 'all'}.pdf`);
   };
