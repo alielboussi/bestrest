@@ -14,12 +14,15 @@ import './StockReports.css';
 const StockReport = () => {
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
   const [expandedImage, setExpandedImage] = useState(null);
 
   useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
+    supabase.from('categories').select('id, name').then(({ data }) => setCategories(data || []));
   }, []);
 
   useEffect(() => {
@@ -95,11 +98,17 @@ const StockReport = () => {
     fetchStock();
   }, [location]);
 
-  // Filter by product name or SKU, but always show all products if search is empty
+  // Filter by product name, SKU, and category
   const filteredProducts = products.filter(p => {
+    // Category filter
+    if (category && String(p.category_id) !== String(category)) return false;
+    // Search filter
     if (!search || search.trim() === '') return true;
     const s = search.toLowerCase();
-    return ((p.name && p.name.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
+    return (
+      (p.name && p.name.toLowerCase().includes(s)) ||
+      (p.sku && p.sku.toLowerCase().includes(s))
+    );
   });
 
   return (
@@ -116,6 +125,20 @@ const StockReport = () => {
             <option value="">All</option>
             {locations.map(l => (
               <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Category:
+          <select
+            className="stock-report-select"
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            style={{ marginLeft: 8 }}
+          >
+            <option value="">All</option>
+            {categories.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </label>
