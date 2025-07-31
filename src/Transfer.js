@@ -84,13 +84,13 @@ const Transfer = () => {
 
   useEffect(() => {
     if (!search) {
-      setFilteredProducts(products);
+      setFilteredProducts([]); // Show nothing if no search
       return;
     }
     const s = search.toLowerCase();
     setFilteredProducts(
       products.filter(
-        p =>
+        (p) =>
           p.name.toLowerCase().includes(s) ||
           (p.sku && p.sku.toLowerCase().includes(s)) ||
           (p.price && p.price.toString().includes(s))
@@ -121,6 +121,7 @@ const Transfer = () => {
       const { data: users } = await supabase.from('users').select('id').limit(1);
       const userId = users && users.length > 0 ? users[0].id : null;
       let sessionId = id;
+      let oldEntries = [];
       if (id) {
         // Update session
         const { error: sessErr } = await supabase.from('stock_transfer_sessions').update({
@@ -131,6 +132,9 @@ const Transfer = () => {
           transfer_date: transferDate
         }).eq('id', id);
         if (sessErr) throw sessErr;
+        // Fetch old entries before deleting
+        const { data: oldEnts } = await supabase.from('stock_transfer_entries').select('*').eq('session_id', id);
+        oldEntries = oldEnts || [];
         // Delete old entries
         await supabase.from('stock_transfer_entries').delete().eq('session_id', id);
       } else {
@@ -150,6 +154,21 @@ const Transfer = () => {
       const entries = selectedProducts.map(r => ({ session_id: sessionId, product_id: r.product_id, quantity: r.qty }));
       const { error: entErr } = await supabase.from('stock_transfer_entries').insert(entries);
       if (entErr) throw entErr;
+      // If editing, revert old inventory changes before applying new ones
+      if (id && oldEntries.length > 0) {
+        for (const e of oldEntries) {
+          // Add back to fromLocation
+          const { data: invFrom } = await supabase.from('inventory').select('id, quantity').eq('product_id', e.product_id).eq('location', fromLocation).single();
+          if (invFrom) {
+            await supabase.from('inventory').update({ quantity: (parseFloat(invFrom.quantity) + parseFloat(e.quantity)), updated_at: new Date() }).eq('id', invFrom.id);
+          }
+          // Subtract from toLocation
+          const { data: invTo } = await supabase.from('inventory').select('id, quantity').eq('product_id', e.product_id).eq('location', toLocation).single();
+          if (invTo) {
+            await supabase.from('inventory').update({ quantity: (parseFloat(invTo.quantity) - parseFloat(e.quantity)), updated_at: new Date() }).eq('id', invTo.id);
+          }
+        }
+      }
       // Update inventory: subtract from fromLocation, add to toLocation
       for (const r of selectedProducts) {
         // Subtract from fromLocation
@@ -210,8 +229,18 @@ const Transfer = () => {
                 <tr><th>Product</th><th>SKU</th><th>Price</th><th>Qty</th></tr>
               </thead>
               <tbody>
-                {filteredProducts.map(p => (
-                  <tr key={p.id}>
+                {/* Show all previously transferred products when editing, plus any search results (no duplicates) */}
+                {(
+                  id
+                    ? [
+                        ...selectedProducts,
+                        ...filteredProducts.filter(
+                          p => !selectedProducts.some(r => r.product_id === p.id)
+                        ).map(p => ({ product_id: p.id, name: p.name, sku: p.sku, price: p.price, qty: '' }))
+                      ]
+                    : filteredProducts.map(p => ({ product_id: p.id, name: p.name, sku: p.sku, price: p.price, qty: '' }))
+                ).map(p => (
+                  <tr key={p.product_id}>
                     <td>{p.name}</td>
                     <td>{p.sku}</td>
                     <td>{p.price}</td>
@@ -219,8 +248,8 @@ const Transfer = () => {
                       <input
                         type="number"
                         min="0"
-                        value={selectedProducts.find(r => r.product_id === p.id)?.qty || ''}
-                        onChange={e => handleQtyChange(p.id, e.target.value)}
+                        value={selectedProducts.find(r => r.product_id === p.product_id)?.qty || p.qty || ''}
+                        onChange={e => handleQtyChange(p.product_id, e.target.value)}
                       />
                     </td>
                   </tr>
@@ -230,13 +259,6 @@ const Transfer = () => {
           </div>
           <button className="transfer-submit-btn" onClick={handleSubmit} disabled={saving}>{id ? 'Save Changes' : 'Process Transfer'}</button>
           {error && <div className="transfer-error">{error}</div>}
-          <button
-            type="button"
-            className="back-dashboard-btn"
-            onClick={() => navigate('/dashboard')}
-          >
-            ← Back to Dashboard
-          </button>
         </>}
       </div>
     </div>

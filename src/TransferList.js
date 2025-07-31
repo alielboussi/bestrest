@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
-import './Transfer.css';
+import './TransferList.css';
 
 const TransferList = () => {
   const [transfers, setTransfers] = useState([]);
@@ -18,6 +18,7 @@ const TransferList = () => {
         .from('stock_transfer_sessions')
         .select('id, from_location, to_location, delivery_number, transfer_date, created_at')
         .order('created_at', { ascending: false });
+      console.log('Fetched transfers:', data, 'Error:', error);
       setTransfers(data || []);
       setLoading(false);
     };
@@ -25,54 +26,38 @@ const TransferList = () => {
   }, []);
 
   return (
-    <div className="transfer-container">
-      <h1>Transfers</h1>
+    <div className="transfer-list-container">
+      <div className="transfer-list-title">Processed Transfers</div>
       {loading ? <div>Loading...</div> : (
-        <table className="transfer-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>From</th>
-              <th>To</th>
-              <th>Delivery #</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transfers.map(t => (
-              <tr key={t.id}>
-                <td>{t.transfer_date}</td>
-                <td>{locations.find(l => l.id === t.from_location)?.name || t.from_location}</td>
-                <td>{locations.find(l => l.id === t.to_location)?.name || t.to_location}</td>
-                <td>{t.delivery_number}</td>
-                <td>
-                  <button onClick={() => navigate(`/transfer/${t.id}`)}>Edit</button>
-                </td>
+        transfers.length === 0 ? (
+          <div style={{color:'#aaa', textAlign:'center', marginTop:'2rem', fontSize:'1.1rem'}}>No transfers found.</div>
+        ) : (
+          <table className="transfer-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Delivery #</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {transfers.map(t => (
+                <tr key={t.id}>
+                  <td>{t.transfer_date}</td>
+                  <td>{locations.find(l => l.id === t.from_location)?.name || t.from_location}</td>
+                  <td>{locations.find(l => l.id === t.to_location)?.name || t.to_location}</td>
+                  <td>{t.delivery_number}</td>
+                  <td>
+                    <button className="transfer-edit-btn" onClick={() => navigate(`/transfer/${t.id}`)}>Edit</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
       )}
-      <button
-        className="back-to-dashboard-btn"
-        style={{
-          fontSize: '0.95em',
-          padding: '6px 18px',
-          background: '#00bfff',
-          color: '#fff',
-          border: '2px solid #00bfff',
-          borderRadius: 6,
-          fontWeight: 600,
-          boxShadow: '0 1px 4px #0003',
-          cursor: 'pointer',
-          transition: 'background 0.2s, color 0.2s',
-          minWidth: 120,
-          margin: '12px 0 18px 0',
-        }}
-        onClick={() => navigate('/dashboard')}
-        onMouseOver={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#00bfff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-        onMouseOut={e => { e.currentTarget.style.background = '#00bfff'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-      >Back to Dashboard</button>
     </div>
   );
 };

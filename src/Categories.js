@@ -157,9 +157,6 @@ const Categories = () => {
           </tbody>
         </table>
       </div>
-      <div className="categories-footer">
-        <button type="button" className="back-dashboard-btn" onClick={handleBack}>← Back to Dashboard</button>
-      </div>
     </div>
   );
 };

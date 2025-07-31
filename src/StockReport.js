@@ -1,109 +1,105 @@
 
+
+
+
+
+
+
+
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import './ReportPage.css';
-
+import './StockReports.css';
 
 
 
 const StockReport = () => {
-  const [location, setLocation] = useState('');
-  const [locations, setLocations] = useState([]);
   const [products, setProducts] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
 
+
+
   useEffect(() => {
+    // Fetch locations for filter dropdown
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
   }, []);
 
+
+
+
   useEffect(() => {
     async function fetchStock() {
-      if (!location) {
-        // All locations: aggregate quantity and total cost per product
-        const { data: inventoryRows, error } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, products(name, cost_price)');
-        if (error) return setProducts([]);
-        // Aggregate by product_id
-        const productMap = {};
-        inventoryRows.forEach(row => {
-          if (!productMap[row.product_id]) {
-            productMap[row.product_id] = {
-              id: row.product_id,
-              name: row.products?.name || '',
-              cost_price: row.products?.cost_price || 0,
-              quantity: 0,
-              total_cost: 0
-            };
-          }
-          productMap[row.product_id].quantity += row.quantity || 0;
-          productMap[row.product_id].total_cost += (row.quantity || 0) * (row.products?.cost_price || 0);
-        });
-        setProducts(Object.values(productMap));
-      } else {
-        // Specific location: show products and quantity for that location
-        const { data: inventoryRows, error } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, products(name, cost_price)')
-          .eq('location', location);
-        if (error) return setProducts([]);
-        setProducts(
-          inventoryRows.map(row => ({
-            id: row.product_id,
-            name: row.products?.name || '',
-            cost_price: row.products?.cost_price || 0,
-            quantity: row.quantity || 0,
-            total_cost: (row.quantity || 0) * (row.products?.cost_price || 0)
-          }))
-        );
+      // Fetch all products (with SKU, name, standard_price, promotional_price)
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, sku, name, price, standard_price, promotional_price');
+      if (productsError || !productsData) {
+        setProducts([]);
+        return;
       }
+
+      // Fetch inventory, filter by location if selected
+      let inventoryRows = [];
+      if (!location) {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, location');
+        if (!error && data) inventoryRows = data;
+      } else {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('product_id, quantity, location')
+          .eq('location', location);
+        if (!error && data) inventoryRows = data;
+      }
+
+      // Map inventory by product_id
+      const inventoryMap = {};
+      inventoryRows.forEach(row => {
+        if (!inventoryMap[row.product_id]) inventoryMap[row.product_id] = 0;
+        inventoryMap[row.product_id] += row.quantity || 0;
+      });
+
+      // Always show all products, even if inventory is empty
+      const merged = productsData.map(prod => {
+        const quantity = inventoryMap[prod.id] || 0;
+        // Fallback: use prod.price if standard_price is missing
+        let standard_price = prod.standard_price;
+        if (standard_price === undefined || standard_price === null || standard_price === '') {
+          standard_price = prod.price !== undefined && prod.price !== null && prod.price !== '' ? prod.price : 0;
+        }
+        return {
+          ...prod,
+          standard_price,
+          quantity,
+        };
+      });
+      setProducts(merged);
     }
     fetchStock();
   }, [location]);
 
-  // Only search by product name for stock report
+
+  // Filter by product name or SKU, but always show all products if search is empty
   const filteredProducts = products.filter(p => {
-    if (!search) return true;
+    if (!search || search.trim() === '') return true;
     const s = search.toLowerCase();
-    return (p.name || '').toLowerCase().includes(s);
+    return ((p.name && p.name.toLowerCase().includes(s)) || (p.sku && p.sku.toLowerCase().includes(s)));
   });
 
-  // Export as PDF
-  const handleExportPDF = () => {
-    const doc = new jsPDF('p', 'pt', 'a4');
-    const margin = 40;
-    let y = margin;
-    doc.setFontSize(18);
-    doc.text('Stock Report', margin, y);
-    y += 24;
-    doc.setFontSize(12);
-    doc.text(`Location: ${location || 'All'}`, margin, y);
-    y += 18;
-    doc.autoTable({
-      head: [['Product', 'Quantity', 'Total Cost']],
-      body: filteredProducts.map(p => [
-        p.name,
-        p.quantity,
-        p.total_cost
-      ]),
-      startY: y + 10,
-      styles: { fontSize: 10, cellPadding: 4 },
-      headStyles: { fillColor: [0, 191, 255] },
-      margin: { left: margin, right: margin }
-    });
-    doc.save(`stock_report_${location || 'all'}.pdf`);
-  };
 
-  // Export as CSV
+
+  // Export filtered products to CSV (only the required columns)
   const handleExportCSV = () => {
     if (!filteredProducts.length) return;
-    const header = ['Product', 'Quantity', 'Total Cost'];
+    const header = ['SKU', 'Product', 'Standard Price', 'Promotional Price', 'Quantity'];
     const rows = filteredProducts.map(p => [
-      p.name,
-      p.quantity,
-      p.total_cost
+      p.sku || '',
+      p.name || '',
+      p.standard_price !== undefined ? p.standard_price : '',
+      p.promotional_price !== undefined ? p.promotional_price : '',
+      p.quantity
     ]);
     const csvContent = [header, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -116,103 +112,61 @@ const StockReport = () => {
   };
 
 
+  // Export filtered products to PDF with signature lines and value calculation
+  // (Remove this function if it was not present in the original file)
 
   return (
-    <div className="report-page">
-      <h2>Stock Report</h2>
-      <div className="report-filters" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <label>Location:
-          <select value={location} onChange={e => setLocation(e.target.value)}>
+    <div className="stock-report-container">
+      <h2 className="stock-report-header">Stock Report</h2>
+
+      <div className="stock-report-controls">
+        <label>
+          Location:
+          <select
+            className="stock-report-select"
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+          >
             <option value="">All</option>
-            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {locations.map(l => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
           </select>
         </label>
         <input
           type="text"
+          className="stock-report-search"
           placeholder="Search Products..."
-          style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid #00bfff', background: '#181c20', color: '#fff', minWidth: 160 }}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
+        <button className="stock-report-export-btn" onClick={handleExportCSV}>Export to CSV</button>
       </div>
-      <table className="report-table">
+
+      <table className="stock-report-table">
         <thead>
           <tr>
+            <th>SKU</th>
             <th>Product</th>
+            <th>Standard Price</th>
+            <th>Promotional Price</th>
             <th>Quantity</th>
-            <th>Total Cost</th>
           </tr>
         </thead>
         <tbody>
           {filteredProducts.map(p => (
             <tr key={p.id}>
-              <td>{p.name}</td>
+              <td>{(p.sku !== undefined && p.sku !== null && p.sku !== '') ? p.sku : '-'}</td>
+              <td>{p.name || ''}</td>
+              <td>{(p.standard_price !== undefined && p.standard_price !== null && p.standard_price !== '') ? p.standard_price : (p.price !== undefined && p.price !== null && p.price !== '' ? p.price : 0)}</td>
+              <td>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? p.promotional_price : ''}</td>
               <td>{p.quantity}</td>
-              <td>{p.total_cost}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div style={{ display: 'flex', alignItems: 'center', margin: '18px 0 0 0', width: '100%' }}>
-        <button
-          className="export-btn"
-          style={{
-            fontSize: '0.95em',
-            padding: '6px 18px',
-            background: '#00bfff',
-            color: '#fff',
-            border: '2px solid #00bfff',
-            borderRadius: 6,
-            fontWeight: 600,
-            boxShadow: '0 1px 4px #0003',
-            cursor: 'pointer',
-            transition: 'background 0.2s, color 0.2s',
-            minWidth: 120,
-            marginRight: 12,
-          }}
-          onClick={handleExportPDF}
-        >Export as PDF</button>
-        <button
-          className="export-btn"
-          style={{
-            fontSize: '0.95em',
-            padding: '6px 18px',
-            background: '#00bfff',
-            color: '#fff',
-            border: '2px solid #00bfff',
-            borderRadius: 6,
-            fontWeight: 600,
-            boxShadow: '0 1px 4px #0003',
-            cursor: 'pointer',
-            transition: 'background 0.2s, color 0.2s',
-            minWidth: 120,
-            marginRight: 'auto',
-          }}
-          onClick={handleExportCSV}
-        >Export as CSV</button>
-        <button
-          className="back-to-dashboard-btn"
-          style={{
-            fontSize: '0.95em',
-            padding: '6px 18px',
-            background: '#00bfff',
-            color: '#fff',
-            border: '2px solid #00bfff',
-            borderRadius: 6,
-            fontWeight: 600,
-            boxShadow: '0 1px 4px #0003',
-            cursor: 'pointer',
-            transition: 'background 0.2s, color 0.2s',
-            minWidth: 120,
-            marginLeft: 'auto',
-          }}
-          onClick={() => window.location.href = '/dashboard'}
-          onMouseOver={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#00bfff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-          onMouseOut={e => { e.currentTarget.style.background = '#00bfff'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-        >Back to Dashboard</button>
-
-      </div>
     </div>
   );
 }
+
 export default StockReport;

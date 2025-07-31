@@ -20,9 +20,8 @@ import StockViewer from './StockViewer';
 import Sets from "./Sets";
 import SalesReport from './SalesReport';
 import StockReport from './StockReport';
-import LaybyReport from './LaybyReport';
 import StocktakeReport from './StocktakeReport';
-import FactoryResetAziliButton from './FactoryResetAziliButton';
+import Roneth113ResetButton from './Roneth113ResetButton';
 
 // Wrapper to extract query params for VarianceReport
 function VarianceReportWrapper() {
@@ -96,11 +95,12 @@ function App() {
         <Route path="/opening-stock" element={user ? <OpeningStock /> : <Navigate to="/dashboard" />} />
         <Route path="/closing-stock" element={user ? <ClosingStock /> : <Navigate to="/dashboard" />} />
         <Route path="/transfer" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
+        <Route path="/transfer/:id" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
+        <Route path="/transfers" element={user ? <TransferList /> : <Navigate to="/dashboard" />} />
         <Route path="/stock-viewer" element={user ? <StockViewer /> : <Navigate to="/dashboard" />} />
         <Route path="/sets" element={user ? <Sets /> : <Navigate to="/dashboard" />} />
         <Route path="/sales-report" element={user ? <SalesReport /> : <Navigate to="/dashboard" />} />
         <Route path="/stock-report" element={user ? <StockReport /> : <Navigate to="/dashboard" />} />
-        <Route path="/layby-report" element={user ? <LaybyReport /> : <Navigate to="/dashboard" />} />
         <Route path="/stocktake-report" element={user ? <StocktakeReport /> : <Navigate to="/dashboard" />} />
         <Route path="/variance-report" element={user ? <VarianceReportWrapper /> : <Navigate to="/dashboard" />} />
         {/* User Access Control Route (admin only) */}
@@ -108,7 +108,7 @@ function App() {
         {/* Default route: Redirect to login */}
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
-      <FactoryResetAziliButton />
+      <Roneth113ResetButton />
     </div>
   );
 }

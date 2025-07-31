@@ -145,14 +145,6 @@ const Locations = () => {
           ))}
         </tbody>
       </table>
-      <div className="back-to-dashboard-container">
-        <button
-          className="back-to-dashboard-btn"
-          onClick={() => window.location.href = '/dashboard'}
-        >
-          &#8592; Back to Dashboard
-        </button>
-      </div>
     </div>
   );
 };

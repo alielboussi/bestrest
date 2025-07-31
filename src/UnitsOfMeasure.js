@@ -70,20 +70,16 @@ const UnitsOfMeasure = () => {
               <td>{unit.name}</td>
               <td>{unit.abbreviation || '-'}</td>
               <td>
-                <button onClick={() => handleEdit(unit)}>Edit</button>
-                <button onClick={() => handleDelete(unit.id)} className="delete-btn">Delete</button>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button onClick={() => handleEdit(unit)} style={{ background: '#27c46c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1.08rem', cursor: 'pointer', width: '120px', height: '44px', display: 'inline-block' }}>Edit</button>
+                  <button onClick={() => handleDelete(unit.id)} className="delete-btn" style={{ width: '120px', height: '44px', display: 'inline-block', marginLeft: 0 }}>Delete</button>
+                </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <button
-        type="button"
-        className="back-dashboard-btn"
-        onClick={() => navigate('/dashboard')}
-      >
-        ← Back to Dashboard
-      </button>
+
     </div>
   );
 };

@@ -119,111 +119,84 @@ export default function Sets() {
   };
 
   return (
-    <div className="sets-container">
-      <div className="sets-header">
-        <h2>Create Kit / Set</h2>
-        <button
-          className="back-to-dashboard-btn"
-          style={{
-            fontSize: '0.95em',
-            padding: '6px 18px',
-            background: '#00bfff',
-            color: '#fff',
-            border: '2px solid #00bfff',
-            borderRadius: 6,
-            fontWeight: 600,
-            boxShadow: '0 1px 4px #0003',
-            cursor: 'pointer',
-            transition: 'background 0.2s, color 0.2s',
-            minWidth: 120,
-            margin: '0 0 0 18px',
-          }}
-          onClick={() => navigate('/dashboard')}
-          onMouseOver={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#00bfff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-          onMouseOut={e => { e.currentTarget.style.background = '#00bfff'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-        >Back to Dashboard</button>
-      </div>
-      <form className="sets-form" onSubmit={handleSubmit}>
-        <div className="sets-form-row">
-          <select required value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+    <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
+      <h1 className="products-title" style={{marginTop: '1rem'}}>Create Kit / Set</h1>
+      <form className="product-form" onSubmit={handleSubmit}>
+        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(7, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center'}}>
+          <select required name="location" value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
             <option value="">Select Location</option>
             {locations.map(loc => (
               <option key={loc.id} value={loc.id}>{loc.name}</option>
             ))}
           </select>
-          <input required placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} />
-          <input placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} />
-          <input required type="number" step="0.01" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} />
-          <input type="number" step="0.01" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} />
-          <input type="date" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} />
-          <input type="date" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} />
+          <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
+          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
+          <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+          <input type="number" step="0.01" name="promotionalPrice" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+          <input type="date" name="promoStart" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+          <input type="date" name="promoEnd" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
         </div>
-        <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} />
-        <div className="sets-section-title">Kit Components</div>
-        <div className="sets-search-row">
+
+        <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} style={{marginBottom: '10px', borderColor: '#00b4d8'}} />
+        <div className="sets-section-title" style={{color: '#00b4d8'}}>Kit Components</div>
+        <div className="form-grid-search-row" style={{marginTop: '18px', marginBottom: '8px', width: '100%', display: 'flex', justifyContent: 'flex-start'}}>
           <input
-            className="sets-search"
+            className="products-search-bar"
             placeholder="Search product to add..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            style={{marginBottom: 0, width: '350px', borderColor: '#00b4d8', background: '#23272f', color: '#e0e6ed', borderRadius: '6px', padding: '8px 12px', fontSize: '1rem'}}
           />
-          <div className="sets-search-results">
-            {filteredProducts.slice(0, 5).map(product => (
-              <button
-                type="button"
-                key={product.id}
-                className="sets-add-btn"
-                onClick={() => addProductToKit(product)}
-              >
-                + {product.name} (Stock: {productStock[product.id] || 0})
-              </button>
-            ))}
-          </div>
         </div>
-        <table className="sets-list">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th style={{ width: 120 }}>Quantity</th>
-              <th style={{ width: 60 }}>Remove</th>
-            </tr>
-          </thead>
-          <tbody>
-            {kitItems.map(item => (
-              <tr key={item.product_id}>
-                <td>{item.name}</td>
-                <td>
-                  <input
-                    type="number"
-                    min="1"
-                    max={productStock[item.product_id] || 0}
-                    value={item.quantity}
-                    onChange={e => updateQty(item.product_id, Number(e.target.value))}
-                    style={{ width: 70 }}
-                  />
-                  <span style={{ color: '#00bfff', fontSize: '0.9em', marginLeft: 6 }}>
-                    (Stock: {productStock[item.product_id] || 0})
-                  </span>
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="sets-delete-btn"
-                    onClick={() => removeProductFromKit(item.product_id)}
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
+
+        <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflow: 'visible', maxHeight: 'none'}}>
+          <table style={{width: '100%', minWidth: 600, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
+            <thead>
+              <tr style={{background: '#23272f'}}>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8'}}>Product</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', width: 120}}>Quantity</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', width: 60}}>Remove</th>
               </tr>
-            ))}
-            {kitItems.length === 0 && (
-              <tr>
-                <td colSpan={3} style={{ textAlign: "center", color: "#888" }}>No products added yet.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <button type="submit" className="sets-save-btn">Create Kit/Set</button>
+            </thead>
+            <tbody>
+              {kitItems.map(item => (
+                <tr key={item.product_id} style={{background: '#181818'}}>
+                  <td>{item.name}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="1"
+                      max={productStock[item.product_id] || 0}
+                      value={item.quantity}
+                      onChange={e => updateQty(item.product_id, Number(e.target.value))}
+                      style={{ width: 70, borderColor: '#00b4d8', borderRadius: '4px', background: '#23272f', color: '#e0e6ed', padding: '4px 8px' }}
+                    />
+                    <span style={{ color: '#00b4d8', fontSize: '0.9em', marginLeft: 6 }}>
+                      (Stock: {productStock[item.product_id] || 0})
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="sets-delete-btn"
+                      onClick={() => removeProductFromKit(item.product_id)}
+                      style={{background: '#ff4d4d', color: '#fff', border: 'none', borderRadius: '5px', padding: '6px 10px', fontSize: '1rem', cursor: 'pointer'}}>
+                      <FaTrash />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {kitItems.length === 0 && (
+                <tr>
+                  <td colSpan={3} style={{ textAlign: "center", color: "#888" }}>No products added yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="form-actions" style={{display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', width: 'auto'}}>
+          <button type="submit" className="sets-save-btn" style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer', width: 'auto', marginTop: '1rem'}}>Create Kit/Set</button>
+        </div>
       </form>
     </div>
   );

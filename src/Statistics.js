@@ -19,18 +19,47 @@ const Statistics = () => {
       setLoading(true);
       setError('');
       try {
-        // Total Sales
-        let salesQuery = supabase.from('sales').select('total_amount, sale_date, location_id');
+        // Fetch all locations for name lookup
+        const { data: locData } = await supabase.from('locations').select('id, name');
+        const locationMap = {};
+        (locData || []).forEach(l => { locationMap[l.id] = l.name; });
+
+        // Total Sales (with currency)
+        let salesQuery = supabase.from('sales').select('total_amount, sale_date, location_id, currency');
         if (dateFilter) salesQuery = salesQuery.gte('sale_date', dateFilter);
-        if (locationFilter) salesQuery = salesQuery.eq('location_id', locationFilter);
+        if (locationFilter) {
+          // Allow filter by location name or id
+          const locId = Object.keys(locationMap).find(id => locationMap[id]?.toLowerCase() === locationFilter.toLowerCase()) || locationFilter;
+          salesQuery = salesQuery.eq('location_id', locId);
+        }
         const { data: salesData, error: salesError } = await salesQuery;
         if (salesError) throw salesError;
-        const totalSales = (salesData || []).reduce((sum, s) => sum + (s.total_amount || 0), 0);
+        // Group by currency
+        const salesByCurrency = {};
+        (salesData || []).forEach(s => {
+          const cur = s.currency || '';
+          salesByCurrency[cur] = (salesByCurrency[cur] || 0) + (s.total_amount || 0);
+        });
 
-        // Most/Least Sold Product
-        let itemsQuery = supabase.from('sales_items').select('product_id, quantity');
-        const { data: itemsData, error: itemsError } = await itemsQuery;
-        if (itemsError) throw itemsError;
+        // Most/Least Sold Product (filtered by date/location)
+        let itemsQuery = supabase.from('sales_items').select('product_id, quantity, sale_id');
+        const { data: allSales } = await supabase.from('sales').select('id, sale_date, location_id');
+        let saleIds = (allSales || []).map(s => s.id);
+        if (dateFilter || locationFilter) {
+          let filteredSales = allSales || [];
+          if (dateFilter) filteredSales = filteredSales.filter(s => s.sale_date >= dateFilter);
+          if (locationFilter) {
+            const locId = Object.keys(locationMap).find(id => locationMap[id]?.toLowerCase() === locationFilter.toLowerCase()) || locationFilter;
+            filteredSales = filteredSales.filter(s => s.location_id === locId);
+          }
+          saleIds = filteredSales.map(s => s.id);
+        }
+        let itemsData = [];
+        if (saleIds.length > 0) {
+          const { data: items, error: itemsError } = await supabase.from('sales_items').select('product_id, quantity, sale_id').in('sale_id', saleIds);
+          if (itemsError) throw itemsError;
+          itemsData = items;
+        }
         const productSales = {};
         (itemsData || []).forEach(item => {
           productSales[item.product_id] = (productSales[item.product_id] || 0) + (item.quantity || 0);
@@ -48,17 +77,21 @@ const Statistics = () => {
           leastSoldProduct = prodMap[sorted[sorted.length - 1][0]] || '';
         }
 
-        // Lay-By Amount Due
-        const { data: laybyData, error: laybyError } = await supabase.from('laybys').select('total_amount, paid_amount');
+        // Lay-By Amount Due (with currency)
+        const { data: laybyData, error: laybyError } = await supabase.from('laybys').select('total_amount, paid_amount, currency');
         if (laybyError) throw laybyError;
-        const laybyDue = (laybyData || []).reduce((sum, l) => sum + ((l.total_amount || 0) - (l.paid_amount || 0)), 0);
+        const laybyByCurrency = {};
+        (laybyData || []).forEach(l => {
+          const cur = l.currency || '';
+          laybyByCurrency[cur] = (laybyByCurrency[cur] || 0) + ((l.total_amount || 0) - (l.paid_amount || 0));
+        });
 
         // Total Customers
         const { data: custData, error: custError } = await supabase.from('customers').select('id');
         if (custError) throw custError;
         const totalCustomers = (custData || []).length;
 
-        setStats({ totalSales, mostSoldProduct, leastSoldProduct, laybyDue, totalCustomers });
+        setStats({ salesByCurrency, mostSoldProduct, leastSoldProduct, laybyByCurrency, totalCustomers });
       } catch (err) {
         setError('Failed to fetch statistics.');
       } finally {
@@ -101,7 +134,11 @@ const Statistics = () => {
         <div className="stats-cards" style={{overflowX: 'auto', overflowY: 'auto', maxHeight: '60vh'}}>
           <div className="stats-card">
             <h3>Total Sales</h3>
-            <p>${stats.totalSales}</p>
+            {stats.salesByCurrency && Object.keys(stats.salesByCurrency).length > 0 ? (
+              Object.entries(stats.salesByCurrency).map(([cur, amt]) => (
+                <p key={cur}>{cur} {amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              ))
+            ) : <p>0</p>}
           </div>
           <div className="stats-card">
             <h3>Most Sold Product</h3>
@@ -113,7 +150,11 @@ const Statistics = () => {
           </div>
           <div className="stats-card">
             <h3>Total Lay-By Amount Due</h3>
-            <p>${stats.laybyDue}</p>
+            {stats.laybyByCurrency && Object.keys(stats.laybyByCurrency).length > 0 ? (
+              Object.entries(stats.laybyByCurrency).map(([cur, amt]) => (
+                <p key={cur}>{cur} {amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              ))
+            ) : <p>0</p>}
           </div>
           <div className="stats-card">
             <h3>Total Customers</h3>

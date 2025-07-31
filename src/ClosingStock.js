@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './ClosingStock.css';
+import './Products.css';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,11 +8,18 @@ function ClosingStock() {
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [products, setProducts] = useState([]);
+  const [units, setUnits] = useState([]);
   const [search, setSearch] = useState('');
   const [entries, setEntries] = useState({}); // { product_id: qty }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  // Fetch units
+  useEffect(() => {
+    supabase.from('unit_of_measure').select('*').then(({ data }) => {
+      setUnits(data || []);
+    });
+  }, []);
 
   // Fetch locations
   useEffect(() => {
@@ -91,52 +99,80 @@ function ClosingStock() {
     }
   };
 
-  // Filtered products
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Only show products when searching
+  const filteredProducts = search.trim().length > 0
+    ? products.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
+      )
+    : [];
 
   return (
-    <div className="closing-stock-container">
-      <h2 className="closing-stock-title">Closing Stock</h2>
-      <button className="back-dashboard-btn" onClick={() => navigate('/dashboard')}>Back to Dashboard</button>
-      <div className="closing-stock-form">
-        <label>
-          Location:
-          <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
-            <option value="">Select Location</option>
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
-        </label>
-        <input
-          type="text"
-          placeholder="Search products by name or SKU..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="product-search-input"
-        />
-        <div className="product-list">
-          {filteredProducts.map(product => (
-            <div key={product.id} className="product-row">
-              <span className="product-name">{product.name}</span>
-              <input
-                type="number"
-                min="0"
-                value={entries[product.id] || ''}
-                onChange={e => handleQtyChange(product.id, e.target.value)}
-                placeholder="Qty"
-                className="qty-input"
-              />
-            </div>
-          ))}
+    <div className="products-container">
+      <div className="product-form" style={{maxWidth: 700, margin: '2rem auto'}}>
+        <h2 className="products-title" style={{marginTop: 0, marginBottom: '1.2rem'}}>Closing Stock</h2>
+        <div className="form-row">
+          <label style={{minWidth: 120, color: '#e0e6ed', fontWeight: 500, width: '100%', display: 'block'}}>
+            Location:
+            <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} style={{display: 'block', width: '100%', minWidth: 220, maxWidth: 500, marginTop: 4, fontSize: '1.08rem', padding: '0.5rem 1rem', borderRadius: 7, background: '#181a20', color: '#fff', border: '1.5px solid #00b4d8'}}>
+              <option value="">Select Location</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={loc.id}>{loc.name}</option>
+              ))}
+            </select>
+          </label>
+          <input
+            type="text"
+            placeholder="Search products by name or SKU..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="products-search-bar"
+            style={{marginLeft: 16, flex: 2}}
+            disabled={!selectedLocation}
+          />
         </div>
-        {error && <div className="error-message">{error}</div>}
-        <button className="save-btn" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Closing Stock'}
-        </button>
+        <div className="products-list" style={{marginTop: 0, minWidth: 0, maxHeight: 350, background: '#23272f', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.12)'}}>
+          <table style={{width: '100%', color: '#e0e6ed', background: 'transparent', borderCollapse: 'collapse'}}>
+            <thead>
+              <tr style={{background: '#23272f'}}>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'left'}}>Name</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>SKU</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Unit</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.length === 0 && search.trim() !== '' ? (
+                <tr><td colSpan={4} style={{textAlign:'center', color:'#888'}}>No products found.</td></tr>
+              ) : (
+                filteredProducts.map(product => (
+                  <tr key={product.id}>
+                    <td>{product.name}</td>
+                    <td style={{textAlign:'center'}}>{product.sku}</td>
+                    <td style={{textAlign:'center'}}>{units.find(u => u.id === product.unit_of_measure_id)?.name || '-'}</td>
+                    <td style={{textAlign:'center'}}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={entries[product.id] || ''}
+                        onChange={e => handleQtyChange(product.id, e.target.value)}
+                        placeholder="Qty"
+                        className="qty-input"
+                        style={{width: 70}}
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {error && <div className="products-error">{error}</div>}
+        <div style={{display:'flex', justifyContent:'center'}}>
+          <button className="save-btn" onClick={handleSave} disabled={saving} style={{marginTop: 18}}>
+            {saving ? 'Saving...' : 'Save Closing Stock'}
+          </button>
+        </div>
       </div>
     </div>
   );

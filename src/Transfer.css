@@ -2,19 +2,21 @@
   max-width: 900px;
   width: 98vw;
   margin: 32px auto;
-  background: #181818;
+  background: #181c23;
   border-radius: 12px;
   padding: 32px 24px 24px 24px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+  box-shadow: 0 2px 16px #00b4d833;
   color: #fff;
   box-sizing: border-box;
 }
 
 .transfer-container h1 {
   text-align: center;
-  color: #4caf50;
+  color: #00b4d8;
   margin-bottom: 24px;
-  font-size: 2rem;
+  font-size: 2.2rem;
+  font-weight: bold;
+  letter-spacing: 1px;
 }
 
 .transfer-form {
@@ -29,100 +31,131 @@
   margin-bottom: 14px;
 }
 
-.transfer-form-row label {
-  min-width: 120px;
-  font-weight: 500;
-}
-
 .transfer-form-row input,
 .transfer-form-row select {
   flex: 1 1 180px;
   min-width: 120px;
   max-width: 100%;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #333;
-  background: #222;
-  color: #fff;
-  font-size: 1rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #00b4d8;
+  background: #23272f;
+  color: #e0e6ed;
+  font-size: 1.08rem;
   box-sizing: border-box;
+  margin-bottom: 2px;
+  transition: border 0.2s, background 0.2s;
+}
+
+.transfer-form-row input:focus,
+.transfer-form-row select:focus {
+  outline: none;
+  border: 1.5px solid #00b4d8;
+  background: #1a222b;
 }
 
 .transfer-table-wrapper {
   width: 100%;
-  overflow-x: auto;
-  margin-bottom: 18px;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin-bottom: 12px;
+  background: transparent;
+  border-radius: 10px;
+  box-sizing: border-box;
 }
 
 .transfer-table {
   width: 100%;
-  min-width: 480px;
+  max-width: 100%;
   border-collapse: collapse;
-  background: #222;
-  border-radius: 8px;
+  background: #23272f;
+  border-radius: 10px;
   overflow: hidden;
+  color: #e0e6ed;
+  box-shadow: 0 2px 8px #00b4d822;
+  table-layout: fixed;
+  box-sizing: border-box;
 }
 
 .transfer-table th, .transfer-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid #333;
-  text-align: left;
+  padding: 4px 2px;
+  border-bottom: 1px solid #00b4d8;
+  text-align: center;
+  font-size: 0.95rem;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
 }
+/* Explicit column widths for compactness */
+.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { width: 90px; max-width: 100px; }
+.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { width: 60px; max-width: 70px; }
+.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { width: 60px; max-width: 70px; }
+.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { width: 60px; max-width: 70px; }
 
 .transfer-table th {
-  background: #222;
-  color: #00bfff;
-  font-weight: 600;
+  background: #23272f;
+  color: #00b4d8;
+  font-weight: 700;
+  font-size: 0.87rem;
+  border-bottom: 2px solid #00b4d8;
 }
 
 .transfer-table tr {
-  background: #181818;
+  background: #181c23;
   transition: background 0.2s;
 }
 
 .transfer-table tr:hover {
-  background: #222;
+  background: #23272f;
 }
 
 .transfer-table input[type="number"] {
-  width: 70px;
-  padding: 6px;
-  border-radius: 5px;
-  border: 1px solid #333;
-  background: #222;
-  color: #fff;
+  width: 28px;
+  padding: 1px 0;
+  border-radius: 3px;
+  border: 1px solid #00b4d8;
+  background: #23272f;
+  color: #e0e6ed;
+  font-size: 0.82rem;
+  text-align: center;
 }
+/* Compact columns for no slider */
+.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { max-width: 60px; }
+.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { max-width: 30px; }
+.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { max-width: 28px; }
+.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { max-width: 50px; }
 
 .transfer-submit-btn {
-  background: #4caf50;
+  background: #00b4d8;
   color: #fff;
   border: none;
-  padding: 12px 0;
-  border-radius: 6px;
-  font-size: 1.1rem;
+  padding: 16px 0;
+  border-radius: 8px;
+  font-size: 1.15rem;
   font-weight: bold;
   cursor: pointer;
   width: 100%;
   margin-bottom: 10px;
+  box-shadow: 0 2px 8px #00b4d855;
   transition: background 0.2s;
 }
 
 .transfer-submit-btn:hover {
-  background: #388e3c;
+  background: #0099cc;
 }
 
 .transfer-error {
   color: #ff4d4d;
   margin-bottom: 10px;
   text-align: center;
+  font-size: 1.08rem;
 }
 
-/* Back to Dashboard button placed at the bottom, not fixed */
 .back-dashboard-btn {
   width: 100%;
   margin: 24px 0 0 0;
-  background: #00bfff;
+  background: #00b4d8;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -130,7 +163,7 @@
   font-weight: bold;
   cursor: pointer;
   padding: 16px 0;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+  box-shadow: 0 2px 12px #00b4d855;
   transition: background 0.2s, color 0.2s, border 0.2s;
   display: block;
 }

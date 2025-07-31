@@ -181,9 +181,6 @@ const CompanySettings = () => {
           <button onClick={handleSaveSettings}>
             {companyId ? 'Update Settings' : 'Save Settings'}
           </button>
-          <button className="back-dashboard-btn" onClick={handleBackToDashboard}>
-            Back to Dashboard
-          </button>
         </div>
       </div>
     </div>

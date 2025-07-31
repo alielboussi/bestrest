@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
+import { exportLaybyPDF, exportLaybyCSV } from "./exportLaybyUtils";
 import "./LaybyManagement.css";
 
 export default function LaybyManagement() {
@@ -15,6 +16,7 @@ export default function LaybyManagement() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   const navigate = useNavigate();
 
   // Fetch all layby sales with outstanding balances
@@ -100,7 +102,7 @@ export default function LaybyManagement() {
     // Insert payment
     const { error } = await supabase.from("sales_payments").insert([
       {
-        sale_id: selectedLayby.id,
+        sale_id: selectedLayby.sale_id, // Use sale_id (integer), not layby.id (UUID)
         amount: paymentAmount,
         payment_type: "layby",
         currency: "K",
@@ -139,76 +141,159 @@ export default function LaybyManagement() {
     setLoading(false);
   }
 
+  // Export handlers
+  async function handleExport(type) {
+    if (!selectedLayby) return;
+    // Fetch products for this layby (from sales_items)
+    const { data: saleItems } = await supabase
+      .from("sales_items")
+      .select("product_id, quantity, unit_price, product:products(name, sku)")
+      .eq("sale_id", selectedLayby.sale_id);
+    const products = (saleItems || []).map(i => ({
+      name: i.product?.name || '',
+      sku: i.product?.sku || '',
+      qty: i.quantity,
+      price: i.unit_price
+    }));
+    // Fetch payments for this layby
+    const { data: payments } = await supabase
+      .from("sales_payments")
+      .select("amount, payment_date")
+      .eq("sale_id", selectedLayby.sale_id);
+    // Get customer details
+    const customer = selectedLayby.customerInfo || {};
+    // Prepare data
+    const logoUrl = window.location.origin + '/bestrest-logo.png';
+    const companyName = 'BestRest';
+    if (type === 'pdf') {
+      exportLaybyPDF({ companyName, logoUrl, customer, layby: selectedLayby, products, payments });
+    } else {
+      const csv = exportLaybyCSV({ customer, layby: selectedLayby, products, payments });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `layby_statement_${customer.name || 'customer'}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Filter and sort laybys for display
+  const filteredLaybys = laybys
+    .filter(layby => {
+      const name = layby.customerInfo?.name?.toLowerCase() || "";
+      const phone = layby.customerInfo?.phone?.toLowerCase() || "";
+      return (
+        name.includes(search.toLowerCase()) ||
+        phone.includes(search.toLowerCase())
+      );
+    })
+    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
+    .slice(0, 5);
+
   return (
-    <div className="layby-mgmt-container">
-      <button
-        className="back-to-dashboard-btn"
-        style={{
-          fontSize: '0.95em',
-          padding: '6px 18px',
-          background: '#00bfff',
-          color: '#fff',
-          border: '2px solid #00bfff',
-          borderRadius: 6,
-          fontWeight: 600,
-          boxShadow: '0 1px 4px #0003',
-          cursor: 'pointer',
-          transition: 'background 0.2s, color 0.2s',
-          minWidth: 120,
-          margin: '12px 0 18px 0',
-        }}
-        onClick={() => navigate('/dashboard')}
-        onMouseOver={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#00bfff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-        onMouseOut={e => { e.currentTarget.style.background = '#00bfff'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-      >Back to Dashboard</button>
-      <h2>Layby Management</h2>
-      {error && <div style={{ color: "#ff5252" }}>{error}</div>}
-      {success && <div style={{ color: "#4caf50" }}>{success}</div>}
-      <table className="pos-table">
-        <thead>
-          <tr>
-            <th>Customer</th>
-            <th>Phone</th>
-            <th>Total</th>
-            <th>Paid</th>
-            <th>Outstanding</th>
-            <th>Reminder</th>
-            <th>Notes</th>
-            <th>Updated</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {laybys.map(layby => (
-            <tr key={layby.id} style={{ background: layby.outstanding === 0 ? '#0f2e1d' : undefined }}>
-              <td>{layby.customerInfo?.name}</td>
-              <td>{layby.customerInfo?.phone}</td>
-              <td>{layby.total_amount}</td>
-              <td>{layby.paid}</td>
-              <td>{layby.outstanding}</td>
-              <td>
-                <input type="date" value={layby.reminder_date || ""} onChange={e => setReminderDate(e.target.value)} />
-                <button onClick={() => handleSetReminder(layby.id)} disabled={!reminderDate}>Set</button>
-              </td>
-              <td style={{ minWidth: 120 }}>
-                <input type="text" value={layby.id === selectedLayby?.id ? notes : layby.notes || ""}
-                  onChange={e => {
-                    setNotes(e.target.value);
-                    setSelectedLayby(layby);
-                  }}
-                  placeholder="Add notes..."
-                  style={{ width: 100, background: '#181f2f', color: '#4cafef', border: '1px solid #333' }}
-                />
-                <button style={{ background: '#4cafef', marginLeft: 4 }} onClick={() => handleUpdateNotes(layby.id)}>Save</button>
-              </td>
-              <td style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleString() : ''}</td>
-              <td>
-                <button onClick={() => setSelectedLayby(layby)} disabled={layby.outstanding === 0}>Add Payment</button>
-              </td>
+    <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
+      <h2 style={{ fontSize: '2.1rem', color: '#4caf50', textAlign: 'center', marginBottom: 28 }}>Layby Management</h2>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <input
+          type="text"
+          placeholder="Search customer name or phone..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '1rem', minWidth: 220 }}
+        />
+      </div>
+      {error && <div style={{ color: "#ff5252", marginBottom: 10 }}>{error}</div>}
+      {success && <div style={{ color: "#4caf50", marginBottom: 10 }}>{success}</div>}
+      {/* Export buttons for each layby row */}
+      <div style={{ width: '100%', background: 'transparent', borderRadius: 8, overflowX: 'visible' }}>
+        <table className="pos-table" style={{ width: '100%', minWidth: 600, background: '#23272f', borderRadius: 8, margin: '0 auto', fontSize: '0.86rem' }}>
+          <thead>
+            <tr>
+              <th className="text-col">Customer</th>
+              <th className="text-col">Phone</th>
+              <th className="num-col">Total</th>
+              <th className="num-col">Paid</th>
+              <th className="num-col">Outstanding</th>
+              <th className="num-col">Reminder</th>
+              <th className="text-col">Updated</th>
+              <th className="action-col">Actions</th>
+              <th className="action-col">Export</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredLaybys.map(layby => (
+              <tr key={layby.id} style={{ background: layby.outstanding === 0 ? '#0f2e1d' : undefined }}>
+                <td className="text-col">{layby.customerInfo?.name}</td>
+                <td className="text-col">{layby.customerInfo?.phone}</td>
+                <td className="num-col">{layby.total_amount}</td>
+                <td className="num-col">{layby.paid}</td>
+                <td className="num-col">{layby.outstanding}</td>
+                <td className="num-col">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input type="date" value={layby.reminder_date || ""} onChange={e => setReminderDate(e.target.value)} style={{ background: '#181f2f', color: '#fff', border: '1px solid #333', borderRadius: 4, padding: '1px 2px', minWidth: 70, maxWidth: 90, fontSize: '0.8rem' }} />
+                    <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => handleSetReminder(layby.id)} disabled={!reminderDate}>Set</button>
+                  </div>
+                </td>
+                <td className="text-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
+                <td className="action-col">
+                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => setSelectedLayby(layby)} disabled={layby.outstanding === 0}>Add Payment</button>
+                </td>
+                <td className="action-col">
+                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90, marginRight: 2 }} onClick={async () => {
+                    // Fetch products for this layby (from sales_items)
+                    const { data: saleItems } = await supabase
+                      .from("sales_items")
+                      .select("product_id, quantity, unit_price, product:products(name, sku)")
+                      .eq("sale_id", layby.sale_id);
+                    const products = (saleItems || []).map(i => ({
+                      name: i.product?.name || '',
+                      sku: i.product?.sku || '',
+                      qty: i.quantity,
+                      price: i.unit_price
+                    }));
+                    // Fetch payments for this layby
+                    const { data: payments } = await supabase
+                      .from("sales_payments")
+                      .select("amount, payment_date")
+                      .eq("sale_id", layby.sale_id);
+                    const customer = layby.customerInfo || {};
+                    const logoUrl = window.location.origin + '/bestrest-logo.png';
+                    const companyName = 'BestRest';
+                    exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments });
+                  }}>PDF</button>
+                  <button style={{ background: '#4caf50', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={async () => {
+                    const { data: saleItems } = await supabase
+                      .from("sales_items")
+                      .select("product_id, quantity, unit_price, product:products(name, sku)")
+                      .eq("sale_id", layby.sale_id);
+                    const products = (saleItems || []).map(i => ({
+                      name: i.product?.name || '',
+                      sku: i.product?.sku || '',
+                      qty: i.quantity,
+                      price: i.unit_price
+                    }));
+                    const { data: payments } = await supabase
+                      .from("sales_payments")
+                      .select("amount, payment_date")
+                      .eq("sale_id", layby.sale_id);
+                    const customer = layby.customerInfo || {};
+                    const csv = exportLaybyCSV({ customer, layby, products, payments });
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `layby_statement_${customer.name || 'customer'}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}>CSV</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {selectedLayby && (
         <form onSubmit={handleAddPayment} style={{ marginTop: 24, background: '#23272f', padding: 18, borderRadius: 8 }}>
           <h3>Add Payment for {selectedLayby.customerInfo?.name}</h3>

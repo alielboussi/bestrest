@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
@@ -20,13 +21,13 @@ export default function POS() {
   const [checkoutSuccess, setCheckoutSuccess] = useState("");
   const [currency, setCurrency] = useState("K");
   const [products, setProducts] = useState([]);
+  const [sets, setSets] = useState([]);
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState([]); // [{product, qty, price, vat, discount}]
+  const [cart, setCart] = useState([]); // [{product, qty, price, vat}]
   const [vatIncluded, setVatIncluded] = useState(true);
   const [discountAll, setDiscountAll] = useState(0);
-  const [paymentType, setPaymentType] = useState("");
-  const [layby, setLayby] = useState(false);
-  const [downPayment, setDownPayment] = useState(0);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [customerLaybys, setCustomerLaybys] = useState([]);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const navigate = useNavigate();
 
@@ -36,9 +37,10 @@ export default function POS() {
     supabase.from("customers").select("id, name, phone").then(({ data }) => setCustomers(data || []));
   }, []);
 
-  // Fetch products for selected location
+  // Fetch products and sets for selected location
   useEffect(() => {
     if (selectedLocation) {
+      // Fetch products
       supabase
         .from("inventory")
         .select("product_id, quantity, product:products(id, name, sku, standard_price, promotional_price, currency)")
@@ -46,14 +48,42 @@ export default function POS() {
         .then(({ data }) => {
           setProducts((data || []).map(row => ({ ...row.product, stock: row.quantity })));
         });
+      // Fetch sets/kits (combos)
+      supabase
+        .from("combo_inventory")
+        .select("combo_id, quantity, combo:combos(id, combo_name, sku, standard_price, promotional_price, currency)")
+        .eq("location_id", selectedLocation)
+        .then(({ data }) => {
+          setSets((data || []).map(row => ({
+            ...row.combo,
+            stock: row.quantity,
+            isSet: true
+          })));
+        });
     } else {
       setProducts([]);
+      setSets([]);
     }
   }, [selectedLocation]);
 
-  // Add product to cart
-  const addToCart = (product) => {
-    setCart([...cart, { ...product, qty: 1, price: currency === "K" ? product.standard_price : "", vat: vatIncluded, discount: 0 }]);
+  // Helper: get correct price (promo > standard)
+  const getBestPrice = (item) => {
+    if (item.promotional_price && Number(item.promotional_price) > 0) return Number(item.promotional_price);
+    if (item.standard_price && Number(item.standard_price) > 0) return Number(item.standard_price);
+    return 0;
+  };
+
+  // Add product or set to cart
+  const addToCart = (item) => {
+    setCart([
+      ...cart,
+      {
+        ...item,
+        qty: 1,
+        price: getBestPrice(item),
+        isSet: item.isSet || false
+      }
+    ]);
   };
 
   // Update cart item
@@ -98,80 +128,40 @@ export default function POS() {
     setCustomerLoading(false);
   };
 
-  // Calculate totals
+  // Calculate totals (VAT is inclusive, not added)
   const subtotal = cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.qty)), 0);
-  const vatAmount = vatIncluded ? subtotal * 0.16 : 0;
-  const discountAmount = discountAll + cart.reduce((sum, item) => sum + (Number(item.discount || 0) * Number(item.qty)), 0);
-  const total = subtotal + vatAmount - discountAmount;
+  const discountAmount = Number(discountAll) || 0;
+  const total = subtotal - discountAmount;
 
 
-  // Handle checkout (Supabase integration)
+  // Handle checkout (Supabase integration, supports partial payments/layby)
   const handleCheckout = async () => {
     setCheckoutError("");
     setCheckoutSuccess("");
-    if (!selectedLocation || !selectedCustomer || cart.length === 0 || !paymentType) {
-      setCheckoutError("Please select location, customer, payment type, and add products to cart.");
+    if (!selectedLocation || !selectedCustomer || cart.length === 0) {
+      setCheckoutError("Please select location, customer, and add products to cart.");
       return;
     }
+    // If paymentAmount is not set or 0, treat as layby/partial
+    let payAmt = Number(paymentAmount);
+    if (payAmt < 0 || payAmt > total) {
+      setCheckoutError("Enter a valid payment amount (<= total).");
+      return;
+    }
+    if (!payAmt || payAmt === 0) payAmt = 0;
     setCheckoutLoading(true);
     try {
-      // 1. Insert sale
-      const { data: saleData, error: saleError } = await supabase
-        .from("sales")
-        .insert([
-          {
-            location: selectedLocation,
-            customer_id: selectedCustomer,
-            sale_date: date,
-            total_amount: total,
-            vat: vatAmount,
-            discount: discountAmount,
-            currency,
-            payment_type: paymentType,
-            layby,
-            down_payment: layby ? downPayment : null,
-            status: layby ? 'layby' : 'completed',
-            updated_at: new Date().toISOString(),
-          },
-        ])
-        .select();
-      if (saleError) throw saleError;
-      const saleId = saleData[0].id;
-
-      // 2. Insert sale_items
-      const saleItems = cart.map((item) => ({
-        sale_id: saleId,
-        product_id: item.id,
-        quantity: item.qty,
-        unit_price: item.price,
-        vat: item.vat ? 0.16 * item.price * item.qty : 0,
-        discount: item.discount,
-      }));
-      const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
-      if (itemsError) throw itemsError;
-
-      // 3. Insert payment (if not layby)
-      if (!layby) {
-        const { error: payError } = await supabase.from("sales_payments").insert([
-          {
-            sale_id: saleId,
-            amount: total,
-            payment_type: paymentType,
-            currency,
-            payment_date: new Date().toISOString(),
-          },
-        ]);
-        if (payError) throw payError;
-      } else {
-        // 4. If layby, create layby record and link both ways
+      let laybyId = null;
+      let saleIdValue = null;
+      // 1. If partial payment, create layby record first to get layby_id
+      if (payAmt < total) {
         const { data: laybyData, error: laybyError } = await supabase
           .from("laybys")
           .insert([
             {
               customer_id: selectedCustomer,
-              sale_id: saleId,
               total_amount: total,
-              paid_amount: downPayment,
+              paid_amount: payAmt,
               status: 'active',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
@@ -179,125 +169,280 @@ export default function POS() {
           ])
           .select();
         if (laybyError) throw laybyError;
-        const laybyId = laybyData[0].id;
-        // Update sale with layby_id
-        const { error: updateSaleError } = await supabase
-          .from("sales")
-          .update({ layby_id: laybyId, updated_at: new Date().toISOString() })
-          .eq("id", saleId);
-        if (updateSaleError) throw updateSaleError;
+        laybyId = laybyData[0].id;
+      } else {
+        // For non-layby, generate a unique sale_id (e.g., SALE-<timestamp>-<random>)
+        saleIdValue = `SALE-${Date.now()}-${Math.floor(Math.random()*10000)}`;
       }
 
+      // 2. Insert sale with all required columns
+      const { data: saleData, error: saleError } = await supabase
+        .from("sales")
+        .insert([
+          {
+            customer_id: selectedCustomer,
+            sale_date: date,
+            total_amount: total,
+            status: payAmt < total ? 'layby' : 'completed',
+            updated_at: new Date().toISOString(),
+            location_id: selectedLocation,
+            layby_id: laybyId,
+            currency: currency,
+            discount: discountAmount,
+            sale_id: saleIdValue
+          },
+        ])
+        .select();
+      if (saleError) throw saleError;
+      const saleId = saleData[0].id;
+
+      // 3. Update layby with sale_id if layby was created
+      if (laybyId) {
+        await supabase.from("laybys").update({ sale_id: saleId }).eq("id", laybyId);
+      }
+
+      // 4. Insert sale_items
+      const saleItems = cart.map((item) => ({
+        sale_id: saleId,
+        product_id: item.id,
+        quantity: item.qty,
+        unit_price: item.price,
+        currency: currency // Store the selected currency for each item
+      }));
+      const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
+      if (itemsError) throw itemsError;
+
+      // 5. Insert payment (partial or full)
+      const { error: payError } = await supabase.from("sales_payments").insert([
+        {
+          sale_id: saleId,
+          amount: payAmt,
+          payment_type: 'cash', // or allow user to select in future
+          currency,
+          payment_date: new Date().toISOString(),
+        },
+      ]);
+      if (payError) throw payError;
+
       setCheckoutSuccess("Sale completed successfully!");
+        // 6. Deduct inventory for each product in the cart at the selected location
+        for (const item of cart) {
+          // Get current inventory for this product/location
+          const { data: invRows, error: invError } = await supabase
+            .from('inventory')
+            .select('id, quantity')
+            .eq('product_id', item.id)
+            .eq('location', selectedLocation);
+          if (invError) throw invError;
+          if (invRows && invRows.length > 0) {
+            // Update existing inventory row
+            const invId = invRows[0].id;
+            const newQty = Math.max(0, (Number(invRows[0].quantity) || 0) - Number(item.qty));
+            const { error: updateError } = await supabase
+              .from('inventory')
+              .update({ quantity: newQty, updated_at: new Date().toISOString() })
+              .eq('id', invId);
+            if (updateError) throw updateError;
+          } else {
+            // No inventory row exists for this product/location, create one with negative quantity
+            const { error: insertError } = await supabase
+              .from('inventory')
+              .insert([
+                {
+                  product_id: item.id,
+                  location: selectedLocation,
+                  quantity: Math.max(0, 0 - Number(item.qty)),
+                  updated_at: new Date().toISOString()
+                }
+              ]);
+            if (insertError) throw insertError;
+          }
+        }
       setCart([]);
-      setPaymentType("");
-      setLayby(false);
-      setDownPayment(0);
+      setPaymentAmount(0);
+      // Optionally, refresh laybys for this customer
+      fetchCustomerLaybys(selectedCustomer);
     } catch (err) {
       setCheckoutError(err.message || "Checkout failed.");
     }
     setCheckoutLoading(false);
   };
 
-  // Handle layby (placeholder)
-  const handleLayby = () => {
-    setLayby(true);
-    setCheckoutError("");
-    setCheckoutSuccess("");
+  // Fetch laybys for customer
+  const fetchCustomerLaybys = async (customerId) => {
+    if (!customerId) return;
+    const { data } = await supabase
+      .from('laybys')
+      .select('id, sale_id, total_amount, paid_amount, status, created_at, updated_at')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false });
+    setCustomerLaybys(data || []);
   };
+
+  // When customer changes, fetch laybys
+  useEffect(() => {
+    fetchCustomerLaybys(selectedCustomer);
+  }, [selectedCustomer]);
+
+
 
   return (
     <div className="pos-container">
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 18 }}>
-        <button onClick={() => navigate('/dashboard')} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px', marginRight: 16, cursor: 'pointer', fontWeight: 500 }}>Back to Dashboard</button>
-        <h2 style={{ margin: 0 }}><FaCashRegister style={{ marginRight: 8 }} /> Point of Sale</h2>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+        <button onClick={() => navigate('/dashboard')} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', marginRight: 10, cursor: 'pointer', fontWeight: 500, fontSize: '0.95rem' }}>Back to Dashboard</button>
+        <h2 style={{ margin: 0, fontSize: '1.2rem' }}><FaCashRegister style={{ marginRight: 6, fontSize: '1.1rem' }} /> Point of Sale</h2>
       </div>
-      <div className="pos-row">
-        <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required>
+      <div className="pos-row" style={{ gap: 6, marginBottom: 6 }}>
+        <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28 }}>
           <option value="">Select Location</option>
           {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
         </select>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-        <select value={currency} onChange={e => setCurrency(e.target.value)}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ fontSize: '0.95rem', height: 28 }} />
+        <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28 }}>
           <option value="K">K</option>
           <option value="$">$</option>
         </select>
-        <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}>
+        <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '0.95rem', padding: '2px 6px', height: 28, minWidth: 140 }}>
           <option value="">Select Customer</option>
           {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
         </select>
-        <button type="button" onClick={() => setShowCustomerModal(true)}><FaUserPlus /> New Customer</button>
+        <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '0.95rem', padding: '2px 10px', height: 28 }}><FaUserPlus /> New Customer</button>
       </div>
-      <div className="pos-row">
+      <div className="pos-row" style={{ gap: 6, marginBottom: 6 }}>
         <input
           type="text"
           placeholder="Search product by name or SKU..."
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{ fontSize: '0.95rem', height: 28, width: 180 }}
         />
-        <button type="button" onClick={() => setShowAddProduct(true)}><FaSearch /> Search</button>
+        <button type="button" onClick={() => setShowAddProduct(true)} style={{ fontSize: '0.95rem', padding: '2px 10px', height: 28 }}><FaSearch /> Search</button>
       </div>
-      <div className="pos-products">
-        {products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku || "").toLowerCase().includes(search.toLowerCase())).slice(0, 8).map(product => (
-          <button key={product.id} className="pos-product-btn" onClick={() => addToCart(product)}>
-            {product.name} ({product.sku})<br />Stock: {product.stock}
-          </button>
-        ))}
+      <div className="pos-products" style={{ gap: 8 }}>
+        {/* Only show products/sets if search is not empty */}
+        {search.trim() && [
+          ...products.filter(p =>
+            p.name.toLowerCase().includes(search.toLowerCase()) ||
+            (p.sku || "").toLowerCase().includes(search.toLowerCase())
+          ).map(product => (
+            <button key={product.id} className="pos-product-btn" onClick={() => addToCart(product)}>
+              {product.name} ({product.sku})<br />Stock: {product.stock}<br />
+              <b>Price: {getBestPrice(product).toFixed(2)} {product.currency || currency}</b>
+            </button>
+          )),
+          ...sets.filter(s =>
+            (s.combo_name || "").toLowerCase().includes(search.toLowerCase()) ||
+            (s.sku || "").toLowerCase().includes(search.toLowerCase())
+          ).map(set => (
+            <button key={"set-" + set.id} className="pos-product-btn" onClick={() => addToCart(set)}>
+              {set.combo_name} (Set) ({set.sku})<br />Stock: {set.stock}<br />
+              <b>Price: {getBestPrice(set).toFixed(2)} {set.currency || currency}</b>
+            </button>
+          ))
+        ]}
+        {/* Show a message if no search */}
+        {!search.trim() && (
+          <div style={{ color: '#aaa', textAlign: 'center', margin: '32px 0', fontSize: '1.1rem' }}>
+            Search for a product or kit/set by name or SKU to display results.
+          </div>
+        )}
       </div>
-      <table className="pos-table">
+      <table className="pos-table" style={{ fontSize: '0.95rem' }}>
         <thead>
           <tr>
-            <th>SKU</th>
-            <th>Name</th>
-            <th>Qty</th>
-            <th>Amount</th>
-            <th>VAT</th>
-            <th>Discount</th>
-            <th>Remove</th>
+            <th className="text-col" style={{ fontSize: '0.95rem', padding: 4 }}>SKU</th>
+            <th className="text-col" style={{ fontSize: '0.95rem', padding: 4 }}>Name</th>
+            <th className="customer-col" style={{ fontSize: '0.95rem', padding: 4 }}>Customer Name</th>
+            <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Qty</th>
+            <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Amount</th>
+            <th className="action-col" style={{ fontSize: '0.95rem', padding: 4 }}>Remove</th>
           </tr>
         </thead>
         <tbody>
-          {cart.map((item, idx) => (
-            <tr key={idx}>
-              <td>{item.sku}</td>
-              <td>{item.name}</td>
-              <td><input type="number" min="1" max={item.stock} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} /></td>
-              <td><input type="number" min="0" value={item.price} onChange={e => updateCartItem(idx, { price: e.target.value })} disabled={currency === "K"} /></td>
-              <td><input type="checkbox" checked={item.vat} onChange={e => updateCartItem(idx, { vat: e.target.checked })} /></td>
-              <td><input type="number" min="0" value={item.discount} onChange={e => updateCartItem(idx, { discount: e.target.value })} /></td>
-              <td><button onClick={() => removeCartItem(idx)}>Remove</button></td>
-            </tr>
-          ))}
+          {cart.map((item, idx) => {
+            // Find customer name by selectedCustomer
+            const customer = customers.find(c => c.id === selectedCustomer);
+            return (
+              <tr key={idx}>
+                <td className="text-col" style={{ padding: 4 }}>{item.sku}</td>
+                <td className="text-col" style={{ padding: 4 }}>{item.name}</td>
+                <td className="customer-col" style={{ padding: 4 }}>{customer ? customer.name : ''}</td>
+                <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
+                <td className="num-col" style={{ padding: 4 }}><input type="number" min="0" value={item.price} onChange={e => updateCartItem(idx, { price: e.target.value })} style={{ width: 64, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
+                <td className="action-col" style={{ padding: 4 }}><button onClick={() => removeCartItem(idx)} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24 }}>Remove</button></td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      <div className="pos-summary">
+      <div className="pos-summary" style={{ fontSize: '1rem', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', marginTop: 8, marginBottom: 8 }}>
         <div>Subtotal: {subtotal.toFixed(2)}</div>
-        <div>VAT (16%): {vatAmount.toFixed(2)}</div>
-        <div>Discount: {discountAmount.toFixed(2)}</div>
-        <div><b>Total: {total.toFixed(2)} {currency}</b></div>
-      </div>
-      <div className="pos-actions">
-        <select value={paymentType} onChange={e => setPaymentType(e.target.value)} style={{ minWidth: 120 }}>
-          <option value="">Payment Type</option>
-          <option value="cash">Cash</option>
-          <option value="card">Card</option>
-          <option value="mobile">Mobile Money</option>
-          <option value="bank">Bank Transfer</option>
-          <option value="check">Check</option>
-        </select>
-        {layby && (
-          <input
+        <div>VAT @16%: Inclusive</div>
+        <div>
+          Discount: <input
             type="number"
             min="0"
-            value={downPayment}
-            onChange={e => setDownPayment(Number(e.target.value))}
-            placeholder="Down Payment"
-            style={{ minWidth: 120 }}
+            max={subtotal}
+            value={discountAll}
+            onChange={e => setDiscountAll(e.target.value)}
+            style={{ width: 60, marginLeft: 4, marginRight: 4, fontSize: '0.95rem', height: 24 }}
           />
-        )}
-        <button onClick={handleCheckout} disabled={checkoutLoading}>{checkoutLoading ? "Processing..." : "Checkout"}</button>
-        <button onClick={handleLayby} style={{ background: layby ? '#4caf50' : undefined }}>Layby</button>
+        </div>
+        <div><b>Total: {total.toFixed(2)} {currency}</b></div>
       </div>
+      <div className="pos-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+        <input
+          type="number"
+          min="0"
+          max={total}
+          value={paymentAmount}
+          onChange={e => setPaymentAmount(Number(e.target.value))}
+          placeholder="Payment Amount"
+          style={{ minWidth: 90, fontSize: '0.95rem', height: 28, marginRight: 4 }}
+        />
+        <button
+          onClick={handleCheckout}
+          disabled={checkoutLoading || total <= 0}
+          style={{ fontSize: '0.95rem', padding: '4px 14px', height: 28, whiteSpace: 'nowrap', minWidth: 140 }}
+        >
+          {checkoutLoading
+            ? "Processing..."
+            : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout")}
+        </button>
+      </div>
+      {/* Show layby history for customer */}
+      {customerLaybys.length > 0 && (
+        <div style={{ margin: '24px 0', background: '#23272f', borderRadius: 8, padding: 16 }}>
+          <h4 style={{ color: '#00b4d8', margin: 0, marginBottom: 8 }}>Layby / Partial Payment History</h4>
+          <table style={{ width: '100%', color: '#fff', fontSize: 15 }}>
+            <thead>
+              <tr style={{ color: '#00b4d8' }}>
+                <th>Created</th>
+                <th>Status</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Balance</th>
+                <th className="customer-col">Customer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerLaybys.map(l => {
+                const customer = customers.find(c => c.id === selectedCustomer);
+                return (
+                  <tr key={l.id}>
+                    <td>{new Date(l.created_at).toLocaleDateString()}</td>
+                    <td>{l.status}</td>
+                    <td>{l.total_amount}</td>
+                    <td>{l.paid_amount}</td>
+                    <td>{(l.total_amount - l.paid_amount).toFixed(2)}</td>
+                    <td className="customer-col">{customer ? customer.name : ''}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
       {checkoutError && <div style={{ color: "#ff5252", marginBottom: 10 }}>{checkoutError}</div>}
       {checkoutSuccess && <div style={{ color: "#4caf50", marginBottom: 10 }}>{checkoutSuccess}</div>}
 

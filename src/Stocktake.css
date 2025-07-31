@@ -29,22 +29,3 @@
   margin-top: 1rem;
   font-weight: 600;
 }
-.back-dashboard-btn {
-  position: fixed;
-  bottom: 2rem;
-  right: 2rem;
-  background: #00bfff;
-  color: #fff;
-  border: none;
-  border-radius: 2rem;
-  padding: 0.8rem 2rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  z-index: 1000;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.back-dashboard-btn:hover {
-  background: #0099cc;
-}

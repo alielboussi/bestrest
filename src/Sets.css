@@ -17,101 +17,83 @@
 
 .sets-header h2 {
   color: #4caf50;
-  font-size: 2rem;
-  margin: 0;
-}
-
-/* Back to Dashboard button - fixed, blue, rounded, bottom right */
-.sets-back-btn {
-  position: fixed;
-  right: 32px;
-  bottom: 32px;
-  z-index: 100;
-  background: #00bfff;
-  color: #fff;
-  border: none;
-  border-radius: 32px;
-  font-size: 1.08rem;
   font-weight: bold;
-  cursor: pointer;
-  padding: 18px 38px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
-  transition: background 0.2s, color 0.2s, border 0.2s;
-  display: flex;
+}
+
+
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+  margin-bottom: 0.5rem;
   align-items: center;
-  justify-content: center;
 }
 
-.sets-back-btn:hover {
-  background: #0099cc;
-  color: #fff;
+.form-grid-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+  align-items: center;
 }
 
-.sets-form-row {
-  display: flex;
-  flex-wrap: wrap;         /* Allow wrapping */
+
+.form-grid input,
+.form-grid select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1.5px solid #00b4d8;
+  background: #23272f;
+  color: #e0e6ed;
+  font-size: 1rem;
+  flex: 1;
   gap: 10px;
-  margin-bottom: 12px;
 }
 
+.form-grid input[type="date"] {
+  color-scheme: dark;
+}
 .sets-form-row input,
-.sets-form-row select {
-  flex: 1 1 180px;         /* Allow shrinking and growing, min width 180px */
-  min-width: 140px;
+
+
+.form-grid-search-row {
+  margin-bottom: 1rem;
   max-width: 100%;
 }
 
-.sets-form input,
-.sets-form select {
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #333;
-  background: #222;
-  color: #fff;
-  font-size: 1rem;
-  flex: 1;
-}
-
-.sets-form input[type="date"] {
-  color-scheme: dark;
-}
-
-.sets-form input[placeholder="Image URL"] {
-  margin-bottom: 10px;
-}
 
 .sets-section-title {
   margin: 18px 0 8px 0;
-  color: #00bfff;
+  color: #00b4d8;
   font-size: 1.1rem;
   font-weight: 600;
+  border: 1px solid #333;
 }
 
-.sets-search-row {
+
+.form-actions {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 10px;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: flex-end;
+  width: auto;
 }
 
-.sets-search {
-  flex: 2;
+
+.products-search-bar {
+  width: 100%;
   padding: 8px 10px;
   border-radius: 6px;
-  border: 1.5px solid #00bfff;
-  background: #222;
-  color: #fff;
+  border: 1.5px solid #00b4d8;
+  background: #23272f;
+  color: #e0e6ed;
   font-size: 1rem;
 }
 
-.sets-search-results {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
 
 .sets-add-btn {
-  background: #00bfff;
+  background: #00b4d8;
   color: #fff;
   border: none;
   padding: 7px 14px;
@@ -120,28 +102,64 @@
   font-weight: bold;
   cursor: pointer;
   transition: background 0.2s;
+  display: flex;
 }
-
 .sets-add-btn:hover {
   background: #0099cc;
 }
 
-.sets-list {
+
+.products-list {
   width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 24px;
+  margin-top: 0.5rem;
+  overflow: visible;
+  max-height: none;
 }
-
-.sets-list th, .sets-list td {
-  padding: 12px 10px;
-  border-bottom: 1px solid #222;
-  text-align: left;
-}
-
-.sets-list th {
-  background: #222;
-  color: #00bfff;
+.products-list th {
+  background: #23272f;
+  color: #00b4d8;
   font-weight: 600;
+}
+.products-list tr {
+  background: #181818;
+  transition: background 0.2s;
+}
+.products-list tr:hover {
+  background: #222;
+}
+
+
+.sets-delete-btn {
+  background: #ff4d4d;
+  color: #fff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.sets-delete-btn:hover {
+  background: #b71c1c;
+}
+
+
+.sets-save-btn {
+  background: #00b4d8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 1rem 2rem;
+  font-weight: bold;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 8px #00b4d855;
+  cursor: pointer;
+  width: auto;
+  margin-top: 1rem;
+  transition: background 0.2s;
+}
+.sets-save-btn:hover {
+  background: #0099cc;
 }
 
 .sets-list tr {
@@ -181,6 +199,7 @@
   width: 100%;
   transition: background 0.2s;
 }
+
 
 @media (max-width: 900px) {
   .sets-form-row {

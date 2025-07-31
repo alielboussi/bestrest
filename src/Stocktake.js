@@ -61,13 +61,14 @@ const Stocktake = () => {
       let userId = null;
       const { data: users } = await supabase.from('users').select('id, full_name').ilike('full_name', `%${userName}%`);
       if (users && users.length > 0) userId = users[0].id;
-      // Create stocktake session
+      // Create stocktake session (opening)
       const { data: stocktake, error: stError } = await supabase.from('stocktakes').insert({
         location_id: selectedLocation,
         user_id: userId,
         name: userName,
         started_at: startedAt,
-        ended_at: new Date()
+        ended_at: new Date(),
+        type: 'opening'
       }).select().single();
       if (stError) throw stError;
       // Insert stocktake entries for entered products
@@ -177,13 +178,6 @@ const Stocktake = () => {
         </div>
       )}
       {error && <div className="stocktake-error">{error}</div>}
-      <button
-        type="button"
-        className="back-dashboard-btn blue"
-        onClick={() => navigate('/dashboard')}
-      >
-        ← Back to Dashboard
-      </button>
     </div>
   );
 };

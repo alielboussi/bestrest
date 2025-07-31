@@ -1,0 +1,102 @@
+/* StockReports.css */
+
+
+
+body, .stock-report-container {
+  background: #10181b;
+  color: #e0f7fa;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.stock-report-header {
+  font-size: 2em;
+  margin-bottom: 18px;
+  color: #00e676;
+}
+
+.stock-report-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+
+.stock-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  background: #003366;
+  color: #e0f7fa;
+  font-size: 1.08em;
+  box-shadow: 0 2px 12px #0006;
+}
+
+
+
+.stock-report-table th, .stock-report-table td {
+  border: 2px solid #00e676;
+  padding: 10px 14px;
+  text-align: center;
+  background: #10181b;
+}
+
+
+
+.stock-report-table th {
+  background: #10181b;
+  color: #00bfff;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  font-size: 1.1em;
+  border-bottom: 2.5px solid #00e676;
+}
+
+
+
+.stock-report-table tr:nth-child(even),
+.stock-report-table tr:nth-child(odd) {
+  background: #10181b;
+}
+.stock-report-table tr:hover {
+  background: #003366;
+  color: #00e676;
+}
+
+.stock-report-export-btn {
+  padding: 7px 20px;
+  background: linear-gradient(90deg, #00bfff 60%, #00e676 100%);
+  color: #10181b;
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-size: 1em;
+  box-shadow: 0 1px 4px #0003;
+}
+
+.stock-report-export-btn:hover {
+  background: linear-gradient(90deg, #00e676 60%, #00bfff 100%);
+  color: #fff;
+}
+
+.stock-report-search {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1.5px solid #00bfff;
+  min-width: 180px;
+  background: #181c20;
+  color: #e0f7fa;
+  font-size: 1em;
+}
+
+.stock-report-select {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1.5px solid #00e676;
+  background: #181c20;
+  color: #e0f7fa;
+  font-size: 1em;
+}

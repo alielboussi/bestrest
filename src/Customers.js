@@ -186,9 +186,6 @@ const Customers = () => {
           </tbody>
         </table>
       </div>
-      <footer className="customers-footer">
-        <button type="button" className="back-dashboard-btn" onClick={handleBack}>Back to Dashboard</button>
-      </footer>
     </div>
   );
 };

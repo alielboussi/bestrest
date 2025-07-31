@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import "./Products.css";
 import supabase from "./supabase";
 
+
+// ...existing code...
+
 const initialForm = {
   name: "",
   sku: "",
@@ -23,8 +26,9 @@ const initialForm = {
 function Products() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-    const [units, setUnits] = useState([]);
+  const [units, setUnits] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [inventory, setInventory] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +41,16 @@ function Products() {
   useEffect(() => {
     fetchAll();
     fetchUnits();
+    fetchInventory();
   }, []);
+
+  const fetchInventory = async () => {
+    const { data, error } = await supabase.from('inventory').select('product_id, quantity');
+    if (!error) {
+      console.log('Fetched inventory:', data);
+      setInventory(data || []);
+    }
+  };
 
   const fetchUnits = async () => {
     const { data, error } = await supabase.from('unit_of_measure').select('*').order('created_at', { ascending: false });
@@ -194,103 +207,92 @@ function Products() {
   });
 
   return (
-    <div className="products-container" style={{maxWidth: '100vw', maxHeight: '100vh', overflow: 'auto', padding: '0 1vw'}}>
-      <button
-        className="back-to-dashboard-btn"
-        style={{
-          fontSize: '0.95em',
-          padding: '6px 18px',
-          background: '#00bfff',
-          color: '#fff',
-          border: '2px solid #00bfff',
-          borderRadius: 6,
-          fontWeight: 600,
-          boxShadow: '0 1px 4px #0003',
-          cursor: 'pointer',
-          transition: 'background 0.2s, color 0.2s',
-          minWidth: 120,
-          margin: '12px 0 18px 0',
-        }}
-        onClick={() => navigate('/dashboard')}
-        onMouseOver={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#00bfff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-        onMouseOut={e => { e.currentTarget.style.background = '#00bfff'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#00bfff'; }}
-      >Back to Dashboard</button>
-      <h1>Products</h1>
+    <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
+      <h1 className="products-title" style={{marginTop: '1rem'}}>Products</h1>
       <form className="product-form" onSubmit={handleSubmit}>
-        <input name="name" type="text" placeholder="Product Name" value={form.name} onChange={handleChange} required />
-        <input name="sku" type="text" placeholder="SKU (leave blank for auto)" value={form.sku} onChange={handleChange} />
-        <select name="sku_type" value={form.sku_type} onChange={handleChange}>
-          <option value="auto">Auto SKU</option>
-          <option value="manual">Manual SKU</option>
-        </select>
-        <input name="cost_price" type="number" step="0.01" placeholder="Cost Price" value={form.cost_price} onChange={handleChange} />
-        <input name="price" type="number" step="0.01" placeholder="Price" value={form.price} onChange={handleChange} />
-        <input name="promotional_price" type="number" step="0.01" placeholder="Promotional Price" value={form.promotional_price} onChange={handleChange} />
-        <input name="promo_start_date" type="date" value={form.promo_start_date} onChange={handleChange} />
-        <input name="promo_end_date" type="date" value={form.promo_end_date} onChange={handleChange} />
-        <select name="currency" value={form.currency} onChange={handleChange} required>
-          <option value="">Select Currency</option>
-          <option value="K">K</option>
-          <option value="$">$</option>
-        </select>
-        <select name="category_id" value={form.category_id} onChange={handleChange} required>
-          <option value="">Select Category</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
-        </select>
-        <select name="unit_of_measure_id" value={form.unit_of_measure_id || ''} onChange={handleChange} required>
-          <option value="">Select Unit</option>
-          {units.map((unit) => (
-            <option key={unit.id} value={unit.id}>{unit.name}{unit.abbreviation ? ` (${unit.abbreviation})` : ''}</option>
-          ))}
-        </select>
-        <div className="locations-checkbox-group">
-          {locations.map((loc) => (
-            <label key={loc.id} style={{ display: 'inline-flex', alignItems: 'center', marginRight: '1.5rem', marginBottom: '0.5rem', fontWeight: 400 }}>
-              <input
-                type="checkbox"
-                name="locations"
-                value={loc.id}
-                checked={form.locations.includes(loc.id)}
-                onChange={e => {
-                  const checked = e.target.checked;
-                  setForm(f => ({
-                    ...f,
-                    locations: checked
-                      ? [...f.locations, loc.id]
-                      : f.locations.filter(id => id !== loc.id)
-                  }));
-                }}
-                style={{ marginRight: '0.4em' }}
-              />
-              {loc.name}
-            </label>
-          ))}
+        <div className="form-grid">
+          {/* Currency, Category, Unit */}
+          <select name="currency" value={form.currency} onChange={handleChange} required>
+            <option value="">Select Currency</option>
+            <option value="K">K</option>
+            <option value="$">$</option>
+          </select>
+          <select name="category_id" value={form.category_id} onChange={handleChange} required>
+            <option value="">Select Category</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+          <select name="unit_of_measure_id" value={form.unit_of_measure_id || ''} onChange={handleChange} required>
+            <option value="">Select Unit</option>
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.id}>{unit.name}{unit.abbreviation ? ` (${unit.abbreviation})` : ''}</option>
+            ))}
+          </select>
+
+          {/* Auto SKU, SKU, Product Name, Cost Price */}
+          <select name="sku_type" value={form.sku_type} onChange={handleChange}>
+            <option value="auto">Auto SKU</option>
+            <option value="manual">Manual SKU</option>
+          </select>
+          <input name="sku" type="text" placeholder="SKU (leave blank for auto)" value={form.sku} onChange={handleChange} />
+          <input name="name" type="text" placeholder="Product Name" value={form.name} onChange={handleChange} required />
+          <input name="cost_price" type="number" step="0.01" placeholder="Cost Price" value={form.cost_price} onChange={handleChange} />
+
+          {/* Standard Price, Promotional Price, Promo Start, Promo End */}
+          <input name="price" type="number" step="0.01" placeholder="Standard Price" value={form.price} onChange={handleChange} />
+          <input name="promotional_price" type="number" step="0.01" placeholder="Promotional Price" value={form.promotional_price} onChange={handleChange} />
+          <input name="promo_start_date" type="date" value={form.promo_start_date} onChange={handleChange} className="from-date" />
+          <input name="promo_end_date" type="date" value={form.promo_end_date} onChange={handleChange} className="to-date" />
         </div>
-        <input name="image" type="file" accept="image/*" onChange={handleChange} />
-        {imageUrl && <img src={imageUrl} alt="Product" className="product-image-preview" />}
-        {/* Back to Dashboard button is now fixed at bottom right for best UX */}
-        <button
-          type="button"
-          className="back-dashboard-btn"
-          onClick={() => navigate("/dashboard")}
-        >
-          ← Back to Dashboard
-        </button>
-        <button type="submit" disabled={saving}>{editingId ? "Update" : "Add"} Product</button>
-        {editingId && <button type="button" onClick={handleCancelEdit}>Cancel</button>}
+        <div className="form-grid-search-row">
+          <input className="products-search-bar" type="text" placeholder="Search products by name, SKU, or category..." value={search} onChange={e => setSearch(e.target.value)} style={{marginBottom: 0}} />
+        </div>
+        {/* Removed duplicate locations-checkbox-row using selectedLocations and handleLocationChange */}
+        {/* Locations, Image, Actions */}
+        <div className="form-row" style={{display: 'flex', alignItems: 'flex-start', minHeight: '120px', width: '100%'}}>
+          <div className="locations-checkbox-group" style={{display: 'flex', flexDirection: 'row', gap: '2rem', justifyContent: 'flex-start', alignItems: 'center', flexWrap: 'wrap'}}>
+            {locations.map((loc) => (
+              <label key={loc.id} style={{display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem'}}>
+                <input
+                  type="checkbox"
+                  name="locations"
+                  value={loc.id}
+                  checked={form.locations.includes(loc.id)}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    setForm(f => ({
+                      ...f,
+                      locations: checked
+                        ? [...f.locations, loc.id]
+                        : f.locations.filter(id => id !== loc.id)
+                    }));
+                  }}
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    accentColor: '#00b4d8',
+                    borderRadius: '4px',
+                    border: '2px solid #00b4d8',
+                    marginRight: '0.5rem',
+                  }}
+                />
+                <span style={{color: '#e0e6ed'}}>{loc.name}</span>
+              </label>
+            ))}
+          </div>
+          <input name="image" type="file" accept="image/*" onChange={handleChange} style={{marginLeft: '2rem', alignSelf: 'flex-start'}} />
+          {imageUrl && <img src={imageUrl} alt="Product" className="product-image-preview" style={{marginLeft: '2rem', maxHeight: '60px', borderRadius: '6px', border: '1px solid #00b4d8'}} />}
+          <div style={{flex: 1}} />
+          <div className="form-actions" style={{display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', width: 'auto'}}>
+            <button type="submit" disabled={saving} style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer'}}>{editingId ? "Update" : "Add"} Product</button>
+            {editingId && <button type="button" onClick={handleCancelEdit} style={{marginLeft: '1rem', background: '#23272f', color: '#fff', border: '1px solid #00b4d8', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer'}}>Cancel</button>}
+          </div>
+        </div>
       </form>
       {error && <div className="products-error">{error}</div>}
-      <input
-        className="products-search-bar"
-        type="text"
-        placeholder="Search products by name, SKU, or category..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        style={{marginBottom: '1.5rem'}}
-      />
-      <div className="products-list" style={{overflowX: 'auto', overflowY: 'auto', width: '100%', maxHeight: '60vh'}}>
+      {/* Table moved directly below the checkboxes/image row, and only shows last entered product unless searching */}
+      <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflow: 'visible', maxHeight: 'none'}}>
         {loading ? (
           <div>Loading...</div>
         ) : filteredProducts.length === 0 ? (
@@ -299,33 +301,50 @@ function Products() {
           <table style={{width: '100%', minWidth: 900, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
             <thead>
               <tr style={{background: '#23272f'}}>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Image</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Name</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>SKU</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Category</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Unit</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Locations</th>
-        <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Price</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Promo</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8'}}>Actions</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Image</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'left'}}>Name</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>SKU</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Category</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Unit</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Stock Qty</th>
+                {/* Removed Locations column */}
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Price</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Promo</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Duration</th>
+                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((product) => (
+              {filteredProducts.slice(0, 5).map((product) => (
                 <tr key={product.id} style={{background: editingId === product.id ? '#1a222b' : 'inherit'}}>
                   <td style={{textAlign: 'center'}}>
                     {product.product_images && product.product_images[0] && (
                       <img src={product.product_images[0].image_url} alt="Product" className="product-image-thumb" />
                     )}
                   </td>
-                  <td>{product.name}</td>
-                  <td>{product.sku || '(auto)'}</td>
-                  <td>{categories.find((c) => c.id === product.category_id)?.name || '-'}</td>
-                  <td>{units.find((u) => u.id === product.unit_of_measure_id)?.abbreviation || units.find((u) => u.id === product.unit_of_measure_id)?.name || '-'}</td>
-                  <td>{product.product_locations && product.product_locations.length > 0 ? product.product_locations.map((pl) => locations.find((l) => l.id === pl.location_id)?.name).join(", ") : '-'}</td>
-                  <td>{product.price} {product.currency === 'K' ? 'K' : product.currency === '$' ? '$' : ''}</td>
-                  <td>{product.promotional_price ? `${product.promotional_price} (${product.promo_start_date} to ${product.promo_end_date})` : '-'}</td>
-                  <td>
+                  <td style={{textAlign: 'left'}}>{product.name}</td>
+                  <td style={{textAlign: 'center'}}>{product.sku || '(auto)'}</td>
+                  <td style={{textAlign: 'center'}}>{categories.find((c) => c.id === product.category_id)?.name || '-'}</td>
+                  <td style={{textAlign: 'center'}}>{units.find((u) => u.id === product.unit_of_measure_id)?.abbreviation || units.find((u) => u.id === product.unit_of_measure_id)?.name || '-'}</td>
+                  <td style={{textAlign: 'center'}}>{
+                    (() => {
+                      if (!inventory || inventory.length === 0) return <span style={{color:'#ff4d4f'}}>No inventory</span>;
+                      const matchingInventory = inventory.filter((inv) => inv.product_id === product.id);
+                      const totalQty = matchingInventory.reduce((sum, inv) => sum + (Number(inv.quantity) || 0), 0);
+                      return matchingInventory.length > 0 ? totalQty : '-';
+                    })()
+                  }</td>
+                  {/* Removed Locations cell */}
+                  <td style={{textAlign: 'center'}}>
+                    {product.price ? product.price : '-'}
+                  </td>
+                  <td style={{textAlign: 'center'}}>
+                    {product.promotional_price ? product.promotional_price : '-'}
+                  </td>
+                  <td style={{textAlign: 'center'}}>
+                    {(product.promo_start_date && product.promo_end_date) ? `${product.promo_start_date} to ${product.promo_end_date}` : '-'}
+                  </td>
+                  <td style={{textAlign: 'center'}}>
                     <button className="edit-btn" onClick={() => handleEdit(product)} disabled={saving}>Edit</button>
                     <button className="delete-btn" onClick={() => handleDelete(product.id)} disabled={saving}>Delete</button>
                   </td>
