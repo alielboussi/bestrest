@@ -125,6 +125,12 @@ const OpeningStock = () => {
       )}
       {step === 3 && (
         <div className="stocktake-step">
+          {/* Debug info - remove after testing */}
+          <div style={{ color: 'yellow', background: '#222', padding: 8, marginBottom: 8 }}>
+            <div>DEBUG: allProducts.length = {allProducts.length}</div>
+            <div>DEBUG: search = '{search}'</div>
+            <div>DEBUG: Matching products = {search.trim().length >= 2 ? allProducts.filter(p => p.name.toLowerCase().includes(search.trim().toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.trim().toLowerCase()))).length : 0}</div>
+          </div>
           <h2>Location: {locations.find(l => l.id === selectedLocation)?.name}</h2>
           <h3>Stocktaker: {userName}</h3>
           <label>Search Product:</label>
@@ -139,22 +145,25 @@ const OpeningStock = () => {
               <tr><th>Product</th><th>SKU</th><th>Qty</th></tr>
             </thead>
             <tbody>
-              {allProducts.filter(p =>
-                search && (p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())))
-              ).map(p => (
-                <tr key={p.id}>
-                  <td>{p.name}</td>
-                  <td>{p.sku}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockRows.find(r => r.product_id === p.id)?.qty || ''}
-                      onChange={e => handleQtyChange(p.id, e.target.value)}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {search.trim().length >= 2 && allProducts
+                .filter(p =>
+                  p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+                  (p.sku && p.sku.toLowerCase().includes(search.trim().toLowerCase()))
+                )
+                .map(p => (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{p.sku}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min="0"
+                        value={stockRows.find(r => r.product_id === p.id)?.qty || ''}
+                        onChange={e => handleQtyChange(p.id, e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
           <div style={{ marginTop: 16 }}>

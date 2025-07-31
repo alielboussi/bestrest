@@ -16,6 +16,7 @@ const StockReport = () => {
   const [locations, setLocations] = useState([]);
   const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
+  const [expandedImage, setExpandedImage] = useState(null);
 
   useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
@@ -23,13 +24,24 @@ const StockReport = () => {
 
   useEffect(() => {
     async function fetchStock() {
-      // Fetch all products (with SKU, name, standard_price, promotional_price, image, unit_of_measure)
+      // Fetch all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, sku, name, price, standard_price, promotional_price, image_url, unit_of_measure');
+        .select('id, sku, name, price, promotional_price, unit_of_measure_id');
       if (productsError || !productsData) {
         setProducts([]);
         return;
+      }
+
+      // Fetch product images
+      const { data: imagesData, error: imagesError } = await supabase
+        .from('product_images')
+        .select('product_id, image_url');
+      const imageMap = {};
+      if (imagesData) {
+        imagesData.forEach(img => {
+          if (!imageMap[img.product_id]) imageMap[img.product_id] = img.image_url;
+        });
       }
 
       // Fetch inventory, filter by location if selected
@@ -55,18 +67,29 @@ const StockReport = () => {
       });
 
       // Always show all products, even if inventory is empty
-      const merged = productsData.map(prod => {
-        const quantity = inventoryMap[prod.id] || 0;
-        let standard_price = prod.standard_price;
-        if (standard_price === undefined || standard_price === null || standard_price === '') {
-          standard_price = prod.price !== undefined && prod.price !== null && prod.price !== '' ? prod.price : 0;
-        }
-        return {
-          ...prod,
-          standard_price,
-          quantity,
-        };
-      });
+      // If a location is selected, only show products that have inventory records for that location (even if quantity is 0)
+      let productIdsForLocation = null;
+      if (location) {
+        productIdsForLocation = new Set(inventoryRows.map(row => row.product_id));
+      }
+      let merged = productsData
+        .filter(prod => {
+          if (!location) return true;
+          return productIdsForLocation.has(prod.id);
+        })
+        .map(prod => {
+          const quantity = inventoryMap[prod.id] || 0;
+          let standard_price = prod.standard_price;
+          if (standard_price === undefined || standard_price === null || standard_price === '') {
+            standard_price = prod.price !== undefined && prod.price !== null && prod.price !== '' ? prod.price : 0;
+          }
+          return {
+            ...prod,
+            standard_price,
+            quantity,
+            image_url: imageMap[prod.id] || null,
+          };
+        });
       setProducts(merged);
     }
     fetchStock();
@@ -109,7 +132,13 @@ const StockReport = () => {
           <div className="stock-report-card" key={p.id}>
             <div className="stock-report-card-img-wrap">
               {p.image_url ? (
-                <img src={p.image_url} alt={p.name} className="stock-report-card-img" />
+                <img
+                  src={p.image_url}
+                  alt={p.name}
+                  className="stock-report-card-img"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setExpandedImage(p.image_url)}
+                />
               ) : (
                 <div className="stock-report-card-img-placeholder">No Image</div>
               )}
@@ -125,6 +154,55 @@ const StockReport = () => {
           </div>
         ))}
       </div>
+
+      {/* Modal for expanded image */}
+      {expandedImage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setExpandedImage(null)}
+        >
+          <img
+            src={expandedImage}
+            alt="Expanded Product"
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              borderRadius: '10px',
+              boxShadow: '0 0 20px #000',
+              background: '#fff',
+            }}
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setExpandedImage(null)}
+            style={{
+              position: 'fixed',
+              top: 30,
+              right: 40,
+              fontSize: 32,
+              background: 'transparent',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              zIndex: 1001,
+            }}
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 };

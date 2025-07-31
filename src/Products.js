@@ -138,10 +138,27 @@ function Products() {
     setError("");
     try {
       let productId = editingId;
+      // Generate unique SKU if needed
+      let skuToUse = form.sku;
+      if ((form.sku_type === "auto" && !form.sku.trim()) || !form.sku.trim()) {
+        // Try to generate a unique SKU: e.g. PROD-YYYYMMDD-HHMMSS-XXXX
+        let unique = false;
+        let generatedSku = "";
+        while (!unique) {
+          const now = new Date();
+          const pad = (n) => n.toString().padStart(2, '0');
+          generatedSku = `PROD-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}-${Math.floor(1000 + Math.random() * 9000)}`;
+          // Check if SKU exists
+          const { data: existing } = await supabase.from('products').select('id').eq('sku', generatedSku).maybeSingle();
+          if (!existing) unique = true;
+        }
+        skuToUse = generatedSku;
+      }
+
       // Prepare product data
       const productData = {
         name: form.name,
-        sku: form.sku,
+        sku: skuToUse,
         sku_type: form.sku_type === "auto",
         cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
         price: form.price ? parseFloat(form.price) : null,
@@ -153,9 +170,55 @@ function Products() {
         unit_of_measure_id: form.unit_of_measure_id ? parseInt(form.unit_of_measure_id) : null
       };
 
-      // Insert product into Supabase
-      const { error } = await supabase.from('products').insert([productData]);
-      if (error) throw error;
+      // Insert product and get the ID
+      let insertedProductId = productId;
+      if (!editingId) {
+        const { data: inserted, error: insertError } = await supabase.from('products').insert([productData]).select('id').single();
+        if (insertError) throw insertError;
+        insertedProductId = inserted.id;
+      } else {
+        // If editing, update the product
+        const { error: updateError } = await supabase.from('products').update(productData).eq('id', editingId);
+        if (updateError) throw updateError;
+      }
+
+      // Handle product_locations for selected locations
+      if (form.locations && form.locations.length > 0) {
+        // Remove existing links if editing
+        if (editingId) {
+          await supabase.from('product_locations').delete().eq('product_id', insertedProductId);
+        }
+        // Insert new links
+        const prodLocRows = form.locations.map(locId => ({ product_id: insertedProductId, location_id: locId }));
+        if (prodLocRows.length > 0) {
+          const { error: prodLocError } = await supabase.from('product_locations').insert(prodLocRows);
+          if (prodLocError) throw prodLocError;
+        }
+      }
+
+      // Handle image upload if a file is selected
+      if (form.image) {
+        const file = form.image;
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${insertedProductId}_${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // Upload to bucket 'productimages'
+        const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
+        const publicUrl = publicUrlData?.publicUrl;
+        if (!publicUrl) throw new Error('Failed to get public URL for image.');
+
+        // Insert into product_images table
+        const { error: imageInsertError } = await supabase.from('product_images').insert([
+          { product_id: insertedProductId, image_url: publicUrl }
+        ]);
+        if (imageInsertError) throw imageInsertError;
+      }
+
       fetchAll();
       handleCancelEdit();
     } catch (err) {
@@ -167,14 +230,16 @@ function Products() {
   };
 
   // Filter products by search
-  const filteredProducts = products.filter((product) => {
-    const searchLower = search.toLowerCase();
-    return (
-      product.name?.toLowerCase().includes(searchLower) ||
-      product.sku?.toLowerCase().includes(searchLower) ||
-      (categories.find((c) => c.id === product.category_id)?.name?.toLowerCase().includes(searchLower))
-    );
-  });
+  const filteredProducts = products
+    .filter((product) => {
+      const searchLower = search.toLowerCase();
+      return (
+        product.name?.toLowerCase().includes(searchLower) ||
+        product.sku?.toLowerCase().includes(searchLower) ||
+        (categories.find((c) => c.id === product.category_id)?.name?.toLowerCase().includes(searchLower))
+      );
+    })
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
   return (
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
@@ -262,13 +327,15 @@ function Products() {
       </form>
       {error && <div className="products-error">{error}</div>}
       {/* Table moved directly below the checkboxes/image row, and only shows last entered product unless searching */}
-      <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflow: 'visible', maxHeight: 'none'}}>
+      <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflowX: 'auto', maxHeight: 'none'}}>
+        {/* Show only 2 products, and make sure both rows are visible by setting maxHeight and overflowY */}
         {loading ? (
           <div>Loading...</div>
         ) : filteredProducts.length === 0 ? (
           <div>No products found.</div>
         ) : (
-          <table style={{width: '100%', minWidth: 900, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
+          <div style={{maxHeight: 300, overflowY: 'auto', width: '100%'}}>
+            <table style={{width: '100%', minWidth: 900, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
             <thead>
               <tr style={{background: '#23272f'}}>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Image</th>
@@ -277,7 +344,6 @@ function Products() {
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Category</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Unit</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Stock Qty</th>
-                {/* Removed Locations column */}
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Price</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Promo</th>
                 <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Duration</th>
@@ -285,7 +351,7 @@ function Products() {
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.slice(0, 5).map((product) => (
+              {filteredProducts.slice(0, 1).map((product) => (
                 <tr key={product.id} style={{background: editingId === product.id ? '#1a222b' : 'inherit'}}>
                   <td style={{textAlign: 'center'}}>
                     {product.product_images && product.product_images[0] && (
@@ -304,7 +370,6 @@ function Products() {
                       return matchingInventory.length > 0 ? totalQty : '-';
                     })()
                   }</td>
-                  {/* Removed Locations cell */}
                   <td style={{textAlign: 'center'}}>
                     {product.price ? product.price : '-'}
                   </td>
@@ -321,7 +386,8 @@ function Products() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </div>
     </div>

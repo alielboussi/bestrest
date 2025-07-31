@@ -307,6 +307,25 @@ export default function POS() {
               ]);
             if (insertError) throw insertError;
           }
+
+          // Ensure product_locations is updated for this product/location
+          const { data: prodLocRows, error: prodLocError } = await supabase
+            .from('product_locations')
+            .select('id')
+            .eq('product_id', item.id)
+            .eq('location_id', selectedLocation);
+          if (prodLocError) throw prodLocError;
+          if (!prodLocRows || prodLocRows.length === 0) {
+            const { error: insertProdLocError } = await supabase
+              .from('product_locations')
+              .insert([
+                {
+                  product_id: item.id,
+                  location_id: selectedLocation
+                }
+              ]);
+            if (insertProdLocError) throw insertProdLocError;
+          }
         }
       setCart([]);
       setPaymentAmount(0);
