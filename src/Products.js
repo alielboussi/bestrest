@@ -142,7 +142,7 @@ function Products() {
       const productData = {
         name: form.name,
         sku: form.sku,
-        sku_type: form.sku_type === "auto", // true for "auto", false for "manual"
+        sku_type: form.sku_type === "auto",
         cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
         price: form.price ? parseFloat(form.price) : null,
         promotional_price: form.promotional_price ? parseFloat(form.promotional_price) : null,
@@ -153,14 +153,14 @@ function Products() {
         unit_of_measure_id: form.unit_of_measure_id ? parseInt(form.unit_of_measure_id) : null
       };
 
-      // ...rest of the handleSubmit logic, including locations and image upload...
-
-      // Insert/update product, handle locations, handle image upload, etc.
-
-      // (The rest of your code remains unchanged)
-      // ...
+      // Insert product into Supabase
+      const { error } = await supabase.from('products').insert([productData]);
+      if (error) throw error;
+      fetchAll();
+      handleCancelEdit();
     } catch (err) {
-      setError("Failed to save product.");
+      setError("Failed to save product. " + (err.message || err));
+      console.error('Product save error:', err);
     } finally {
       setSaving(false);
     }
