@@ -1,9 +1,7 @@
 /* Mobile responsive styles for StockReport page */
 @media (max-width: 600px) {
   .stock-report-header {
-    font-size: 2rem;
-    text-align: center;
-    margin-top: 1.5rem;
+    display: none !important;  /* <--- Hides Stock View header on phones */
   }
   .stock-report-controls {
     flex-direction: column;
