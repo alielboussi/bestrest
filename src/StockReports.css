@@ -26,8 +26,8 @@
     align-items: center;
   }
   .stock-report-card {
-    width: 98vw;
-    max-width: 420px;
+    width: calc(98vw - 2cm);
+    max-width: calc(420px - 2cm);
     min-width: unset;
     margin: 0 auto;
     border-radius: 12px;
@@ -35,6 +35,7 @@
     font-size: 1.05rem;
     box-sizing: border-box;
     word-break: break-word;
+    min-height: 3cm;
     height: auto;
     background: #181d23;
   }
