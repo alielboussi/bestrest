@@ -22,12 +22,12 @@
   .stock-report-list {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.5cm;
     align-items: center;
   }
   .stock-report-card {
-    width: calc(98vw - 2cm);
-    max-width: calc(420px - 2cm);
+    width: 95vw;
+    max-width: 400px;
     min-width: unset;
     margin: 0 auto;
     border-radius: 12px;
@@ -35,7 +35,6 @@
     font-size: 1.05rem;
     box-sizing: border-box;
     word-break: break-word;
-    min-height: 3cm;
     height: auto;
     background: #181d23;
   }
@@ -78,7 +77,7 @@
     white-space: pre-line;
     overflow-wrap: break-word;
     max-width: 100%;
-    flex-shrink: 0;
+    flex: 1 1 auto;
   }
   /* Modal overlay for expanded image */
   .stock-report-modal {
