@@ -103,7 +103,7 @@ function App() {
         <Route path="/stock-viewer" element={user ? <StockViewer /> : <Navigate to="/dashboard" />} />
         <Route path="/sets" element={user ? <Sets /> : <Navigate to="/dashboard" />} />
         <Route path="/sales-report" element={user ? <SalesReport /> : <Navigate to="/dashboard" />} />
-        <Route path="/stock-report" element={user ? <StockReport /> : <Navigate to="/dashboard" />} />
+        <Route path="/stock-report" element={<StockReport />} />
         <Route path="/stocktake-report" element={user ? <StocktakeReport /> : <Navigate to="/dashboard" />} />
         <Route path="/variance-report" element={user ? <VarianceReportWrapper /> : <Navigate to="/dashboard" />} />
         {/* User Access Control Route (admin only) */}
