@@ -47,6 +47,7 @@ const Dashboard = () => {
   const handleCompanySettings = () => {
     navigate('/company-settings');
   };
+
   // All hooks at the top level
   // Remove permissions state
   const [user, setUser] = useState(null);
@@ -66,6 +67,16 @@ const Dashboard = () => {
 
   const [dueTotals, setDueTotals] = useState({ K: 0, $: 0 });
   const navigate = useNavigate();
+
+  // Fetch locations for dropdown
+  useEffect(() => {
+    async function fetchLocations() {
+      const { data, error } = await supabase.from('locations').select('id, name');
+      if (!error && data) setLocations(data);
+      else setLocations([]);
+    }
+    fetchLocations();
+  }, []);
 
   useEffect(() => {
     // Get user from localStorage
@@ -103,6 +114,7 @@ const Dashboard = () => {
     navigate('/locations');
   };
 
+
   // Factory Reset Handlers
   const handleFactoryReset = () => {
     setShowResetConfirm(true);
@@ -121,6 +133,57 @@ const Dashboard = () => {
       alert('Factory reset failed: ' + err.message);
     }
   };
+
+  // Fetch and filter product statistics by location and date
+  useEffect(() => {
+    async function fetchProductStats() {
+      // Build inventory query
+      let inventoryQuery = supabase.from('inventory').select('product_id, quantity, location');
+      if (locationFilter) inventoryQuery = inventoryQuery.eq('location', locationFilter);
+      const { data: inventoryRows, error: invError } = await inventoryQuery;
+      if (invError) {
+        setProductStats({ qty: 0, costK: 0, cost$: 0 });
+        return;
+      }
+
+      // Get all product IDs in inventory
+      const productIds = Array.from(new Set((inventoryRows || []).map(row => row.product_id)));
+      if (productIds.length === 0) {
+        setProductStats({ qty: 0, costK: 0, cost$: 0 });
+        return;
+      }
+
+      // Fetch product details for these IDs
+      const { data: products, error: prodError } = await supabase
+        .from('products')
+        .select('id, standard_price, price, promotional_price, currency')
+        .in('id', productIds);
+      if (prodError) {
+        setProductStats({ qty: 0, costK: 0, cost$: 0 });
+        return;
+      }
+
+      // Build product map for price/currency lookup
+      const productMap = {};
+      (products || []).forEach(p => { productMap[p.id] = p; });
+
+      // Aggregate stats
+      let qty = 0, costK = 0, cost$ = 0;
+      (inventoryRows || []).forEach(row => {
+        const prod = productMap[row.product_id];
+        if (!prod) return;
+        const quantity = Number(row.quantity) || 0;
+        qty += quantity;
+        // Use promotional price if available, else standard, else price
+        let price = prod.promotional_price || prod.standard_price || prod.price || 0;
+        if (prod.currency === 'K') costK += price * quantity;
+        else if (prod.currency === '$') cost$ += price * quantity;
+        else costK += price * quantity; // Default to K if currency missing
+      });
+      setProductStats({ qty, costK, cost$: cost$ });
+    }
+    fetchProductStats();
+  }, [locationFilter, dateFrom, dateTo]);
 
   // Password generator state
   const [showPasswordGen, setShowPasswordGen] = useState(false);

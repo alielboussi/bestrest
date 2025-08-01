@@ -9,6 +9,8 @@ const Statistics = () => {
     mostSoldProduct: '',
     leastSoldProduct: '',
     laybyDue: 0,
+    dueK: 0,
+    due$: 0,
     totalCustomers: 0
   });
   const [loading, setLoading] = useState(false);
@@ -88,13 +90,24 @@ const Statistics = () => {
           leastSoldProduct = prodMap[sorted[sorted.length - 1][0]] || '';
         }
 
-        // Lay-By Amount Due (with currency)
-        const { data: laybyData, error: laybyError } = await supabase.from('laybys').select('total_amount, paid_amount, currency');
+        // Lay-By Amount Due (with currency) and Customer Due Stats
+        // If locationFilter is set, filter laybys by location_id
+        let laybyQuery = supabase.from('laybys').select('total_amount, paid_amount, currency, location_id');
+        if (locationFilter) {
+          // Try to match location name to id
+          const locId = Object.keys(locationMap).find(id => locationMap[id]?.toLowerCase() === locationFilter.toLowerCase()) || locationFilter;
+          laybyQuery = laybyQuery.eq('location_id', locId);
+        }
+        const { data: laybyData, error: laybyError } = await laybyQuery;
         if (laybyError) throw laybyError;
         const laybyByCurrency = {};
+        let dueK = 0, due$ = 0;
         (laybyData || []).forEach(l => {
           const cur = l.currency || '';
-          laybyByCurrency[cur] = (laybyByCurrency[cur] || 0) + ((l.total_amount || 0) - (l.paid_amount || 0));
+          const due = (l.total_amount || 0) - (l.paid_amount || 0);
+          laybyByCurrency[cur] = (laybyByCurrency[cur] || 0) + due;
+          if (cur === 'K') dueK += due;
+          else if (cur === '$') due$ += due;
         });
 
         // Total Customers
@@ -105,7 +118,7 @@ const Statistics = () => {
         // Fetch all products for debug
         const { data: productsData } = await supabase.from('products').select('id, name');
 
-        setStats({ salesByCurrency, mostSoldProduct, leastSoldProduct, laybyByCurrency, totalCustomers });
+        setStats({ salesByCurrency, mostSoldProduct, leastSoldProduct, laybyByCurrency, dueK, due$, totalCustomers });
         setDebug({
           salesData: salesData || [],
           salesItemsData: itemsData || [],
@@ -189,6 +202,14 @@ const Statistics = () => {
                   <p key={cur}>{cur} {amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 ))
               ) : <p>0</p>}
+            </div>
+            <div className="stats-card">
+              <h3>Customer Due Total (K)</h3>
+              <p>{stats.dueK.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} K</p>
+            </div>
+            <div className="stats-card">
+              <h3>Customer Due Total ($)</h3>
+              <p>{stats.due$.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $</p>
             </div>
             <div className="stats-card">
               <h3>Total Customers</h3>

@@ -26,6 +26,9 @@ import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
 import Roneth113ResetButton from './Roneth113ResetButton';
 
+// Utility to detect Android WebView
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 // Auth wrapper for LaybyManagementView
 function ProtectedLaybyManagementView() {
   const [user, setUser] = React.useState(null);
@@ -57,16 +60,26 @@ function ProtectedLaybyManagementView() {
   return <LaybyManagementView />;
 }
 
-// SmartRedirect: redirects / to /login on PC, /closing-stock on Android WebView
+// SmartRedirect: redirects / based on user role
 function SmartRedirect() {
   const navigate = useNavigate();
   React.useEffect(() => {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    if (/android/i.test(ua)) {
-      navigate('/closing-stock', { replace: true });
-    } else {
-      navigate('/login', { replace: true });
+    async function doRedirect() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        // If not logged in, go to public stock report
+        navigate('/stock-report', { replace: true });
+        return;
+      }
+      const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
+      const role = userRows && userRows[0] ? userRows[0].role : null;
+      if (['admin', 'user'].includes(role)) {
+        navigate('/layby-management', { replace: true });
+      } else {
+        navigate('/login', { replace: true });
+      }
     }
+    doRedirect();
   }, [navigate]);
   return null;
 }
@@ -90,7 +103,7 @@ function App() {
         <Route path="/stock-app" element={<StockApp />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/pos" element={<POS />} />
-        <Route path="/layby-management" element={<ProtectedLaybyManagementView />} />
+        <Route path="/layby-management" element={isAndroid ? <ProtectedLaybyManagementView /> : <LaybyManagement />} />
         <Route path="/company-settings" element={<CompanySettings />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/locations" element={<Locations />} />
