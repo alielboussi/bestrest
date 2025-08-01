@@ -65,18 +65,23 @@ function SmartRedirect() {
   const navigate = useNavigate();
   React.useEffect(() => {
     async function doRedirect() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        // If not logged in, go to public stock report
-        navigate('/stock-report', { replace: true });
-        return;
-      }
-      const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
-      const role = userRows && userRows[0] ? userRows[0].role : null;
-      if (['admin', 'user'].includes(role)) {
-        navigate('/layby-management', { replace: true });
+      // Only redirect to layby-management for Android app
+      if (isAndroid) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/stock-report', { replace: true });
+          return;
+        }
+        const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
+        const role = userRows && userRows[0] ? userRows[0].role : null;
+        if (["admin", "user"].includes(role)) {
+          navigate('/layby-management', { replace: true });
+        } else {
+          navigate('/login', { replace: true });
+        }
       } else {
-        navigate('/login', { replace: true });
+        // On desktop/web, go to dashboard
+        navigate('/dashboard', { replace: true });
       }
     }
     doRedirect();
