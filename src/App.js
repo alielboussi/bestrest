@@ -101,34 +101,18 @@ function VarianceReportWrapper() {
 
 
 function App() {
+  // Role-based route restriction
+  const user = JSON.parse(localStorage.getItem('user'));
+  const allowedUserRoutes = ['/layby-management', '/stock-report'];
+  const location = window.location.pathname;
+  if (user && user.role === 'user' && !allowedUserRoutes.includes(location)) {
+    window.location.replace('/layby-management');
+    return null;
+  }
   return (
     <div className="App">
       <Routes>
-        {/* Public, view-only stock report for Android app */}
-        <Route path="/stock-app" element={<StockApp />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/pos" element={<POS />} />
-        <Route path="/layby-management" element={isAndroid ? <ProtectedLaybyManagementView /> : <LaybyManagement />} />
-        <Route path="/company-settings" element={<CompanySettings />} />
-        <Route path="/customers" element={<Customers />} />
-        <Route path="/locations" element={<Locations />} />
-        <Route path="/categories" element={<Categories />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
-        <Route path="/opening-stock" element={<OpeningStock />} />
-        <Route path="/closing-stock" element={<ClosingStock />} />
-        <Route path="/transfer" element={<Transfer />} />
-        <Route path="/transfer/:id" element={<Transfer />} />
-        <Route path="/transfers" element={<TransferList />} />
-        <Route path="/stock-viewer" element={<StockViewer />} />
-        <Route path="/sets" element={<Sets />} />
-        <Route path="/sales-report" element={<SalesReport />} />
-        <Route path="/stock-report" element={<StockReport />} />
-        <Route path="/stocktake-report" element={<StocktakeReport />} />
-        <Route path="/variance-report" element={<VarianceReportWrapper />} />
-        {/* Default route: Smart redirect based on platform */}
-        <Route path="/" element={<SmartRedirect />} />
-        <Route path="/login" element={<LoginPage />} />
+        {/* ...existing code... */}
       </Routes>
       <Roneth113ResetButton />
     </div>

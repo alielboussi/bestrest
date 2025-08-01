@@ -10,10 +10,15 @@ const StockReport = () => {
   const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
   const [expandedImage, setExpandedImage] = useState(null);
+  const user = JSON.parse(localStorage.getItem('user'));
 
   useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
     supabase.from('categories').select('id, name').then(({ data }) => setCategories(data || []));
+    // If user role is 'user', force Kitwe location
+    if (user && user.role === 'user') {
+      setLocation('Kitwe');
+    }
   }, []);
 
   useEffect(() => {
@@ -113,6 +118,7 @@ const StockReport = () => {
             className="stock-report-select"
             value={location}
             onChange={e => setLocation(e.target.value)}
+            disabled={user && user.role === 'user'}
           >
             <option value="">All</option>
             {locations.map(l => (

@@ -8,12 +8,12 @@ import "./LaybyManagement.css";
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
 export default function LaybyManagement() {
-  // Block navigation for Android user role
+  // Block navigation for user role
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user'));
-    if (isAndroid && user && user.role === 'user') {
+    if (user && user.role === 'user') {
       const handlePopState = () => {
-        if (window.location.pathname !== '/layby-management') {
+        if (window.location.pathname !== '/layby-management' && window.location.pathname !== '/stock-report') {
           window.location.replace('/layby-management');
         }
       };
@@ -264,8 +264,21 @@ export default function LaybyManagement() {
                 </td>
                 <td className="text-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
                 <td className="action-col">
-                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => setSelectedLayby(layby)} disabled={layby.outstanding === 0}>Add Payment</button>
+                  <button
+                    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }}
+                    onClick={() => setSelectedLayby(layby)}
+                    disabled={layby.outstanding === 0 || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
+                  >
+                    Add Payment
+                  </button>
                 </td>
+                  <button
+                    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }}
+                    onClick={() => handleSetReminder(layby.id)}
+                    disabled={!reminderDate || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
+                  >
+                    Set
+                  </button>
                 <td className="action-col">
                   <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90, marginRight: 2 }} onClick={async () => {
                     // Fetch products for this layby (from sales_items)
