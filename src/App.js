@@ -96,7 +96,14 @@ function App() {
         <Route path="/products" element={user ? <Products /> : <Navigate to="/dashboard" />} />
         <Route path="/units-of-measure" element={user ? <UnitsOfMeasure /> : <Navigate to="/dashboard" />} />
         <Route path="/opening-stock" element={user ? <OpeningStock /> : <Navigate to="/dashboard" />} />
-        <Route path="/closing-stock" element={<ClosingStock />} />
+        <Route
+          path="/closing-stock"
+          element={
+            user && (user.role === 'admin' || user.role === 'stock')
+              ? <ClosingStock />
+              : <div style={{textAlign: 'center', marginTop: '3rem', color: 'red', fontWeight: 'bold', fontSize: '1.3rem'}}>Access Denied</div>
+          }
+        />
         <Route path="/transfer" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
         <Route path="/transfer/:id" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
         <Route path="/transfers" element={user ? <TransferList /> : <Navigate to="/dashboard" />} />

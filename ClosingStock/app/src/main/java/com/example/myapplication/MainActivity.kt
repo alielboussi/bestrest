@@ -33,8 +33,11 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url.toString()
-                // Only allow the closing stock page
-                return url != allowedUrl
+                return if (url == allowedUrl) {
+                    false // allow navigation to the allowed URL
+                } else {
+                    true // block navigation to any other URL
+                }
             }
         }
 

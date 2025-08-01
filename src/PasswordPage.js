@@ -40,19 +40,6 @@ function PasswordPage() {
   return (
     <div className="password-page-container">
       <h2 className="password-title">Closing Stock Password</h2>
-      <div className="password-generate-row">
-        <input
-          className="password-field"
-          type="text"
-          value={password}
-          readOnly
-        />
-        <button className="dashboard-page-btn gray password-generate-btn" onClick={handleGenerate} style={{display:'flex',alignItems:'center',gap:8}}>
-          <FaRegEdit size={20} />
-          Password Generator
-        </button>
-      </div>
-      <div style={{marginTop: 10, color: '#aaa', fontSize: '0.98em', textAlign:'center'}}>Share this password with your employee conducting the stocktake.</div>
       <form onSubmit={handleSubmit} style={{width:'100%', marginTop: 32}}>
         <input
           className="password-input"
