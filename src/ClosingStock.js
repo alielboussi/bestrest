@@ -144,13 +144,13 @@ function ClosingStock() {
       qty: entries[p.id]
     }));
 
-  // Show all products if search is empty, otherwise filter
+  // Only show products matching the search term (never show all by default)
   const filteredProducts = search.trim().length > 0
     ? products.filter(p =>
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()))
       )
-    : products;
+    : [];
 
   return (
     <div className="closing-stock-container">
@@ -272,6 +272,20 @@ function ClosingStock() {
                       setConfirmChecked(false);
                       // Optionally export to CSV
                       exportToCSV(confirmRows);
+                      // After successful submit: close app on Android, go to dashboard on PC
+                      setTimeout(() => {
+                        const ua = navigator.userAgent || navigator.vendor || window.opera;
+                        if (/android/i.test(ua) && window.ReactNativeWebView) {
+                          // If running in Android WebView with ReactNativeWebView bridge
+                          window.ReactNativeWebView.postMessage('close');
+                        } else if (/android/i.test(ua)) {
+                          // If running in Android WebView (no bridge, fallback)
+                          window.close();
+                        } else {
+                          // On PC, return to dashboard
+                          navigate('/');
+                        }
+                      }, 500);
                     } catch (err) {
                       setError('Failed to save: ' + err.message);
                     }

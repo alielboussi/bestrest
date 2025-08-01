@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication"
+    namespace = "com.example.stocktake"
     compileSdk = 36
 
     defaultConfig {
