@@ -26,17 +26,11 @@ const LoginPage = (props) => {
         let tries = 0;
         const pollUser = () => {
           const user = JSON.parse(localStorage.getItem('user'));
-          if (user && user.role) {
+          if (user) {
             setError('');
-            if (user.role === 'stock') {
-              setLoggingIn(false);
-              navigate('/closing-stock');
-            } else if (user.role === 'user' && isAndroid) {
+            if (isAndroid) {
               setLoggingIn(false);
               navigate('/layby-management');
-            } else if (user.role === 'user') {
-              setLoggingIn(false);
-              navigate('/dashboard');
             } else {
               setLoggingIn(false);
               navigate('/dashboard');
@@ -68,12 +62,8 @@ const LoginPage = (props) => {
 
       localStorage.setItem('user', JSON.stringify(user));
       setError('');
-      if (user.role === 'stock') {
-        navigate('/closing-stock');
-      } else if (user.role === 'user' && isAndroid) {
+      if (isAndroid) {
         navigate('/layby-management');
-      } else if (user.role === 'user') {
-        navigate('/dashboard');
       } else {
         navigate('/dashboard');
       }
