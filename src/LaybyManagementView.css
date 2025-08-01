@@ -1,21 +1,31 @@
 /* LaybyManagementView.css - Styles for LaybyManagementView.js
    Matches the layout and look of LaybyManagement.css for consistency. */
 
-.layby-view-container {
-  max-width: 900px;
+
+.layby-view-container.landscape-layout {
+  max-width: 1200px;
+  min-width: 900px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 16px 24px;
   background: #f9f9f9;
   border-radius: 10px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .layby-view-title {
   font-size: 2rem;
   font-weight: 600;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   color: #222;
   text-align: left;
+}
+.layby-view-searchbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .layby-view-table {
@@ -24,8 +34,9 @@
   margin-bottom: 18px;
   background: #fff;
   border-radius: 6px;
-  overflow: hidden;
+  overflow: auto;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  font-size: 1.1rem;
 }
 
 .layby-view-table th {
@@ -34,12 +45,14 @@
   font-weight: 500;
   padding: 12px 8px;
   text-align: left;
+  white-space: nowrap;
 }
 
 .layby-view-table td {
   padding: 10px 8px;
   border-bottom: 1px solid #eee;
   font-size: 1rem;
+  white-space: nowrap;
 }
 
 .layby-view-table tr:last-child td {
@@ -78,8 +91,9 @@
   font-size: 1.2rem;
 }
 
-@media (max-width: 600px) {
-  .layby-view-container {
+@media (max-width: 900px) {
+  .layby-view-container.landscape-layout {
+    min-width: 0;
     padding: 6px;
   }
   .layby-view-title {
@@ -88,5 +102,16 @@
   .layby-view-table th, .layby-view-table td {
     font-size: 0.95rem;
     padding: 7px 4px;
+  }
+}
+
+@media (orientation: landscape) {
+  .layby-view-container.landscape-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  .layby-view-table {
+    font-size: 1.1rem;
   }
 }

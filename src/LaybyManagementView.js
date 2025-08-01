@@ -7,9 +7,10 @@ import './LaybyManagementView.css';
 const LaybyManagementView = () => {
   const [laybys, setLaybys] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     async function fetchData() {
@@ -18,14 +19,21 @@ const LaybyManagementView = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         setCurrentUser(null);
+        setUserRole(null);
         setLoading(false);
         return;
       }
       setCurrentUser(user);
       // Fetch user roles
       const { data: userRows } = await supabase.from('users').select('id, email, role').eq('id', user.id);
-      if (!userRows || userRows.length === 0 || !['admin', 'user'].includes(userRows[0].role)) {
-        setCurrentUser(null);
+      if (!userRows || userRows.length === 0) {
+        setUserRole(null);
+        setLoading(false);
+        return;
+      }
+      const role = userRows[0].role;
+      setUserRole(role);
+      if (!['admin', 'user'].includes(role)) {
         setLoading(false);
         return;
       }
@@ -116,11 +124,34 @@ const LaybyManagementView = () => {
   }
 
   if (loading) return <div>Loading...</div>;
-  if (!currentUser) return <div className="layby-view-access-denied">Access denied. Only admin or user roles can view this page.</div>;
+  if (!currentUser) return <div className="layby-view-access-denied">Please log in to access Layby Management.</div>;
+  if (!['admin', 'user'].includes(userRole)) return <div className="layby-view-access-denied">Access denied. Only admin or user roles can view this page.</div>;
+
+  // Filter laybys by search
+  const filteredLaybys = laybys.filter(l => {
+    const customer = getCustomerName(l.customer_id).toLowerCase();
+    const status = (l.status || '').toLowerCase();
+    const searchVal = search.toLowerCase();
+    return (
+      customer.includes(searchVal) ||
+      status.includes(searchVal) ||
+      String(l.total_amount).includes(searchVal) ||
+      String(l.paid_amount).includes(searchVal)
+    );
+  });
 
   return (
-    <div className="layby-view-container">
+    <div className="layby-view-container landscape-layout">
       <div className="layby-view-title">Layby Management (View Only)</div>
+      <div className="layby-view-searchbar">
+        <input
+          type="text"
+          placeholder="Search by customer, status, or amount..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ width: '100%', maxWidth: 400, marginBottom: 12, padding: 8, fontSize: 16, borderRadius: 4, border: '1px solid #bbb' }}
+        />
+      </div>
       <table className="layby-view-table">
         <thead>
           <tr>
@@ -129,18 +160,16 @@ const LaybyManagementView = () => {
             <th>Paid Amount</th>
             <th>Outstanding</th>
             <th>Status</th>
-            {/* Reminder and Actions columns removed */}
           </tr>
         </thead>
         <tbody>
-          {laybys.map(l => (
+          {filteredLaybys.map(l => (
             <tr key={l.id}>
               <td>{getCustomerName(l.customer_id)}</td>
               <td>{formatAmount(l.total_amount)}</td>
               <td>{formatAmount(l.paid_amount)}</td>
               <td>{formatAmount((l.total_amount || 0) - (l.paid_amount || 0))}</td>
               <td>{l.status}</td>
-              {/* Reminder and Actions columns removed */}
             </tr>
           ))}
         </tbody>
