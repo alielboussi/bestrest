@@ -153,10 +153,149 @@ function ClosingStock() {
     : products;
 
   return (
-    <div className="products-container">
-      <div className="product-form" style={{maxWidth: 700, margin: '2rem auto'}}>
-        <h2 className="products-title" style={{marginTop: 0, marginBottom: '1.2rem'}}>Closing Stock</h2>
-        {/* ...rest of the closing stock form and logic, but no password generator or password entry UI here... */}
+    <div className="closing-stock-container">
+      <div className="closing-stock-form">
+        <h2 className="closing-stock-title">Closing Stock</h2>
+        {/* Location selection */}
+        <label>
+          Location:
+          <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+            <option value="">Select Location</option>
+            {locations.map(loc => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
+          </select>
+        </label>
+        {/* Product search */}
+        <input
+          className="product-search-input"
+          type="text"
+          placeholder="Search products by name or SKU..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          disabled={!selectedLocation}
+        />
+        {/* Product list */}
+        <div className="product-list">
+          {filteredProducts.length === 0 && (
+            <div style={{ color: '#aaa', padding: '1.2rem', textAlign: 'center' }}>
+              {selectedLocation ? 'No products found.' : 'Select a location to begin.'}
+            </div>
+          )}
+          {filteredProducts.map(prod => (
+            <div className="product-row" key={prod.id}>
+              <div className="product-name">
+                <b>{prod.name}</b> <span style={{ color: '#00bfff', fontSize: '0.95em' }}>({prod.sku})</span>
+                <div style={{ fontSize: '0.95em', color: '#aaa' }}>Unit: {units.find(u => u.id === prod.unit_of_measure_id)?.name || '-'}</div>
+              </div>
+              <input
+                className="qty-input"
+                type="number"
+                min="0"
+                value={entries[prod.id] || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  setEntries(prev => ({ ...prev, [prod.id]: val === '' ? '' : Math.max(0, Number(val)) }));
+                }}
+                placeholder="Qty"
+                style={{ width: 80, marginLeft: 12 }}
+              />
+            </div>
+          ))}
+        </div>
+        {/* Save/Confirm section */}
+        {filteredProducts.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <button
+              className="save-btn"
+              style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, fontSize: '1.1em', border: 'none', borderRadius: 7, padding: '10px 28px', cursor: 'pointer', marginRight: 12 }}
+              disabled={saving || Object.values(entries).every(qty => !qty || Number(qty) <= 0)}
+              onClick={() => setShowConfirm(true)}
+            >
+              {saving ? 'Saving...' : 'Save & Confirm'}
+            </button>
+            {error && <div style={{ color: '#ff4d4d', marginTop: 8 }}>{error}</div>}
+          </div>
+        )}
+        {/* Confirmation Modal */}
+        {showConfirm && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <div style={{ background: '#23272f', borderRadius: 12, padding: 32, minWidth: 320, color: '#e0e6ed', boxShadow: '0 2px 16px #000a', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Confirm Closing Stock</h3>
+              <div style={{ maxHeight: 220, overflowY: 'auto', width: '100%', marginBottom: 16 }}>
+                <table style={{ width: '100%', color: '#fff', fontSize: '1em', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ color: '#00bfff' }}>
+                      <th style={{ textAlign: 'left', padding: '4px 8px' }}>Name</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px' }}>SKU</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px' }}>Unit</th>
+                      <th style={{ textAlign: 'left', padding: '4px 8px' }}>Qty</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confirmRows.map((row, idx) => (
+                      <tr key={idx}>
+                        <td style={{ padding: '4px 8px' }}>{row.name}</td>
+                        <td style={{ padding: '4px 8px' }}>{row.sku}</td>
+                        <td style={{ padding: '4px 8px' }}>{row.unit}</td>
+                        <td style={{ padding: '4px 8px' }}>{row.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <label style={{ marginBottom: 12 }}>
+                <input type="checkbox" checked={confirmChecked} onChange={e => setConfirmChecked(e.target.checked)} /> I confirm the above entries are correct
+              </label>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <button
+                  className="save-btn"
+                  style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, fontSize: '1.1em', border: 'none', borderRadius: 7, padding: '8px 22px', cursor: 'pointer' }}
+                  disabled={!confirmChecked || saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    setError('');
+                    try {
+                      // Save entries to Supabase (insert or update inventory)
+                      for (const row of confirmRows) {
+                        await supabase.from('inventory').upsert({
+                          product_id: products.find(p => p.sku === row.sku).id,
+                          location: selectedLocation,
+                          quantity: Number(row.qty)
+                        });
+                      }
+                      setShowConfirm(false);
+                      setEntries({});
+                      setConfirmChecked(false);
+                      // Optionally export to CSV
+                      exportToCSV(confirmRows);
+                    } catch (err) {
+                      setError('Failed to save: ' + err.message);
+                    }
+                    setSaving(false);
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Confirm & Save'}
+                </button>
+                <button
+                  style={{ background: '#888', color: '#fff', fontWeight: 600, fontSize: '1.1em', border: 'none', borderRadius: 7, padding: '8px 22px', cursor: 'pointer' }}
+                  onClick={() => setShowConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, fontSize: '1.1em', border: 'none', borderRadius: 7, padding: '8px 22px', cursor: 'pointer' }}
+                  onClick={() => exportToCSV(confirmRows)}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
