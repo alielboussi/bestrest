@@ -17,6 +17,15 @@ import ClosingStock from './ClosingStock';
 import Transfer from './Transfer';
 import TransferList from './TransferList';
 import supabase from './supabase';
+import VarianceReport from './VarianceReport';
+import StockViewer from './StockViewer';
+import Sets from "./Sets";
+import SalesReport from './SalesReport';
+import StockReport from './StockReport';
+import StockApp from './StockApp';
+import StocktakeReport from './StocktakeReport';
+import Roneth113ResetButton from './Roneth113ResetButton';
+
 // Auth wrapper for LaybyManagementView
 function ProtectedLaybyManagementView() {
   const [user, setUser] = React.useState(null);
@@ -47,14 +56,6 @@ function ProtectedLaybyManagementView() {
   if (!['admin', 'user'].includes(role)) return <div style={{ color: 'red', margin: 32 }}>Access denied. Only admin or user roles can view this page.</div>;
   return <LaybyManagementView />;
 }
-import VarianceReport from './VarianceReport';
-import StockViewer from './StockViewer';
-import Sets from "./Sets";
-import SalesReport from './SalesReport';
-import StockReport from './StockReport';
-import StockApp from './StockApp';
-import StocktakeReport from './StocktakeReport';
-import Roneth113ResetButton from './Roneth113ResetButton';
 
 // SmartRedirect: redirects / to /login on PC, /closing-stock on Android WebView
 function SmartRedirect() {
