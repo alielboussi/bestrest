@@ -122,6 +122,24 @@ const Dashboard = () => {
     }
   };
 
+  // Password generator state
+  const [showPasswordGen, setShowPasswordGen] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState('');
+
+  // Password generator handler
+  const handleGeneratePassword = () => {
+    // Generate a random 6-digit password
+    const pwd = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedPassword(pwd);
+    localStorage.setItem('closingStockPassword', pwd);
+    setShowPasswordGen(true);
+  };
+
+  const handleClosePasswordGen = () => {
+    setShowPasswordGen(false);
+    setGeneratedPassword('');
+  };
+
   return (
     <div className="dashboard-container">
       {/* Secret Factory Reset Button */}
@@ -149,6 +167,20 @@ const Dashboard = () => {
         <h1>Dashboard</h1>
         <button className="logout-btn" onClick={handleLogout}>Logout</button>
       </div>
+
+      {/* Password Generator Button moved to dashboard row below */}
+
+      {/* Password Modal */}
+      {showPasswordGen && (
+        <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.6)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center'}}>
+          <div style={{background:'#23272f', borderRadius:12, padding:32, minWidth:320, color:'#e0e6ed', boxShadow:'0 2px 16px #000a', display:'flex', flexDirection:'column', alignItems:'center'}}>
+            <h2 style={{marginTop:0, marginBottom:12}}>Closing Stock Password</h2>
+            <div style={{fontSize:'2.2em', fontWeight:700, letterSpacing:2, marginBottom:16, color:'#00b4d8'}}>{generatedPassword}</div>
+            <div style={{marginBottom:18, color:'#aaa', fontSize:'1em'}}>Share this password with authorized staff only.<br/>It is now required to access the Closing Stock page.</div>
+            <button onClick={handleClosePasswordGen} style={{padding:'8px 22px', borderRadius:7, background:'#00b4d8', color:'#fff', fontWeight:600, fontSize:'1.1em', border:'none', cursor:'pointer'}}>Close</button>
+          </div>
+        </div>
+      )}
       {/* Filters and Company Settings - only one set */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 16 }}>
         <button className="dashboard-page-btn gray" onClick={handleCompanySettings} style={{ marginRight: 8 }}>
@@ -225,111 +257,115 @@ const Dashboard = () => {
       </div>
 
       {/* Main Icon Rows - Arranged as requested */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18, marginBottom: 8 }}>
-        {/* Line 1: Example, only show buttons if user has can_view for the module */}
-        <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'flex-start', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%' }}>
-          {canAccessModule('Locations') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleLocations}>
-              <FaMapMarkerAlt size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Locations</span>
-            </button>
-          )}
-          {canAccessModule('Categories') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/categories')}>
-              <FaBox size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Categories</span>
-            </button>
-          )}
-          {canAccessModule('Products') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/products')}>
-              <FaTags size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Products</span>
-            </button>
-          )}
-          {canAccessModule('Sets') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sets')}>
-              <FaBox size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Sets</span>
-            </button>
-          )}
-          {canAccessModule('Units of Measure') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/units-of-measure')}>
-              <FaFlask size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Units of Measure</span>
-            </button>
-          )}
-          {canAccessModule('Stocktake') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/opening-stock')}>
-              <FaRegEdit size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Opening Stock</span>
-            </button>
-          )}
-          {canAccessModule('Stock Transfers') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfer')}>
-              <FaExchangeAlt size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Stock Transfer</span>
-            </button>
-          )}
-          {canAccessModule('Transfer List') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfers')}>
-              <FaExchangeAlt size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Edit Transfers</span>
-            </button>
-          )}
-          {canAccessModule('Closing Stock') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/closing-stock')}>
-              <FaRegEdit size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Closing Stock</span>
-            </button>
-          )}
-        </div>
-        {/* Line 2: Only show if user has can_view for the module */}
-        <div className="dashboard-pages-row" style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'center', gap: 12, overflowX: 'auto', paddingBottom: 4, width: '100%', maxWidth: 1100, margin: '0 auto' }}>
-          {canAccessModule('Customers') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleCustomers}>
-              <FaUsers size={32} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Customers</span>
-            </button>
-          )}
-          {canAccessModule('Sales') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/pos')} title="Point of Sale">
-              <span style={{ fontSize: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="1.7em" height="1.7em" viewBox="0 0 24 24" fill="none"><path d="M3 19V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm2 0h14V7H5v12Zm2-8h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z" fill="#fff"/></svg>
-                <span style={{ fontSize: 13, marginTop: 2 }}>POS</span>
-              </span>
-            </button>
-          )}
-          {canAccessModule('Laybys') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-management')} title="Layby Management">
-              <FaCashRegister size={22} style={{ marginBottom: 2 }} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Layby Management</span>
-            </button>
-          )}
-          {/* User Access Control Button: Only show for admins, handled elsewhere */}
-          {canAccessModule('Reports') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sales-report')} title="Sales Report">
-              <FaChartLine size={22} style={{ marginBottom: 2 }} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Sales Report</span>
-            </button>
-          )}
-          {canAccessModule('Reports') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stock-report')} title="Stock Report">
-              <FaBox size={22} style={{ marginBottom: 2 }} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Stock Report</span>
-            </button>
-          )}
-          {canAccessModule('Reports') && (
-            // Layby Report button removed as requested
-            <></>
-          )}
-          {canAccessModule('Reports') && (
-            <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stocktake-report')} title="Stocktake Report">
-              <FaRegEdit size={22} style={{ marginBottom: 2 }} />
-              <span style={{ fontSize: 13, marginTop: 2 }}>Stocktake Report</span>
-            </button>
-          )}
-          {/* Variance Report button removed as requested */}
-        </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start', gap: 12, marginTop: 18, marginBottom: 8, width: '100%' }}>
+        {/* All dashboard buttons in a single row, no horizontal scroll */}
+        {canAccessModule('Locations') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleLocations}>
+            <FaMapMarkerAlt size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Locations</span>
+          </button>
+        )}
+        {canAccessModule('Categories') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/categories')}>
+            <FaBox size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Categories</span>
+          </button>
+        )}
+        {canAccessModule('Products') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/products')}>
+            <FaTags size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Products</span>
+          </button>
+        )}
+        {canAccessModule('Sets') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sets')}>
+            <FaBox size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Sets</span>
+          </button>
+        )}
+        {canAccessModule('Units of Measure') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/units-of-measure')}>
+            <FaFlask size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Units of Measure</span>
+          </button>
+        )}
+        {canAccessModule('Stocktake') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/opening-stock')}>
+            <FaRegEdit size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Opening Stock</span>
+          </button>
+        )}
+        {canAccessModule('Stock Transfers') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfer')}>
+            <FaExchangeAlt size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Stock Transfer</span>
+          </button>
+        )}
+        {canAccessModule('Transfer List') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/transfers')}>
+            <FaExchangeAlt size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Edit Transfers</span>
+          </button>
+        )}
+        {canAccessModule('Closing Stock') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/closing-stock')}>
+            <FaRegEdit size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Closing Stock</span>
+          </button>
+        )}
+        {canAccessModule('Customers') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={handleCustomers}>
+            <FaUsers size={32} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Customers</span>
+          </button>
+        )}
+        {canAccessModule('Sales') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/pos')} title="Point of Sale">
+            <span style={{ fontSize: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="1.7em" height="1.7em" viewBox="0 0 24 24" fill="none"><path d="M3 19V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Zm2 0h14V7H5v12Zm2-8h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z" fill="#fff"/></svg>
+              <span style={{ fontSize: 13, marginTop: 2 }}>POS</span>
+            </span>
+          </button>
+        )}
+        {canAccessModule('Laybys') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/layby-management')} title="Layby Management">
+            <FaCashRegister size={22} style={{ marginBottom: 2 }} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Layby Management</span>
+          </button>
+        )}
+        {canAccessModule('Reports') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/sales-report')} title="Sales Report">
+            <FaChartLine size={22} style={{ marginBottom: 2 }} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Sales Report</span>
+          </button>
+        )}
+        {canAccessModule('Reports') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stock-report')} title="Stock Report">
+            <FaBox size={22} style={{ marginBottom: 2 }} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Stock Report</span>
+          </button>
+        )}
+        {canAccessModule('Reports') && (
+          // Layby Report button removed as requested
+          <></>
+        )}
+        {canAccessModule('Reports') && (
+          <button className="dashboard-page-btn gray" style={{ width: 130, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0 }} onClick={() => navigate('/stocktake-report')} title="Stocktake Report">
+            <FaRegEdit size={22} style={{ marginBottom: 2 }} />
+            <span style={{ fontSize: 13, marginTop: 2 }}>Stocktake Report</span>
+          </button>
+        )}
+        {/* Password Generator button always at the end */}
+        <button
+          className="dashboard-page-btn gray"
+          style={{ width: 180, height: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', whiteSpace: 'normal', textAlign: 'center', wordBreak: 'break-word', padding: 0, marginLeft: 4 }}
+          onClick={handleGeneratePassword}
+          title="Password Generator"
+        >
+          <FaRegEdit size={22} style={{ marginBottom: 2 }} />
+          <span style={{ fontSize: 13, marginTop: 2 }}>Password Generator</span>
+        </button>
+        {/* Variance Report button removed as requested */}
       </div>
     </div>
   );

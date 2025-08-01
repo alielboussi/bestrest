@@ -1,3 +1,14 @@
+/* Prevent vertical and horizontal scrollbars on the dashboard page */
+.dashboard-container {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-width: 100vw;
+  min-height: 100vh;
+}
+
+body, html {
+  overflow-x: hidden;
+}
 /* Filters row above statistics */
 .dashboard-filters-row {
   display: flex;
