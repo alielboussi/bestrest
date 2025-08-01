@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
@@ -27,8 +25,9 @@ function exportToCSV(rows) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
 function ClosingStock() {
-  // All hooks must be called unconditionally, before any return
+  // Only require password entry as the gate
   const [passwordEntered, setPasswordEntered] = useState(() => localStorage.getItem('closingStockPasswordEntered') === 'true');
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -129,11 +128,10 @@ function ClosingStock() {
     }
   }, [showConfirm, saving, passwordEntered]);
 
-if (!passwordEntered) {
-  return <PasswordPage />;
-}
-  // ...existing code...
-  // (rest of the component remains unchanged)
+  if (!passwordEntered) {
+    return <PasswordPage />;
+  }
+
   // Build confirmation table rows: only products with qty input and that were searched
   const confirmRows = products
     .filter(p => entries[p.id] && Number(entries[p.id]) > 0)

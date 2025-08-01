@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Route, Routes, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import LaybyManagement from "./LaybyManagement";
-import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
 import CompanySettings from './CompanySettings';
@@ -34,89 +33,35 @@ function VarianceReportWrapper() {
   return <VarianceReport locationId={locationId} openingStockId={openingStockId} closingStockId={closingStockId} />;
 }
 
+
 function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const loggedInUser = localStorage.getItem('user');
-    if (loggedInUser) {
-      setUser(JSON.parse(loggedInUser));
-    }
-    setLoading(false);
-  }, []);
-
-  // Fetch permissions for the logged-in user
-  // Remove permissions fetching
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  // Helper to check permission for a module
-  // Remove canView helper
-
-  // ...existing code...
-  // handleLogin must be defined before use
-  const handleLogin = async (email, password) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .eq('password', password)
-        .single();
-      if (error || !data) {
-        setError('Invalid credentials, please try again.');
-        return;
-      }
-      localStorage.setItem('user', JSON.stringify(data));
-      setUser(data);
-      navigate('/dashboard');
-    } catch (err) {
-      setError('An unexpected error occurred.');
-    }
-  };
-
   return (
     <div className="App">
       <Routes>
         {/* Public, view-only stock report for Android app */}
         <Route path="/stock-app" element={<StockApp />} />
-        <Route path="/login" element={<LoginPage handleLogin={handleLogin} />} />
-        <Route path="/dashboard" element={user ? (<Dashboard user={user} />) : (<Navigate to="/login" />)} />
-        <Route path="/pos" element={user ? <POS /> : <Navigate to="/dashboard" />} />
-        <Route path="/layby-management" element={user ? <LaybyManagement /> : <Navigate to="/dashboard" />} />
-        <Route path="/company-settings" element={user ? <CompanySettings /> : <Navigate to="/dashboard" />} />
-        <Route path="/customers" element={user ? <Customers /> : <Navigate to="/dashboard" />} />
-        <Route path="/locations" element={user ? <Locations /> : <Navigate to="/dashboard" />} />
-        <Route path="/categories" element={user ? <Categories /> : <Navigate to="/dashboard" />} />
-        <Route path="/products" element={user ? <Products /> : <Navigate to="/dashboard" />} />
-        <Route path="/units-of-measure" element={user ? <UnitsOfMeasure /> : <Navigate to="/dashboard" />} />
-        <Route path="/opening-stock" element={user ? <OpeningStock /> : <Navigate to="/dashboard" />} />
-        <Route
-          path="/closing-stock"
-          element={
-            user && (user.role === 'admin' || user.role === 'stock')
-              ? <ClosingStock />
-              : <div style={{textAlign: 'center', marginTop: '3rem', color: 'red', fontWeight: 'bold', fontSize: '1.3rem'}}>Access Denied</div>
-          }
-        />
-        <Route path="/transfer" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
-        <Route path="/transfer/:id" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
-        <Route path="/transfers" element={user ? <TransferList /> : <Navigate to="/dashboard" />} />
-        <Route path="/stock-viewer" element={user ? <StockViewer /> : <Navigate to="/dashboard" />} />
-        <Route path="/sets" element={user ? <Sets /> : <Navigate to="/dashboard" />} />
-        <Route path="/sales-report" element={user ? <SalesReport /> : <Navigate to="/dashboard" />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/pos" element={<POS />} />
+        <Route path="/layby-management" element={<LaybyManagement />} />
+        <Route path="/company-settings" element={<CompanySettings />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/locations" element={<Locations />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
+        <Route path="/opening-stock" element={<OpeningStock />} />
+        <Route path="/closing-stock" element={<ClosingStock />} />
+        <Route path="/transfer" element={<Transfer />} />
+        <Route path="/transfer/:id" element={<Transfer />} />
+        <Route path="/transfers" element={<TransferList />} />
+        <Route path="/stock-viewer" element={<StockViewer />} />
+        <Route path="/sets" element={<Sets />} />
+        <Route path="/sales-report" element={<SalesReport />} />
         <Route path="/stock-report" element={<StockReport />} />
-        <Route path="/stocktake-report" element={user ? <StocktakeReport /> : <Navigate to="/dashboard" />} />
-        <Route path="/variance-report" element={user ? <VarianceReportWrapper /> : <Navigate to="/dashboard" />} />
-        {/* User Access Control Route (admin only) */}
-        {/* UserAccessControl route removed */}
-        {/* Default route: Redirect to login */}
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/stocktake-report" element={<StocktakeReport />} />
+        <Route path="/variance-report" element={<VarianceReportWrapper />} />
+        {/* Default route: Redirect to closing-stock */}
+        <Route path="/" element={<Navigate to="/closing-stock" />} />
       </Routes>
       <Roneth113ResetButton />
     </div>
