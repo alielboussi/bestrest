@@ -49,6 +49,8 @@ function ClosingStock() {
       }
     };
     window.addEventListener('storage', check);
+    // Also check on mount in case PasswordPage redirected here
+    check();
     return () => window.removeEventListener('storage', check);
   }, []);
 

@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+
 import { useLocation } from 'react-router-dom';
 import supabase from './supabase';
 
@@ -58,7 +60,6 @@ export default function Roneth113ResetButton() {
     return () => window.removeEventListener('keydown', handler);
   }, [location.pathname]);
 
-  // Button handler to call backend API
   async function handleResetTables() {
     if (!window.confirm('Are you sure? This will delete ALL data except users and company settings!')) return;
     try {
