@@ -60,6 +60,8 @@ const LoginPage = (props) => {
       setError('');
       if (user.role === 'stock') {
         navigate('/closing-stock');
+      } else if (user.role === 'user' && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+        navigate('/layby-management');
       } else {
         navigate('/dashboard');
       }
