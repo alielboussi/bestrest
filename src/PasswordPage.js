@@ -16,17 +16,17 @@ function PasswordPage() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // Fetch password from company_settings on mount
+  // Fetch password from closing_stock_password on mount
   useEffect(() => {
     async function fetchPassword() {
       setLoading(true);
       const { data, error } = await supabase
-        .from('company_settings')
-        .select('closing_stock_password')
+        .from('closing_stock_password')
+        .select('password')
         .eq('id', 1)
         .single();
-      if (data && data.closing_stock_password) {
-        setPassword(data.closing_stock_password);
+      if (data && data.password) {
+        setPassword(data.password);
       }
       setLoading(false);
     }
@@ -39,16 +39,16 @@ function PasswordPage() {
     setLoading(true);
     // Always fetch latest password before checking
     const { data, error: fetchError } = await supabase
-      .from('company_settings')
-      .select('closing_stock_password')
+      .from('closing_stock_password')
+      .select('password')
       .eq('id', 1)
       .single();
     setLoading(false);
-    if (fetchError || !data || !data.closing_stock_password) {
+    if (fetchError || !data || !data.password) {
       setError('Could not verify password. Try again.');
       return;
     }
-    if (input === data.closing_stock_password) {
+    if (input === data.password) {
       localStorage.setItem('closingStockPasswordEntered', 'true');
       window.location.href = '/closing-stock';
     } else {
