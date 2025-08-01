@@ -272,20 +272,7 @@ function ClosingStock() {
                       setConfirmChecked(false);
                       // Optionally export to CSV
                       exportToCSV(confirmRows);
-                      // After successful submit: close app on Android, go to dashboard on PC
-                      setTimeout(() => {
-                        const ua = navigator.userAgent || navigator.vendor || window.opera;
-                        if (/android/i.test(ua) && window.ReactNativeWebView) {
-                          // If running in Android WebView with ReactNativeWebView bridge
-                          window.ReactNativeWebView.postMessage('close');
-                        } else if (/android/i.test(ua)) {
-                          // If running in Android WebView (no bridge, fallback)
-                          window.close();
-                        } else {
-                          // On PC, return to dashboard
-                          navigate('/');
-                        }
-                      }, 500);
+                      // No auto-close or redirect after submit (reverted)
                     } catch (err) {
                       setError('Failed to save: ' + err.message);
                     }
