@@ -1,18 +1,6 @@
+
 import React from 'react';
 import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
-// SmartRedirect: redirects / to /login on PC, /closing-stock on Android WebView
-function SmartRedirect() {
-  const navigate = useNavigate();
-  React.useEffect(() => {
-    const ua = navigator.userAgent || navigator.vendor || window.opera;
-    if (/android/i.test(ua)) {
-      navigate('/closing-stock', { replace: true });
-    } else {
-      navigate('/login', { replace: true });
-    }
-  }, [navigate]);
-  return null;
-}
 import LaybyManagement from "./LaybyManagement";
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
@@ -36,6 +24,20 @@ import StockReport from './StockReport';
 import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
 import Roneth113ResetButton from './Roneth113ResetButton';
+
+// SmartRedirect: redirects / to /login on PC, /closing-stock on Android WebView
+function SmartRedirect() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    if (/android/i.test(ua)) {
+      navigate('/closing-stock', { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
 
 // Wrapper to extract query params for VarianceReport
 function VarianceReportWrapper() {

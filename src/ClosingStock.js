@@ -259,7 +259,68 @@ function ClosingStock() {
                     setSaving(true);
                     setError('');
                     try {
-                      // Save entries to Supabase (insert or update inventory)
+
+                      // 1. Find latest opening stocktake for this location without a closing pair
+                      const { data: openings, error: openErr } = await supabase
+                        .from('stocktakes')
+                        .select('*')
+                        .eq('location_id', selectedLocation)
+                        .eq('type', 'opening')
+                        .order('started_at', { ascending: false });
+                      if (openErr || !openings || openings.length === 0) throw new Error('No opening stocktake found.');
+                      // Find the first opening without a closing in the same period
+                      let opening = null;
+                      for (const o of openings) {
+                        const { data: closing } = await supabase
+                          .from('stocktakes')
+                          .select('id')
+                          .eq('location_id', selectedLocation)
+                          .eq('type', 'closing')
+                          .gte('started_at', o.started_at)
+                          .lte('started_at', o.ended_at || new Date().toISOString());
+                        if (!closing || closing.length === 0) {
+                          opening = o;
+                          break;
+                        }
+                      }
+                      if (!opening) throw new Error('No open period to close.');
+
+                      // 2. Update opening stocktake's ended_at to now
+                      const now = new Date().toISOString();
+                      const { error: updateErr, data: updateData } = await supabase
+                        .from('stocktakes')
+                        .update({ ended_at: now })
+                        .eq('id', opening.id)
+                        .select();
+                      if (updateErr || !updateData || updateData.length === 0) {
+                        throw new Error('Failed to update ended_at for opening stocktake.');
+                      }
+
+                      // 3. Create a new closing stocktake for this period
+                      const { data: closingStocktake, error: closingErr } = await supabase
+                        .from('stocktakes')
+                        .insert({
+                          location_id: selectedLocation,
+                          type: 'closing',
+                          started_at: opening.started_at,
+                          ended_at: now
+                        })
+                        .select()
+                        .single();
+                      if (closingErr || !closingStocktake) throw new Error('Failed to create closing stocktake.');
+
+                      // 4. Insert all product entries into stocktake_entries for closing
+                      const entriesToInsert = confirmRows.map(row => ({
+                        stocktake_id: closingStocktake.id,
+                        product_id: products.find(p => p.sku === row.sku).id,
+                        qty: Number(row.qty)
+                      }));
+                      const { error: entriesError } = await supabase
+                        .from('stocktake_entries')
+                        .insert(entriesToInsert);
+                      if (entriesError) throw new Error('Failed to insert stocktake entries.');
+
+                      // 5. Update inventory as before
                       for (const row of confirmRows) {
                         await supabase.from('inventory').upsert({
                           product_id: products.find(p => p.sku === row.sku).id,
@@ -267,12 +328,47 @@ function ClosingStock() {
                           quantity: Number(row.qty)
                         });
                       }
+
+
+                      // 6. Start a new opening stocktake for the next period
+                      const { data: newOpening, error: newOpeningErr } = await supabase
+                        .from('stocktakes')
+                        .insert({
+                          location_id: selectedLocation,
+                          type: 'opening',
+                          started_at: now
+                        })
+                        .select()
+                        .single();
+                      if (newOpeningErr || !newOpening) throw new Error('Failed to create new opening stocktake.');
+
+                      // 7. Copy closing stocktake entries to new opening stocktake
+                      const openingEntries = entriesToInsert.map(e => ({
+                        stocktake_id: newOpening.id,
+                        product_id: e.product_id,
+                        qty: e.qty
+                      }));
+                      const { error: openingEntriesErr } = await supabase
+                        .from('stocktake_entries')
+                        .insert(openingEntries);
+                      if (openingEntriesErr) throw new Error('Failed to copy opening stocktake entries.');
+
                       setShowConfirm(false);
                       setEntries({});
                       setConfirmChecked(false);
                       // Optionally export to CSV
                       exportToCSV(confirmRows);
-                      // No auto-close or redirect after submit (reverted)
+                      // After successful submit: close app on Android, go to dashboard on PC
+                      setTimeout(() => {
+                        const ua = navigator.userAgent || navigator.vendor || window.opera;
+                        if (/android/i.test(ua) && window.ReactNativeWebView) {
+                          window.ReactNativeWebView.postMessage('close');
+                        } else if (/android/i.test(ua)) {
+                          window.close();
+                        } else {
+                          navigate('/dashboard');
+                        }
+                      }, 500);
                     } catch (err) {
                       setError('Failed to save: ' + err.message);
                     }

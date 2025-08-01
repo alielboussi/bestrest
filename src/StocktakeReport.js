@@ -54,9 +54,9 @@ const StocktakeReport = () => {
           i++; // skip next (closing)
         }
       }
-      // Only keep the last two periods (most recent)
-      if (periods.length > 2) {
-        periods = periods.slice(-2);
+      // Only keep the latest period (most recent)
+      if (periods.length > 1) {
+        periods = periods.slice(-1);
       }
       setPeriods(periods);
       setSelectedPeriod(periods.length > 0 ? periods[0] : null);
