@@ -126,12 +126,19 @@ const Dashboard = () => {
   const [showPasswordGen, setShowPasswordGen] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState('');
 
-  // Password generator handler
-  const handleGeneratePassword = () => {
+  // Password generator handler (overwrites row with id=1 in closing_stock_password table)
+  const handleGeneratePassword = async () => {
     // Generate a random 6-digit password
     const pwd = Math.floor(100000 + Math.random() * 900000).toString();
+    // Upsert (insert or update) the password at id=1
+    const { error: upsertError } = await supabase
+      .from('closing_stock_password')
+      .upsert([{ id: 1, password: pwd, created_at: new Date().toISOString() }], { onConflict: ['id'] });
+    if (upsertError) {
+      alert('Failed to save password to database: ' + upsertError.message);
+      return;
+    }
     setGeneratedPassword(pwd);
-    localStorage.setItem('closingStockPassword', pwd);
     setShowPasswordGen(true);
   };
 

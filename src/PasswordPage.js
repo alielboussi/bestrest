@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import './PasswordPage.css';
 import { FaRegEdit } from 'react-icons/fa';
@@ -17,17 +16,17 @@ function PasswordPage() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  // Fetch password from Supabase on mount
+  // Fetch password from company_settings on mount
   useEffect(() => {
     async function fetchPassword() {
       setLoading(true);
       const { data, error } = await supabase
-        .from('closing_stock_password')
-        .select('password')
+        .from('company_settings')
+        .select('closing_stock_password')
         .eq('id', 1)
         .single();
-      if (data && data.password) {
-        setPassword(data.password);
+      if (data && data.closing_stock_password) {
+        setPassword(data.closing_stock_password);
       }
       setLoading(false);
     }
@@ -40,16 +39,16 @@ function PasswordPage() {
     setLoading(true);
     // Always fetch latest password before checking
     const { data, error: fetchError } = await supabase
-      .from('closing_stock_password')
-      .select('password')
+      .from('company_settings')
+      .select('closing_stock_password')
       .eq('id', 1)
       .single();
     setLoading(false);
-    if (fetchError || !data || !data.password) {
+    if (fetchError || !data || !data.closing_stock_password) {
       setError('Could not verify password. Try again.');
       return;
     }
-    if (input === data.password) {
+    if (input === data.closing_stock_password) {
       localStorage.setItem('closingStockPasswordEntered', 'true');
       window.location.href = '/closing-stock';
     } else {
@@ -60,16 +59,30 @@ function PasswordPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     const newPwd = generatePassword();
-    // Upsert password to Supabase
-    const { error } = await supabase
-      .from('closing_stock_password')
-      .upsert([{ id: 1, password: newPwd }], { onConflict: ['id'] });
+    // Fetch the existing row to get all NOT NULL columns
+    const { data: existingRow, error: fetchError } = await supabase
+      .from('company_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+    if (fetchError || !existingRow) {
+      setError('Failed to fetch company settings row.');
+      setGenerating(false);
+      return;
+    }
+    // Upsert with all existing values, only updating closing_stock_password
+    const upsertData = { ...existingRow, closing_stock_password: newPwd };
+    const { data, error } = await supabase
+      .from('company_settings')
+      .upsert(upsertData);
+    console.log('Upsert result:', { data, error });
     if (!error) {
       setPassword(newPwd);
       setInput('');
       setError('');
     } else {
-      setError('Failed to generate password.');
+      setError('Failed to generate password.' + (error?.message ? ' ' + error.message : ''));
+      console.error('Supabase upsert error:', error);
     }
     setGenerating(false);
   };
@@ -91,14 +104,9 @@ function PasswordPage() {
         <button type="submit" className="password-submit-btn" disabled={loading}>
           {loading ? 'Checking...' : 'Submit'}
         </button>
-        <button type="button" className="password-generate-btn" onClick={handleGenerate} disabled={generating || loading} style={{marginLeft: 12}}>
-          {generating ? 'Generating...' : <><FaRegEdit style={{marginRight: 4}}/> Generate New Password</>}
-        </button>
+        {/* Password generation button removed for security reasons */}
       </form>
-      <div style={{marginTop: 18, color: '#888', fontSize: 13}}>
-        <span>Current Password: </span>
-        <span style={{fontWeight: 600, letterSpacing: 2}}>{password}</span>
-      </div>
+      {/* Current password display removed for security reasons */}
     </div>
   );
 }
