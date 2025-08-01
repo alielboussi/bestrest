@@ -96,7 +96,7 @@ function App() {
         <Route path="/products" element={user ? <Products /> : <Navigate to="/dashboard" />} />
         <Route path="/units-of-measure" element={user ? <UnitsOfMeasure /> : <Navigate to="/dashboard" />} />
         <Route path="/opening-stock" element={user ? <OpeningStock /> : <Navigate to="/dashboard" />} />
-        <Route path="/closing-stock" element={user ? <ClosingStock /> : <Navigate to="/dashboard" />} />
+        <Route path="/closing-stock" element={<ClosingStock />} />
         <Route path="/transfer" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
         <Route path="/transfer/:id" element={user ? <Transfer /> : <Navigate to="/dashboard" />} />
         <Route path="/transfers" element={user ? <TransferList /> : <Navigate to="/dashboard" />} />

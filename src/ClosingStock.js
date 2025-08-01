@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
+import PasswordPage from './PasswordPage';
 
 // Utility to export confirmation table to CSV (Excel-compatible)
 function exportToCSV(rows) {
@@ -28,10 +29,8 @@ function exportToCSV(rows) {
 
 
 function ClosingStock() {
-  // Password protection: show prompt if not entered
-  const [passwordEntered, setPasswordEntered] = useState(localStorage.getItem('closingStockPasswordEntered') === 'true');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  // Show password page if not entered
+  const [passwordEntered, setPasswordEntered] = useState(() => localStorage.getItem('closingStockPasswordEntered') === 'true');
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [products, setProducts] = useState([]);
@@ -44,40 +43,38 @@ function ClosingStock() {
   const [confirmChecked, setConfirmChecked] = useState(false);
   const navigate = useNavigate();
 
-  // Password check handler
-  const handlePasswordSubmit = (e) => {
-    e.preventDefault();
-    // The password should be set by admin (e.g., in localStorage or env)
-    // For demo, let's assume it's stored in localStorage as 'closingStockPassword'
-    const correctPassword = localStorage.getItem('closingStockPassword');
-    if (passwordInput === correctPassword) {
-      localStorage.setItem('closingStockPasswordEntered', 'true');
-      setPasswordEntered(true);
-      setPasswordError('');
-    } else {
-      setPasswordError('Incorrect password.');
-    }
-  };
+  // Listen for password entry event (in case PasswordPage sets it)
+  useEffect(() => {
+    const check = () => {
+      if (localStorage.getItem('closingStockPasswordEntered') === 'true') {
+        setPasswordEntered(true);
+      }
+    };
+    window.addEventListener('storage', check);
+    return () => window.removeEventListener('storage', check);
+  }, []);
+
+  if (!passwordEntered) {
+    return <PasswordPage />;
+  }
 
   // Fetch units
   useEffect(() => {
-    if (!passwordEntered) return;
     supabase.from('unit_of_measure').select('*').then(({ data }) => {
       setUnits(data || []);
     });
-  }, [passwordEntered]);
+  }, []);
 
   // Fetch locations
   useEffect(() => {
-    if (!passwordEntered) return;
     supabase.from('locations').select('*').then(({ data }) => {
       setLocations(data || []);
     });
-  }, [passwordEntered]);
+  }, []);
 
   // Fetch products for selected location
   useEffect(() => {
-    if (!passwordEntered || !selectedLocation) return;
+    if (!selectedLocation) return;
     supabase
       .from('product_locations')
       .select('product_id, products(id, name, sku, unit_of_measure_id)')
@@ -87,11 +84,10 @@ function ClosingStock() {
         setProducts((data || []).map(row => row.products));
       });
     setSearch(''); // Clear search when location changes
-  }, [selectedLocation, passwordEntered]);
+  }, [selectedLocation]);
 
   // Barcode scanning logic: listen for barcode input and increment product qty
   useEffect(() => {
-    if (!passwordEntered) return;
     let barcode = '';
     let barcodeTimeout = null;
     function handleKeyDown(e) {
@@ -124,7 +120,7 @@ function ClosingStock() {
       window.removeEventListener('keydown', handleKeyDown);
       clearTimeout(barcodeTimeout);
     };
-  }, [products, selectedLocation, passwordEntered]);
+  }, [products, selectedLocation]);
 
   // Handle qty change
   const handleQtyChange = (productId, qty) => {
@@ -160,7 +156,7 @@ function ClosingStock() {
         .insert([
           {
             location_id: selectedLocation,
-            user_id: JSON.parse(localStorage.getItem('user')).id,
+            user_id: null, // No user for public closing stock
             started_at: new Date().toISOString(),
             ended_at: new Date().toISOString(),
             type: 'closing',
@@ -201,7 +197,7 @@ function ClosingStock() {
         .insert([
           {
             location_id: selectedLocation,
-            user_id: JSON.parse(localStorage.getItem('user')).id,
+            user_id: null, // No user for public closing stock
             started_at: new Date().toISOString(),
             ended_at: null,
             type: 'opening',
@@ -250,27 +246,18 @@ function ClosingStock() {
       )
     : products;
 
-  if (!passwordEntered) {
-    return (
-      <div className="products-container">
-        <div className="product-form" style={{maxWidth: 400, margin: '4rem auto', background: '#23272f', borderRadius: 10, padding: 32, color: '#e0e6ed'}}>
-          <h2 style={{marginTop:0, marginBottom:16}}>Enter Closing Stock Password</h2>
-          <form onSubmit={handlePasswordSubmit}>
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={e => setPasswordInput(e.target.value)}
-              placeholder="Password"
-              style={{width: '100%', padding: '0.7rem', fontSize: '1.1em', borderRadius: 7, border: '1.5px solid #00b4d8', marginBottom: 12, background: '#181a20', color: '#fff'}}
-            />
-            {passwordError && <div style={{color:'#ff5252', marginBottom:8}}>{passwordError}</div>}
-            <button type="submit" style={{width:'100%', padding:'0.7rem', borderRadius:7, background:'#00b4d8', color:'#fff', fontWeight:600, fontSize:'1.1em', border:'none', cursor:'pointer'}}>Enter</button>
-          </form>
-          <div style={{marginTop:16, color:'#aaa', fontSize:'0.98em'}}>Password required to access Closing Stock. Please contact admin if you do not have the password.</div>
-        </div>
-      </div>
-    );
-  }
+
+  // After successful submission, reset password entry so next user must re-enter
+  useEffect(() => {
+    if (!showConfirm && !saving && passwordEntered) {
+      // If navigated away after submit, clear password entry
+      const handle = () => {
+        localStorage.removeItem('closingStockPasswordEntered');
+      };
+      window.addEventListener('beforeunload', handle);
+      return () => window.removeEventListener('beforeunload', handle);
+    }
+  }, [showConfirm, saving, passwordEntered]);
 
   return (
     <div className="products-container">

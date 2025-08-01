@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.MyApplication" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Use MaterialComponents NoActionBar theme -->
+    <style name="Theme.MyApplication" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- You can override colors here if desired -->
+        <item name="colorPrimary">#1976D2</item>
+        <item name="colorPrimaryDark">#004BA0</item>
+        <item name="colorAccent">#FF4081</item>
+        <item name="android:windowBackground">#fffafafa</item>
+    </style>
 </resources>
