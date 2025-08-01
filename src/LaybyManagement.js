@@ -5,7 +5,22 @@ import { useNavigate } from "react-router-dom";
 import { exportLaybyPDF, exportLaybyCSV } from "./exportLaybyUtils";
 import "./LaybyManagement.css";
 
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 export default function LaybyManagement() {
+  // Block navigation for Android user role
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    if (isAndroid && user && user.role === 'user') {
+      const handlePopState = () => {
+        if (window.location.pathname !== '/layby-management') {
+          window.location.replace('/layby-management');
+        }
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, []);
   const [laybys, setLaybys] = useState([]);
   const [selectedLayby, setSelectedLayby] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState("");

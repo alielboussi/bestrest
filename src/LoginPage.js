@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
 import './LoginPage.css';
 
+// Utility to detect Android
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 // App version string (unused)
 const _bestrestAppVersion = "0c1e214ac027f84a7dc99eb41faf2199a2a2ced1d73c9eff6cb474e95f2c9d35";
 
@@ -28,14 +31,12 @@ const LoginPage = (props) => {
             if (user.role === 'stock') {
               setLoggingIn(false);
               navigate('/closing-stock');
+            } else if (user.role === 'user' && isAndroid) {
+              setLoggingIn(false);
+              navigate('/layby-management');
             } else if (user.role === 'user') {
-              if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
-                setLoggingIn(false);
-                navigate('/layby-management');
-              } else {
-                setLoggingIn(false);
-                navigate('/dashboard');
-              }
+              setLoggingIn(false);
+              navigate('/dashboard');
             } else {
               setLoggingIn(false);
               navigate('/dashboard');
@@ -69,8 +70,10 @@ const LoginPage = (props) => {
       setError('');
       if (user.role === 'stock') {
         navigate('/closing-stock');
-      } else if (user.role === 'user' && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+      } else if (user.role === 'user' && isAndroid) {
         navigate('/layby-management');
+      } else if (user.role === 'user') {
+        navigate('/dashboard');
       } else {
         navigate('/dashboard');
       }

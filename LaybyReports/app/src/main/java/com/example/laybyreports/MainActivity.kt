@@ -7,7 +7,7 @@ import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
-    private val allowedUrl = "https://bestrest-delta.vercel.app/layby-management"
+    private val allowedDomain = "https://bestrest-delta.vercel.app"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,15 +23,16 @@ class MainActivity : AppCompatActivity() {
                 request: WebResourceRequest?
             ): Boolean {
                 val url = request?.url.toString()
-                return !url.startsWith(allowedUrl)
+                // Only allow navigation within your domain
+                return !url.startsWith(allowedDomain)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                return url == null || !url.startsWith(allowedUrl)
+                return url == null || !url.startsWith(allowedDomain)
             }
         }
 
-        webView.loadUrl(allowedUrl)
+        webView.loadUrl("$allowedDomain/layby-management")
     }
 
     @Deprecated("Deprecated in Java")
