@@ -1,6 +1,20 @@
 import React from 'react';
-import { Route, Routes, Navigate, useLocation } from 'react-router-dom';
+import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
+// SmartRedirect: redirects / to /login on PC, /closing-stock on Android WebView
+function SmartRedirect() {
+  const navigate = useNavigate();
+  React.useEffect(() => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    if (/android/i.test(ua)) {
+      navigate('/closing-stock', { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
 import LaybyManagement from "./LaybyManagement";
+import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
 import CompanySettings from './CompanySettings';
@@ -60,8 +74,9 @@ function App() {
         <Route path="/stock-report" element={<StockReport />} />
         <Route path="/stocktake-report" element={<StocktakeReport />} />
         <Route path="/variance-report" element={<VarianceReportWrapper />} />
-        {/* Default route: Redirect to closing-stock */}
-        <Route path="/" element={<Navigate to="/closing-stock" />} />
+        {/* Default route: Smart redirect based on platform */}
+        <Route path="/" element={<SmartRedirect />} />
+        <Route path="/login" element={<LoginPage />} />
       </Routes>
       <Roneth113ResetButton />
     </div>
