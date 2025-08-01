@@ -2,6 +2,7 @@
 import React from 'react';
 import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import LaybyManagement from "./LaybyManagement";
+import LaybyManagementView from "./LaybyManagementView";
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
@@ -16,6 +17,36 @@ import ClosingStock from './ClosingStock';
 import Transfer from './Transfer';
 import TransferList from './TransferList';
 import supabase from './supabase';
+// Auth wrapper for LaybyManagementView
+function ProtectedLaybyManagementView() {
+  const [user, setUser] = React.useState(null);
+  const [role, setRole] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function checkUser() {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      if (user) {
+        const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
+        setRole(userRows && userRows[0] ? userRows[0].role : null);
+      } else {
+        setRole(null);
+      }
+      setLoading(false);
+    }
+    checkUser();
+    // Listen for auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange(() => checkUser());
+    return () => { listener?.subscription.unsubscribe(); };
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <LoginPage />;
+  if (!['admin', 'user'].includes(role)) return <div style={{ color: 'red', margin: 32 }}>Access denied. Only admin or user roles can view this page.</div>;
+  return <LaybyManagementView />;
+}
 import VarianceReport from './VarianceReport';
 import StockViewer from './StockViewer';
 import Sets from "./Sets";
@@ -58,7 +89,7 @@ function App() {
         <Route path="/stock-app" element={<StockApp />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/pos" element={<POS />} />
-        <Route path="/layby-management" element={<LaybyManagement />} />
+        <Route path="/layby-management" element={<ProtectedLaybyManagementView />} />
         <Route path="/company-settings" element={<CompanySettings />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/locations" element={<Locations />} />
