@@ -26,13 +26,20 @@ const LoginPage = (props) => {
           if (user && user.role) {
             setError('');
             if (user.role === 'stock') {
+              setLoggingIn(false);
               navigate('/closing-stock');
-            } else if (user.role === 'user' && typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
-              navigate('/layby-management');
+            } else if (user.role === 'user') {
+              if (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)) {
+                setLoggingIn(false);
+                navigate('/layby-management');
+              } else {
+                setLoggingIn(false);
+                navigate('/dashboard');
+              }
             } else {
+              setLoggingIn(false);
               navigate('/dashboard');
             }
-            setLoggingIn(false);
           } else if (tries < 20) {
             tries++;
             setTimeout(pollUser, 50);
