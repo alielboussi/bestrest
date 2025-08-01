@@ -75,6 +75,18 @@ const LoginPage = (props) => {
     }
   };
 
+  // Always call hooks at the top level
+  React.useEffect(() => {
+    if (isAndroid) {
+      navigate('/layby-management');
+    }
+  }, [navigate]);
+
+  if (isAndroid) {
+    // For Android, skip login and auto-redirect to layby-management
+    return null;
+  }
+  // For non-Android, show login form as before
   return (
     <div className="login-container">
       <img src="/bestrest-logo.png" alt="Company Logo" className="logo" />
