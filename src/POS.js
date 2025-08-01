@@ -33,6 +33,12 @@ export default function POS() {
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [customerLaybys, setCustomerLaybys] = useState([]);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showCustomPriceModal, setShowCustomPriceModal] = useState(false);
+  const [customPriceIdx, setCustomPriceIdx] = useState(null);
+  const [customPriceValue, setCustomPriceValue] = useState(0);
+  const [showCustomProductModal, setShowCustomProductModal] = useState(false);
+  const [customProductForm, setCustomProductForm] = useState({ name: '', price: '', qty: 1 });
+  const [customProductError, setCustomProductError] = useState('');
   const navigate = useNavigate();
 
   // Fetch locations and customers
@@ -44,13 +50,26 @@ export default function POS() {
   // Fetch products and sets for selected location
   useEffect(() => {
     if (selectedLocation) {
-      // Fetch products
+      // Fetch products and aggregate stock by product_id
       supabase
         .from("inventory")
-        .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency)")
+        .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency), updated_at, created_at")
         .eq("location", selectedLocation)
         .then(({ data }) => {
-          setProducts((data || []).map(row => ({ ...row.product, stock: row.quantity })));
+          // For each product, use only the latest row (by updated_at, fallback to created_at)
+          const productMap = {};
+          (data || []).forEach(row => {
+            if (!row.product) return;
+            const pid = row.product.id;
+            const current = productMap[pid];
+            // Compare updated_at or created_at to keep the latest
+            const rowTime = row.updated_at || row.created_at || '';
+            const currentTime = current ? (current.updated_at || current.created_at || '') : '';
+            if (!current || rowTime > currentTime) {
+              productMap[pid] = { ...row.product, stock: Number(row.quantity) || 0, updated_at: row.updated_at, created_at: row.created_at };
+            }
+          });
+          setProducts(Object.values(productMap));
         });
       // Fetch sets/kits (combos)
       supabase
@@ -100,9 +119,37 @@ export default function POS() {
         ...item,
         qty: 1,
         price: getBestPrice(item),
-        isSet: item.isSet || false
+        isSet: item.isSet || false,
+        isCustom: false
       }
     ]);
+  };
+
+  // Add custom product/service to cart
+  const addCustomProductToCart = () => {
+    setCustomProductError('');
+    const name = customProductForm.name.trim();
+    const price = Number(customProductForm.price);
+    const qty = Number(customProductForm.qty);
+    if (!name || isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0) {
+      setCustomProductError('Enter valid name, price, and quantity.');
+      return;
+    }
+    setCart([
+      ...cart,
+      {
+        id: `custom-${Date.now()}-${Math.floor(Math.random()*10000)}`,
+        name,
+        sku: '',
+        qty,
+        price,
+        isCustom: true,
+        isSet: false,
+        currency,
+      }
+    ]);
+    setShowCustomProductModal(false);
+    setCustomProductForm({ name: '', price: '', qty: 1 });
   };
 
   // Update cart item
@@ -267,13 +314,24 @@ export default function POS() {
       }
 
       // 4. Insert sale_items
-      const saleItems = cart.map((item) => ({
-        sale_id: saleId,
-        product_id: item.id,
-        quantity: item.qty,
-        unit_price: item.price,
-        currency: item.currency || currency // Use item's currency if available, else selected currency
-      }));
+      const saleItems = cart.map((item) => (
+        item.isCustom
+          ? {
+              sale_id: saleId,
+              product_id: null,
+              custom_name: item.name,
+              quantity: item.qty,
+              unit_price: item.price,
+              currency: item.currency || currency
+            }
+          : {
+              sale_id: saleId,
+              product_id: item.id,
+              quantity: item.qty,
+              unit_price: item.price,
+              currency: item.currency || currency
+            }
+      ));
       const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
       if (itemsError) throw itemsError;
 
@@ -292,7 +350,8 @@ export default function POS() {
       setCheckoutSuccess("Sale completed successfully!");
         // 6. Deduct inventory for each product in the cart at the selected location
         for (const item of cart) {
-          // Get current inventory for this product/location
+          if (item.isCustom) continue; // Skip inventory for custom products/services
+          // ...existing code for inventory and product_locations...
           const { data: invRows, error: invError } = await supabase
             .from('inventory')
             .select('id, quantity')
@@ -300,7 +359,6 @@ export default function POS() {
             .eq('location', selectedLocation);
           if (invError) throw invError;
           if (invRows && invRows.length > 0) {
-            // Update existing inventory row
             const invId = invRows[0].id;
             const newQty = Math.max(0, (Number(invRows[0].quantity) || 0) - Number(item.qty));
             const { error: updateError } = await supabase
@@ -309,7 +367,6 @@ export default function POS() {
               .eq('id', invId);
             if (updateError) throw updateError;
           } else {
-            // No inventory row exists for this product/location, create one with negative quantity
             const { error: insertError } = await supabase
               .from('inventory')
               .insert([
@@ -322,8 +379,6 @@ export default function POS() {
               ]);
             if (insertError) throw insertError;
           }
-
-          // Ensure product_locations is updated for this product/location
           const { data: prodLocRows, error: prodLocError } = await supabase
             .from('product_locations')
             .select('id')
@@ -440,6 +495,9 @@ export default function POS() {
           style={{ fontSize: '0.95rem', height: 40, width: 180, marginRight: 4, marginLeft: 10, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333' }}
         />
         <button type="button" onClick={() => setShowAddProduct(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 28, minWidth: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaSearch /> Search</button>
+        <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 28, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 8 }}>
+          <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
+        </button>
       </div>
       <div className="pos-products" style={{ gap: 0 }}>
         {/* Only show products/sets if search is not empty */}
@@ -478,21 +536,85 @@ export default function POS() {
             <th className="text-col" style={{ fontSize: '0.95rem', padding: 4 }}>Name</th>
             <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Qty</th>
             <th className="num-col" style={{ fontSize: '0.95rem', padding: 4 }}>Amount</th>
-            <th className="action-col" style={{ fontSize: '0.95rem', padding: 4 }}>Remove</th>
+            <th className="action-col" style={{ fontSize: '0.95rem', padding: 4 }}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {cart.map((item, idx) => (
             <tr key={idx}>
-              <td className="text-col" style={{ padding: 4 }}>{item.sku}</td>
-              <td className="text-col" style={{ padding: 4 }}>{item.name}</td>
-              <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
-              <td className="num-col" style={{ padding: 4 }}><input type="number" min="0" value={item.price} onChange={e => updateCartItem(idx, { price: e.target.value })} style={{ width: 64, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
-              <td className="action-col" style={{ padding: 4 }}><button onClick={() => removeCartItem(idx)} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24 }}>Remove</button></td>
+              <td className="text-col" style={{ padding: 4 }}>{item.sku || (item.isCustom ? '-' : '')}</td>
+              <td className="text-col" style={{ padding: 4 }}>{item.name}{item.isCustom && <span style={{ color: '#00b4d8', fontSize: '0.9em', marginLeft: 4 }}>(Custom)</span>}</td>
+              <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock || 9999} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
+              <td className="num-col" style={{ padding: 4 }}>{Number(item.price).toFixed(2)}</td>
+              <td className="action-col" style={{ padding: 4, display: 'flex', gap: 4 }}>
+                <button onClick={() => removeCartItem(idx)} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24 }}>Remove</button>
+                <button onClick={() => { setCustomPriceIdx(idx); setCustomPriceValue(item.price); setShowCustomPriceModal(true); }} style={{ fontSize: '0.95rem', padding: '2px 8px', height: 24, background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 4 }}>Set Custom Price</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {/* Custom Price Modal */}
+      {showCustomPriceModal && (
+        <div className="pos-modal">
+          <div className="pos-modal-content">
+            <h3>Set Custom Price</h3>
+            <input
+              type="number"
+              min="0"
+              value={customPriceValue}
+              onChange={e => setCustomPriceValue(e.target.value)}
+              style={{ width: 120, fontSize: '1.1em', marginBottom: 12 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => {
+                if (customPriceIdx !== null) updateCartItem(customPriceIdx, { price: Number(customPriceValue) });
+                setShowCustomPriceModal(false);
+              }} style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, border: 'none', borderRadius: 6, padding: '8px 18px' }}>Save</button>
+              <button onClick={() => setShowCustomPriceModal(false)} style={{ background: '#888', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Product/Service Modal */}
+      {showCustomProductModal && (
+        <div className="pos-modal">
+          <div className="pos-modal-content">
+            <h3>Add Custom Product/Service</h3>
+            <input
+              type="text"
+              placeholder="Name (e.g. Handmade Service)"
+              value={customProductForm.name}
+              onChange={e => setCustomProductForm(f => ({ ...f, name: e.target.value }))}
+              style={{ width: 220, marginBottom: 8 }}
+              required
+            />
+            <input
+              type="number"
+              placeholder="Price"
+              value={customProductForm.price}
+              onChange={e => setCustomProductForm(f => ({ ...f, price: e.target.value }))}
+              style={{ width: 120, marginBottom: 8 }}
+              required
+            />
+            <input
+              type="number"
+              placeholder="Quantity"
+              value={customProductForm.qty}
+              min={1}
+              onChange={e => setCustomProductForm(f => ({ ...f, qty: e.target.value }))}
+              style={{ width: 80, marginBottom: 8 }}
+              required
+            />
+            {customProductError && <div style={{ color: '#ff5252', marginBottom: 8 }}>{customProductError}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={addCustomProductToCart} style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, border: 'none', borderRadius: 6, padding: '8px 18px' }}>Add</button>
+              <button onClick={() => { setShowCustomProductModal(false); setCustomProductError(''); }} style={{ background: '#888', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px' }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="pos-summary" style={{ fontSize: '1rem', display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', marginTop: 8, marginBottom: 8 }}>
         <div>Subtotal: {subtotal.toFixed(2)}</div>
         <div>VAT @16%: Inclusive</div>

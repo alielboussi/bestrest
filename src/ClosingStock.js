@@ -325,7 +325,8 @@ function ClosingStock() {
                         await supabase.from('inventory').upsert({
                           product_id: products.find(p => p.sku === row.sku).id,
                           location: selectedLocation,
-                          quantity: Number(row.qty)
+                          quantity: Number(row.qty),
+                          updated_at: new Date().toISOString()
                         });
                       }
 

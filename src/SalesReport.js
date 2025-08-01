@@ -12,6 +12,8 @@ const SalesReport = () => {
   const [sales, setSales] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
+  const [laybys, setLaybys] = useState([]);
+  const [paymentType, setPaymentType] = useState('all'); // all, completed, layby
 
   useEffect(() => {
     supabase.from('customers').select('id,name').then(({ data, error }) => {
@@ -30,6 +32,14 @@ const SalesReport = () => {
       }
       setSales(data || []);
     });
+    supabase.from('laybys').select('id, sale_id, total_amount, paid_amount').then(({ data, error }) => {
+      if (error) {
+        console.error('Error fetching laybys:', error);
+      } else {
+        console.log('Fetched laybys:', data);
+      }
+      setLaybys(data || []);
+    });
   }, []);
 
   // Filter sales in-memory by date, customer, and search
@@ -39,6 +49,9 @@ const SalesReport = () => {
     if (dateTo && sale.sale_date > dateTo) return false;
     // Customer filter
     if (customer && String(sale.customer_id) !== String(customer)) return false;
+    // Payment type filter
+    if (paymentType === 'completed' && sale.status !== 'completed') return false;
+    if (paymentType === 'layby' && sale.status !== 'layby') return false;
     // Search filter
     if (search) {
       const s = search.toLowerCase();
@@ -55,6 +68,20 @@ const SalesReport = () => {
     }
     return true;
   });
+
+  // Helper: get paid and pending amount for a sale (layby)
+  function getPaidAmount(sale) {
+    if (sale.status !== 'layby') return 0;
+    const layby = laybys.find(l => String(l.sale_id) === String(sale.id));
+    if (!layby) return 0;
+    return parseFloat(layby.paid_amount) || 0;
+  }
+  function getPendingAmount(sale) {
+    if (sale.status !== 'layby') return 0;
+    const layby = laybys.find(l => String(l.sale_id) === String(sale.id));
+    if (!layby) return sale.total_amount;
+    return (parseFloat(layby.total_amount) || 0) - (parseFloat(layby.paid_amount) || 0);
+  }
 
   // Export as PDF
   const handleExportPDF = () => {
@@ -106,31 +133,46 @@ const SalesReport = () => {
     }
 
     // Prepare table head and body
-    const tableHead = ['Date', 'Customer', 'Total Amount', 'Status'];
+    const tableHead = ['Date', 'Customer', 'Total Amount', 'Paid Amount', 'Status', 'Pending Amount'];
     const tableBody = exportRows.map(sale => [
       sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : '',
       sale.customer?.name || '',
       formatAmount(sale.total_amount, sale.currency),
-      sale.status
+      sale.status === 'layby' ? formatAmount(getPaidAmount(sale), sale.currency) : (sale.status === 'completed' ? formatAmount(sale.total_amount, sale.currency) : '-'),
+      sale.status,
+      sale.status === 'layby' ? formatAmount(getPendingAmount(sale), sale.currency) : '-'
     ]);
 
     // Calculate totals per currency for the selected rows
     const currencyTotals = {};
+    const paidTotals = {};
+    const pendingTotals = {};
     exportRows.forEach(sale => {
       const curr = sale.currency || 'N/A';
       currencyTotals[curr] = (currencyTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+      // For paid amount: completed = total, layby = paid_amount
+      if (sale.status === 'completed') {
+        paidTotals[curr] = (paidTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+      } else if (sale.status === 'layby') {
+        paidTotals[curr] = (paidTotals[curr] || 0) + getPaidAmount(sale);
+        pendingTotals[curr] = (pendingTotals[curr] || 0) + getPendingAmount(sale);
+      }
     });
 
     // Add a total row for each currency present
     if (tableBody.length > 0) {
-      const totalCells = [ '', 'Total', '', '' ];
+      const totalCells = [ '', 'Total', '', '', '', '' ];
       // If only one currency, show total in the amount cell
       const currencies = Object.keys(currencyTotals);
       if (currencies.length === 1) {
         totalCells[2] = formatAmount(currencyTotals[currencies[0]], currencies[0]);
+        totalCells[3] = formatAmount(paidTotals[currencies[0]], currencies[0]);
+        totalCells[5] = pendingTotals[currencies[0]] ? formatAmount(pendingTotals[currencies[0]], currencies[0]) : '-';
       } else {
         // If multiple currencies, show all totals in the amount cell, separated by comma
         totalCells[2] = currencies.map(curr => formatAmount(currencyTotals[curr], curr)).join(', ');
+        totalCells[3] = currencies.map(curr => formatAmount(paidTotals[curr], curr)).join(', ');
+        totalCells[5] = currencies.map(curr => pendingTotals[curr] ? formatAmount(pendingTotals[curr], curr) : '-').join(', ');
       }
       tableBody.push(totalCells);
     }
@@ -197,6 +239,13 @@ const SalesReport = () => {
             {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
+        <label>Payment Type:
+          <select value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+            <option value="all">All</option>
+            <option value="completed">Completed</option>
+            <option value="layby">Layby</option>
+          </select>
+        </label>
         <input
           type="text"
           placeholder="Search Sales..."
@@ -210,52 +259,96 @@ const SalesReport = () => {
             <th>Date</th>
             <th>Customer</th>
             <th>Total Amount</th>
+            <th>Paid Amount</th>
             <th>Status</th>
-             <th style={{ textAlign: 'right' }}>
-               <input
-                 type="checkbox"
-                 checked={filteredSales.length > 0 && selectedIds.length === filteredSales.length}
-                 onChange={e => {
-                   if (e.target.checked) {
-                     setSelectedIds(filteredSales.map(sale => sale.id));
-                   } else {
-                     setSelectedIds([]);
-                   }
-                 }}
-                 aria-label="Select all"
-               />
-             </th>
+            <th>Pending Amount</th>
+            <th style={{ textAlign: 'right' }}>
+              <input
+                type="checkbox"
+                checked={filteredSales.length > 0 && selectedIds.length === filteredSales.length}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setSelectedIds(filteredSales.map(sale => sale.id));
+                  } else {
+                    setSelectedIds([]);
+                  }
+                }}
+                aria-label="Select all"
+              />
+            </th>
           </tr>
         </thead>
         <tbody>
-          {filteredSales.map(sale => (
-            <tr key={sale.id}>
-              <td>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
-              <td>{sale.customer?.name || ''}</td>
-              <td>{sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`}</td>
-              <td>{sale.status}</td>
-              <td style={{ textAlign: 'right' }}>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(sale.id)}
-                  onChange={e => {
-                    if (e.target.checked) {
-                      setSelectedIds(prev => [...prev, sale.id]);
-                    } else {
-                      setSelectedIds(prev => prev.filter(id => id !== sale.id));
-                    }
-                  }}
-                  aria-label={`Select sale ${sale.id}`}
-                />
-              </td>
-            </tr>
-          ))}
+          {filteredSales.map((sale, idx) => {
+            const isLayby = sale.status === 'layby';
+            const paidAmount = isLayby ? getPaidAmount(sale) : (sale.status === 'completed' ? sale.total_amount : 0);
+            return (
+              <tr key={sale.id}>
+                <td>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
+                <td>{sale.customer?.name || ''}</td>
+                <td>{sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`}</td>
+                <td>{sale.currency && paidAmount ? `${sale.currency} ${Number(paidAmount).toLocaleString()}` : (sale.status === 'completed' ? (sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`) : '-')}</td>
+                <td>{sale.status}</td>
+                <td>{isLayby ? (sale.currency ? `${sale.currency} ${getPendingAmount(sale).toLocaleString()}` : `N/A ${getPendingAmount(sale).toLocaleString()}`) : '-'}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(sale.id)}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedIds(prev => [...prev, sale.id]);
+                      } else {
+                        setSelectedIds(prev => prev.filter(id => id !== sale.id));
+                      }
+                    }}
+                    aria-label={`Select sale ${sale.id}`}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+          {/* Totals row */}
+          {filteredSales.length > 0 && (
+            (() => {
+              // Calculate totals for UI (same as PDF)
+              const currencyTotals = {};
+              const paidTotals = {};
+              const pendingTotals = {};
+              filteredSales.forEach(sale => {
+                const curr = sale.currency || 'N/A';
+                currencyTotals[curr] = (currencyTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+                if (sale.status === 'completed') {
+                  paidTotals[curr] = (paidTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+                } else if (sale.status === 'layby') {
+                  paidTotals[curr] = (paidTotals[curr] || 0) + getPaidAmount(sale);
+                  pendingTotals[curr] = (pendingTotals[curr] || 0) + getPendingAmount(sale);
+                }
+              });
+              const currencies = Object.keys(currencyTotals);
+              return (
+                <tr style={{ background: '#ffe4e4', color: '#dc2626', fontWeight: 'bold' }}>
+                  <td></td>
+                  <td>Total</td>
+                  <td>{currencies.length === 1
+                    ? `${currencies[0]} ${currencyTotals[currencies[0]].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : currencies.map(curr => `${curr} ${currencyTotals[curr].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(', ')}</td>
+                  <td>{currencies.length === 1
+                    ? `${currencies[0]} ${paidTotals[currencies[0]].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : currencies.map(curr => `${curr} ${paidTotals[curr].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(', ')}</td>
+                  <td></td>
+                  <td>{currencies.length === 1
+                    ? (pendingTotals[currencies[0]] ? `${currencies[0]} ${pendingTotals[currencies[0]].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-')
+                    : currencies.map(curr => pendingTotals[curr] ? `${curr} ${pendingTotals[curr].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-').join(', ')}</td>
+                  <td></td>
+                </tr>
+              );
+            })()
+          )}
         </tbody>
       </table>
       <div style={{ display: 'flex', alignItems: 'center', margin: '18px 0 0 0', width: '100%' }}>
         <button className="export-btn" style={{ marginRight: 12 }} onClick={handleExportPDF}>Export as PDF</button>
         <button className="export-btn" style={{ marginRight: 'auto' }} onClick={handleExportCSV}>Export as CSV</button>
-        {/* Back to Dashboard button removed as requested */}
       </div>
     </div>
   );

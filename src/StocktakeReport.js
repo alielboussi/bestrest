@@ -80,16 +80,27 @@ const StocktakeReport = () => {
         return;
       }
 
-      // Fetch opening stocktake entries
-      const { data: openingEntries } = await supabase
+      // Fetch opening stocktake entries and aggregate by product_id
+      const { data: openingEntriesRaw } = await supabase
         .from('stocktake_entries')
         .select('product_id, qty')
         .eq('stocktake_id', selectedPeriod.opening.id);
-      // Fetch closing stocktake entries
-      const { data: closingEntries } = await supabase
+      const openingEntries = {};
+      (openingEntriesRaw || []).forEach(e => {
+        if (!openingEntries[e.product_id]) openingEntries[e.product_id] = 0;
+        openingEntries[e.product_id] += Number(e.qty || 0);
+      });
+
+      // Fetch closing stocktake entries and aggregate by product_id
+      const { data: closingEntriesRaw } = await supabase
         .from('stocktake_entries')
         .select('product_id, qty')
         .eq('stocktake_id', selectedPeriod.closing.id);
+      const closingEntries = {};
+      (closingEntriesRaw || []).forEach(e => {
+        if (!closingEntries[e.product_id]) closingEntries[e.product_id] = 0;
+        closingEntries[e.product_id] += Number(e.qty || 0);
+      });
 
       // Fetch transfers in (to this location) during period
       const { data: transferSessions } = await supabase
@@ -132,22 +143,12 @@ const StocktakeReport = () => {
         });
       }
 
-      // Map opening/closing by product
-      const openingMap = {};
-      (openingEntries || []).forEach(e => {
-        openingMap[e.product_id] = Number(e.qty || 0);
-      });
-      const closingMap = {};
-      (closingEntries || []).forEach(e => {
-        closingMap[e.product_id] = Number(e.qty || 0);
-      });
-
-      // Merge all data
+      // Merge all data, only one row per product
       const merged = productsData.map(prod => {
-        const opening = openingMap[prod.id] || 0;
+        const opening = openingEntries[prod.id] || 0;
         const transfer = transferInMap[prod.id] || 0;
         const sales = salesMap[prod.id] || 0;
-        const closing = closingMap[prod.id] || 0;
+        const closing = closingEntries[prod.id] || 0;
         const expectedStock = opening + transfer - sales;
         const actualStock = closing;
         const variance = actualStock - expectedStock;
