@@ -1,0 +1,70 @@
+/* LaybyManagementMobile.css: Mobile-optimized styles for iPhone/Samsung S22 and later */
+.layby-mobile-container {
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 12px 4px 32px 4px;
+  background: #181c23;
+  min-height: 100vh;
+  color: #e0e6ed;
+  font-family: 'Inter', Arial, sans-serif;
+}
+.layby-mobile-title {
+  font-size: 1.3rem;
+  text-align: center;
+  margin-bottom: 12px;
+  color: #00b4d8;
+}
+.layby-mobile-loading {
+  text-align: center;
+  margin: 24px 0;
+  font-size: 1.1rem;
+}
+.layby-mobile-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+  background: #23272f;
+  border-radius: 10px;
+  overflow: hidden;
+}
+ .layby-mobile-table th, .layby-mobile-table td {
+  padding: 8px 4px;
+  text-align: left;
+  border-bottom: 1px solid #222;
+  word-break: break-word;
+  white-space: normal;
+ }
+
+/* Ensure export buttons always show text and are not clipped */
+.layby-mobile-table button {
+  min-width: 32px;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+.layby-mobile-table th {
+  background: #222;
+  color: #00b4d8;
+  font-size: 1.05em;
+}
+.layby-mobile-table tr:last-child td {
+  border-bottom: none;
+}
+@media (max-width: 430px) {
+  .layby-mobile-title {
+    font-size: 1.1rem;
+  }
+  .layby-mobile-table th, .layby-mobile-table td {
+    padding: 6px 2px;
+    font-size: 0.98em;
+  }
+  .layby-mobile-table button {
+    min-width: 32px;
+    font-size: 0.65rem;
+    padding: 1px 0;
+  }
+}

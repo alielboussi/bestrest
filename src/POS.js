@@ -1,12 +1,15 @@
-
 import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
 import { FaCashRegister, FaPlus, FaSearch, FaUserPlus } from "react-icons/fa";
 import "./POS.css";
+// Removed user permissions imports
+
+
 
 export default function POS() {
-  // State hooks
+  const navigate = useNavigate();
+  // All hooks at the top, before any return
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -40,55 +43,75 @@ export default function POS() {
   const [showCustomProductModal, setShowCustomProductModal] = useState(false);
   const [customProductForm, setCustomProductForm] = useState({ name: '', price: '', qty: 1 });
   const [customProductError, setCustomProductError] = useState('');
-  const navigate = useNavigate();
+  // Removed userPermissions, actionsList, checkingUser, and user state for open access
 
-  // Fetch locations and customers
+  // User check: always check localStorage in useEffect
+  // Removed user check and login redirect for open access
+
+
+
+
+
+  // Fetch locations and customers (only once)
   useEffect(() => {
     supabase.from("locations").select("id, name").then(({ data }) => setLocations(data || []));
     supabase.from("customers").select("id, name, phone").then(({ data }) => setCustomers(data || []));
   }, []);
 
-  // Fetch products and sets for selected location
+
+  // Fetch products and sets for selected location (always call the hook, handle logic inside)
   useEffect(() => {
-    if (selectedLocation) {
-      // Fetch products and aggregate stock by product_id
-      supabase
-        .from("inventory")
-        .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency), updated_at, created_at")
-        .eq("location", selectedLocation)
-        .then(({ data }) => {
-          // For each product, use only the latest row (by updated_at, fallback to created_at)
-          const productMap = {};
-          (data || []).forEach(row => {
-            if (!row.product) return;
-            const pid = row.product.id;
-            const current = productMap[pid];
-            // Compare updated_at or created_at to keep the latest
-            const rowTime = row.updated_at || row.created_at || '';
-            const currentTime = current ? (current.updated_at || current.created_at || '') : '';
-            if (!current || rowTime > currentTime) {
-              productMap[pid] = { ...row.product, stock: Number(row.quantity) || 0, updated_at: row.updated_at, created_at: row.created_at };
-            }
-          });
-          setProducts(Object.values(productMap));
-        });
-      // Fetch sets/kits (combos)
-      supabase
-        .from("combo_inventory")
-        .select("combo_id, quantity, combo:combos(id, combo_name, sku, price:price, promotional_price, currency)")
-        .eq("location_id", selectedLocation)
-        .then(({ data }) => {
-          setSets((data || []).map(row => ({
-            ...row.combo,
-            stock: row.quantity,
-            isSet: true
-          })));
-        });
-    } else {
+    if (!selectedLocation) {
       setProducts([]);
       setSets([]);
+      return;
     }
+    // Fetch products and aggregate stock by product_id
+    supabase
+      .from("inventory")
+      .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency), updated_at, created_at")
+      .eq("location", selectedLocation)
+      .then(({ data }) => {
+        const productMap = {};
+        (data || []).forEach(row => {
+          if (!row.product) return;
+          const pid = row.product.id;
+          const current = productMap[pid];
+          const rowTime = row.updated_at || row.created_at || '';
+          const currentTime = current ? (current.updated_at || current.created_at || '') : '';
+          if (!current || rowTime > currentTime) {
+            productMap[pid] = { ...row.product, stock: Number(row.quantity) || 0, updated_at: row.updated_at, created_at: row.created_at };
+          }
+        });
+        setProducts(Object.values(productMap));
+      });
+    // Fetch sets/kits (combos)
+    supabase
+      .from("combo_inventory")
+      .select("combo_id, quantity, combo:combos(id, combo_name, sku, price:price, promotional_price, currency)")
+      .eq("location_id", selectedLocation)
+      .then(({ data }) => {
+        setSets((data || []).map(row => ({
+          ...row.combo,
+          stock: row.quantity,
+          isSet: true
+        })));
+      });
   }, [selectedLocation]);
+
+
+  // When customer changes, fetch laybys
+  useEffect(() => {
+    fetchCustomerLaybys(selectedCustomer);
+  }, [selectedCustomer]);
+
+  // Fetch permissions and actions
+  // Removed permissions fetching logic for open access
+
+
+
+
+  // Removed user and checkingUser checks for open access
 
   // Helper: get correct price (use promo if present and > 0, else use price if present and > 0)
   const getBestPrice = (item) => {
@@ -358,6 +381,8 @@ export default function POS() {
         // 6. Deduct inventory for each product in the cart at the selected location
         for (const item of cart) {
           if (item.isCustom) continue; // Skip inventory for custom products/services
+          // Defensive: skip if item.id or selectedLocation is missing
+          if (!item.id || !selectedLocation) continue;
           // ...existing code for inventory and product_locations...
           const { data: invRows, error: invError } = await supabase
             .from('inventory')
@@ -426,12 +451,12 @@ export default function POS() {
     setCustomerLaybys(data || []);
   };
 
-  // When customer changes, fetch laybys
-  useEffect(() => {
-    fetchCustomerLaybys(selectedCustomer);
-  }, [selectedCustomer]);
 
 
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
 
   return (
     <div className="pos-container">
@@ -487,7 +512,9 @@ export default function POS() {
             if (cust) openEditCustomerModal(cust);
           }}>Edit</button>
         )}
-        <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
+        {canAdd && (
+          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
+        )}
       </div>
       {/* ...rest of the component remains unchanged... */}
       <div className="pos-row" style={{ gap: 6, marginBottom: 6, alignItems: 'center', display: 'flex', flexWrap: 'wrap' }}>
@@ -505,9 +532,11 @@ export default function POS() {
 
       {/* Search row: Add Custom Product/Service button before search field */}
       <div className="pos-row" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 10, width: 1200 }}>
-        <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6 }}>
-          <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
-        </button>
+        {canAdd && (
+          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6 }}>
+            <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
+          </button>
+        )}
         <input
           type="text"
           placeholder="Search product by name or SKU..."

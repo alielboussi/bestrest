@@ -7,8 +7,6 @@ function generatePassword() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-
-
 function PasswordPage() {
   const [password, setPassword] = useState('');
   const [input, setInput] = useState('');
@@ -32,6 +30,11 @@ function PasswordPage() {
     }
     fetchPassword();
   }, []);
+
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -107,6 +110,10 @@ function PasswordPage() {
         {/* Password generation button removed for security reasons */}
       </form>
       {/* Current password display removed for security reasons */}
+      {/* Only show Generate/Save if allowed */}
+      {canEdit && (
+        <button onClick={handleGenerate}>Generate/Save</button>
+      )}
     </div>
   );
 }

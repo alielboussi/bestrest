@@ -1,8 +1,5 @@
-
 import React from 'react';
 import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import LaybyManagement from "./LaybyManagement";
-import LaybyManagementView from "./LaybyManagementView";
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
@@ -17,49 +14,18 @@ import ClosingStock from './ClosingStock';
 import Transfer from './Transfer';
 import TransferList from './TransferList';
 import supabase from './supabase';
-import VarianceReport from './VarianceReport';
-import StockViewer from './StockViewer';
+// import VarianceReport from './VarianceReport';
+// import StockViewer from './StockViewer';
 import Sets from "./Sets";
 import SalesReport from './SalesReport';
 import StockReport from './StockReport';
 import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
 import Roneth113ResetButton from './Roneth113ResetButton';
-
+import LaybyManagement from "./LaybyManagement";
+import LaybyManagementMobile from "./LaybyManagementMobile";
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
-
-// Auth wrapper for LaybyManagementView
-function ProtectedLaybyManagementView() {
-  const [user, setUser] = React.useState(null);
-  const [role, setRole] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    async function checkUser() {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      if (user) {
-        const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
-        setRole(userRows && userRows[0] ? userRows[0].role : null);
-      } else {
-        setRole(null);
-      }
-      setLoading(false);
-    }
-    checkUser();
-    // Listen for auth changes
-    const { data: listener } = supabase.auth.onAuthStateChange(() => checkUser());
-    return () => { listener?.subscription.unsubscribe(); };
-  }, []);
-
-  if (loading) return <div>Loading...</div>;
-  if (!user) return <LoginPage />;
-  if (!['admin', 'user'].includes(role)) return <div style={{ color: 'red', margin: 32 }}>Access denied. Only admin or user roles can view this page.</div>;
-  return <LaybyManagementView />;
-}
-
 // SmartRedirect: redirects / based on user role
 function SmartRedirect() {
   const navigate = useNavigate();
@@ -89,30 +55,36 @@ function SmartRedirect() {
   return null;
 }
 
-// Wrapper to extract query params for VarianceReport
-function VarianceReportWrapper() {
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  const locationId = params.get('locationId');
-  const openingStockId = params.get('openingStockId');
-  const closingStockId = params.get('closingStockId');
-  return <VarianceReport locationId={locationId} openingStockId={openingStockId} closingStockId={closingStockId} />;
-}
-
-
 function App() {
-  // Role-based route restriction
-  const user = JSON.parse(localStorage.getItem('user'));
-  const allowedUserRoutes = ['/layby-management', '/stock-report'];
-  const location = window.location.pathname;
-  if (user && user.role === 'user' && !allowedUserRoutes.includes(location)) {
-    window.location.replace('/layby-management');
-    return null;
-  }
   return (
     <div className="App">
       <Routes>
-        {/* ...existing code... */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/locations" element={<Locations />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/pos" element={<POS />} />
+        <Route path="/layby-management" element={<LaybyManagement />} />
+        <Route path="/layby-management-mobile" element={<LaybyManagementMobile />} />
+        <Route path="/stock-report-mobile" element={React.createElement(require('./StockReportMobile').default)} />
+        <Route path="/closing-stock-mobile" element={React.createElement(require('./ClosingStockMobile').default)} />
+        {/* <Route path="/layby-management-view" element={<LaybyManagementView />} /> */}
+        {/* <Route path="/layby-report" element={<LaybyManagementView />} /> */}
+        <Route path="/stocktake-report" element={<StocktakeReport />} />
+        <Route path="/stock-report" element={<StockReport />} />
+        <Route path="/opening-stock" element={<OpeningStock />} />
+        <Route path="/transfer" element={<Transfer />} />
+        <Route path="/sales-report" element={<SalesReport />} />
+        <Route path="/company-settings" element={<CompanySettings />} />
+        <Route path="/sets" element={<Sets />} />
+        <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
+        {/* <Route path="/stock-viewer" element={<StockViewer />} /> */}
+        <Route path="/transfers" element={<TransferList />} />
+        <Route path="/closing-stock" element={<ClosingStock />} />
+        {/* Add more routes as needed */}
+        <Route path="*" element={<LoginPage />} />
       </Routes>
       <Roneth113ResetButton />
     </div>

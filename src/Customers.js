@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import './Customers.css';
 import { useNavigate } from 'react-router-dom';
+// Removed user permissions logic
 
 const initialForm = { name: '', phone: '', address: '', city: '', tpin: '' };
 
@@ -12,11 +13,14 @@ const Customers = () => {
   const [form, setForm] = useState(initialForm);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Removed user permissions state
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  // Removed permissions fetching logic
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -103,53 +107,64 @@ const Customers = () => {
     setEditingId(null);
   };
 
+  // Removed permission helpers
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
+  // Removed permission access check
+
   return (
     <div className="customers-page-container">
       <h1 className="customers-title">Customers</h1>
-      <form className="customer-form" onSubmit={handleSubmit}>
-        <input
-          name="name"
-          type="text"
-          placeholder="Name or Business Name"
-          value={form.name}
-          onChange={handleChange}
-          required
-        />
-        <input
-          name="phone"
-          type="text"
-          placeholder="Phone Number"
-          value={form.phone}
-          onChange={handleChange}
-        />
-        <input
-          name="address"
-          type="text"
-          placeholder="Address"
-          value={form.address}
-          onChange={handleChange}
-        />
-        <input
-          name="city"
-          type="text"
-          placeholder="City"
-          value={form.city}
-          onChange={handleChange}
-        />
-        <input
-          name="tpin"
-          type="text"
-          placeholder="TPIN"
-          value={form.tpin}
-          onChange={handleChange}
-        />
-        <button type="submit" disabled={saving} className="save-btn">
-          {editingId ? 'Update' : 'Add'}
-        </button>
-        {editingId && (
-          <button type="button" onClick={handleCancelEdit} className="cancel-btn">Cancel</button>
-        )}
-      </form>
+      <button onClick={handleBack}>Back to Dashboard</button>
+      {/* Only show Add Customer if allowed */}
+      {canAdd && (
+        <form className="customer-form" onSubmit={handleSubmit}>
+          <input
+            name="name"
+            type="text"
+            placeholder="Name or Business Name"
+            value={form.name}
+            onChange={handleChange}
+            required
+          />
+          <input
+            name="phone"
+            type="text"
+            placeholder="Phone Number"
+            value={form.phone}
+            onChange={handleChange}
+          />
+          <input
+            name="address"
+            type="text"
+            placeholder="Address"
+            value={form.address}
+            onChange={handleChange}
+          />
+          <input
+            name="city"
+            type="text"
+            placeholder="City"
+            value={form.city}
+            onChange={handleChange}
+          />
+          <input
+            name="tpin"
+            type="text"
+            placeholder="TPIN"
+            value={form.tpin}
+            onChange={handleChange}
+          />
+          <button type="submit" disabled={saving} className="save-btn">
+            {editingId ? 'Update' : 'Add'}
+          </button>
+          {editingId && (
+            <button type="button" onClick={handleCancelEdit} className="cancel-btn">Cancel</button>
+          )}
+        </form>
+      )}
       {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
       <div className="customers-table-wrapper">
         <table className="customers-table">
@@ -177,8 +192,8 @@ const Customers = () => {
                   <td>{customer.city}</td>
                   <td>{customer.tpin}</td>
                   <td>
-                    <button className="edit-btn" onClick={() => handleEdit(customer)} disabled={saving}>Edit</button>
-                    <button className="delete-btn" onClick={() => handleDelete(customer.id)} disabled={saving}>Delete</button>
+                    {canEdit && <button className="edit-btn" onClick={() => handleEdit(customer)} disabled={saving}>Edit</button>}
+                    {canDelete && <button className="delete-btn" onClick={() => handleDelete(customer.id)} disabled={saving}>Delete</button>}
                   </td>
                 </tr>
               ))

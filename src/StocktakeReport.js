@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import jsPDF from 'jspdf';
@@ -6,7 +5,11 @@ import 'jspdf-autotable';
 import './ReportPage.css';
 import './StocktakeReport.css';
 
-
+// All actions always accessible
+const canExport = true;
+const canAdd = true;
+const canEdit = true;
+const canDelete = true;
 
 const StocktakeReport = () => {
   const [products, setProducts] = useState([]);
@@ -15,7 +18,6 @@ const StocktakeReport = () => {
   const [search, setSearch] = useState('');
   const [periods, setPeriods] = useState([]); // Stocktake periods for selected location
   const [selectedPeriod, setSelectedPeriod] = useState(null); // { opening, closing, started_at, ended_at }
-
 
   useEffect(() => {
     // Fetch locations for filter dropdown
@@ -572,14 +574,18 @@ const StocktakeReport = () => {
         </tbody>
       </table>
       <div className="stocktake-export-btns">
-        <button
-          className="export-btn"
-          onClick={handleExportPDF}
-        >Export as PDF</button>
-        <button
-          className="export-btn"
-          onClick={handleExportCSV}
-        >Export as CSV</button>
+        {canExport && (
+          <>
+            <button
+              className="export-btn"
+              onClick={handleExportPDF}
+            >Export as PDF</button>
+            <button
+              className="export-btn"
+              onClick={handleExportCSV}
+            >Export as CSV</button>
+          </>
+        )}
       </div>
     </div>
   );

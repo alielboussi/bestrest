@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import { useNavigate } from 'react-router-dom';
-import PasswordPage from './PasswordPage';
+// Removed user permissions imports
 
 // Utility to export confirmation table to CSV (Excel-compatible)
 
@@ -27,8 +27,6 @@ function exportToCSV(rows) {
 }
 
 function ClosingStock() {
-  // Only require password entry as the gate
-  const [passwordEntered, setPasswordEntered] = useState(() => localStorage.getItem('closingStockPasswordEntered') === 'true');
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
   const [products, setProducts] = useState([]);
@@ -39,20 +37,9 @@ function ClosingStock() {
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
+  // Removed user permissions state
   const navigate = useNavigate();
 
-  // Listen for password entry event (in case PasswordPage sets it)
-  useEffect(() => {
-    const check = () => {
-      if (localStorage.getItem('closingStockPasswordEntered') === 'true') {
-        setPasswordEntered(true);
-      }
-    };
-    window.addEventListener('storage', check);
-    // Also check on mount in case PasswordPage redirected here
-    check();
-    return () => window.removeEventListener('storage', check);
-  }, []);
 
   // Fetch units
   useEffect(() => {
@@ -118,21 +105,15 @@ function ClosingStock() {
     };
   }, [products, selectedLocation]);
 
-  // After successful submission, reset password entry so next user must re-enter
-  useEffect(() => {
-    if (!showConfirm && !saving && passwordEntered) {
-      // If navigated away after submit, clear password entry
-      const handle = () => {
-        localStorage.removeItem('closingStockPasswordEntered');
-      };
-      window.addEventListener('beforeunload', handle);
-      return () => window.removeEventListener('beforeunload', handle);
-    }
-  }, [showConfirm, saving, passwordEntered]);
 
-  if (!passwordEntered) {
-    return <PasswordPage />;
-  }
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
+  // Removed permission access check
 
   // Build confirmation table rows: only products with qty input and that were searched
   const confirmRows = products
@@ -204,7 +185,7 @@ function ClosingStock() {
           ))}
         </div>
         {/* Save/Confirm section */}
-        {filteredProducts.length > 0 && (
+        {filteredProducts.length > 0 && (canAdd || canEdit) && (
           <div style={{ marginTop: 18 }}>
             <button
               className="save-btn"

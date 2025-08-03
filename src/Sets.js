@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import "./Sets.css";
 import { FaArrowLeft, FaTrash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+// Removed user permissions imports
 
 export default function Sets() {
   const [products, setProducts] = useState([]);
@@ -19,6 +19,7 @@ export default function Sets() {
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState("");
   const [inventory, setInventory] = useState([]);
+  // Removed user permissions state
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +35,13 @@ export default function Sets() {
       setInventory([]);
     }
   }, [selectedLocation]);
+
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
 
   // Filter products for search
   const filteredProducts = products.filter(p =>
@@ -117,6 +125,8 @@ export default function Sets() {
     alert("Kit/Set created for selected location!");
     setKitName(""); setSku(""); setStandardPrice(""); setPromotionalPrice(""); setPromoStart(""); setPromoEnd(""); setKitItems([]); setImageUrl("");
   };
+
+  // Removed permission access check
 
   return (
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>

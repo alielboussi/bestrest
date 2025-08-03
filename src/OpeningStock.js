@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
 import './OpeningStock.css';
+// Removed user permissions logic
 
 const OpeningStock = () => {
   const navigate = useNavigate();
@@ -16,10 +17,18 @@ const OpeningStock = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [startedAt, setStartedAt] = useState(null);
+  // Removed user permissions state
 
   React.useEffect(() => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
   }, []);
+
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
 
   const handleLocationSelect = async (e) => {
     setSelectedLocation(e.target.value);
@@ -103,6 +112,8 @@ const OpeningStock = () => {
       setSaving(false);
     }
   };
+
+  // Removed permission access check
 
   return (
     <div className="stocktake-container">

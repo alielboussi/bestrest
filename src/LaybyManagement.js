@@ -1,9 +1,9 @@
-
 import React, { useEffect, useState } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
 import { exportLaybyPDF, exportLaybyCSV } from "./exportLaybyUtils";
 import "./LaybyManagement.css";
+// Removed user permissions logic
 
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
@@ -218,6 +218,11 @@ export default function LaybyManagement() {
     .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
     .slice(0, 5);
 
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
   return (
     <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
       <h2 style={{ fontSize: '2.1rem', color: '#4caf50', textAlign: 'center', marginBottom: 28 }}>Layby Management</h2>
@@ -272,13 +277,6 @@ export default function LaybyManagement() {
                     Add Payment
                   </button>
                 </td>
-                  <button
-                    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }}
-                    onClick={() => handleSetReminder(layby.id)}
-                    disabled={!reminderDate || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
-                  >
-                    Set
-                  </button>
                 <td className="action-col">
                   <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90, marginRight: 2 }} onClick={async () => {
                     // Fetch products for this layby (from sales_items)

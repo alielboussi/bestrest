@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import supabase from './supabase'; // Supabase client
 import './CompanySettings.css'; // Import CSS for styling
 import { useNavigate } from 'react-router-dom'; // Use useNavigate for navigation in React Router v6
+// Removed user permissions imports
 
 const CompanySettings = () => {
   const [companyName, setCompanyName] = useState('');
@@ -11,6 +12,7 @@ const CompanySettings = () => {
   const [companyTPIN, setCompanyTPIN] = useState('');
   const [companyLogo, setCompanyLogo] = useState(null); // Store uploaded logo
   const [companyId, setCompanyId] = useState(null); // To store the current company ID
+  // Removed user permissions state
 
   const navigate = useNavigate(); // Use useNavigate hook for React Router v6
 
@@ -41,6 +43,11 @@ const CompanySettings = () => {
 
     fetchCompanyData();
   }, []);
+
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canEdit = true;
 
   // Handle the logo upload
   const handleLogoUpload = async (file) => {
@@ -112,6 +119,8 @@ const CompanySettings = () => {
     navigate('/dashboard'); // Redirect to dashboard page using useNavigate
   };
 
+  // Removed permission access check
+
   return (
     <div className="company-settings-page-container">
       <h1>Company Settings</h1>
@@ -178,9 +187,11 @@ const CompanySettings = () => {
 
         {/* Button container for Save and Back to Dashboard */}
         <div className="button-container">
-          <button onClick={handleSaveSettings}>
-            {companyId ? 'Update Settings' : 'Save Settings'}
-          </button>
+          {canEdit && (
+            <button onClick={handleSaveSettings}>
+              {companyId ? 'Update Settings' : 'Save Settings'}
+            </button>
+          )}
         </div>
       </div>
     </div>

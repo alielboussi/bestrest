@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import './SalesReport.css';
 import supabase from './supabase';
+// Removed user permissions logic
 
 const SalesReport = () => {
   const [dateFrom, setDateFrom] = useState('');
@@ -14,6 +15,7 @@ const SalesReport = () => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [laybys, setLaybys] = useState([]);
   const [paymentType, setPaymentType] = useState('all'); // all, completed, layby
+  // Removed user permissions state
 
   useEffect(() => {
     supabase.from('customers').select('id,name').then(({ data, error }) => {
@@ -41,6 +43,11 @@ const SalesReport = () => {
       setLaybys(data || []);
     });
   }, []);
+
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canExport = true;
 
   // Filter sales in-memory by date, customer, and search
   const filteredSales = sales.filter(sale => {
@@ -227,6 +234,8 @@ const SalesReport = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Removed permission access check
+
   return (
     <div className="sales-report-container">
       <h2>Sales Report</h2>
@@ -347,8 +356,12 @@ const SalesReport = () => {
         </tbody>
       </table>
       <div style={{ display: 'flex', alignItems: 'center', margin: '18px 0 0 0', width: '100%' }}>
-        <button className="export-btn" style={{ marginRight: 12 }} onClick={handleExportPDF}>Export as PDF</button>
-        <button className="export-btn" style={{ marginRight: 'auto' }} onClick={handleExportCSV}>Export as CSV</button>
+        {canExport && (
+          <>
+            <button className="export-btn" style={{ marginRight: 12 }} onClick={handleExportPDF}>Export as PDF</button>
+            <button className="export-btn" style={{ marginRight: 'auto' }} onClick={handleExportCSV}>Export as CSV</button>
+          </>
+        )}
       </div>
     </div>
   );

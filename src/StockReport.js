@@ -3,122 +3,56 @@ import supabase from './supabase';
 import './StockReports.css';
 
 const StockReport = () => {
-  const [products, setProducts] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [category, setCategory] = useState('');
+
+  // State for filters and data
   const [location, setLocation] = useState('');
+  const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
   const [expandedImage, setExpandedImage] = useState(null);
-  const user = JSON.parse(localStorage.getItem('user'));
+  const [locations, setLocations] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productLocations, setProductLocations] = useState([]);
 
+  // Fetch locations, categories, and products
   useEffect(() => {
-    supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
-    supabase.from('categories').select('id, name').then(({ data }) => setCategories(data || []));
-    // If user role is 'user', force Kitwe location
-    if (user && user.role === 'user') {
-      setLocation('Kitwe');
-    }
+    const fetchData = async () => {
+      const { data: locs } = await supabase.from('locations').select('*');
+      setLocations(locs || []);
+      const { data: cats } = await supabase.from('categories').select('*');
+      setCategories(cats || []);
+      const { data: prods } = await supabase.from('products').select('*');
+      setProducts(prods || []);
+      const { data: prodLocs } = await supabase.from('product_locations').select('*');
+      setProductLocations(prodLocs || []);
+    };
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    async function fetchStock() {
-      // Fetch all products
-      const { data: productsData, error: productsError } = await supabase
-        .from('products')
-        .select('id, sku, name, price, promotional_price, unit_of_measure_id, currency');
-      if (productsError || !productsData) {
-        setProducts([]);
-        return;
-      }
-
-      // Fetch product images
-      const { data: imagesData, error: imagesError } = await supabase
-        .from('product_images')
-        .select('product_id, image_url');
-      const imageMap = {};
-      if (imagesData) {
-        imagesData.forEach(img => {
-          if (!imageMap[img.product_id]) imageMap[img.product_id] = img.image_url;
-        });
-      }
-
-      // Fetch inventory, filter by location if selected
-      let inventoryRows = [];
-      if (!location) {
-        const { data, error } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, location');
-        if (!error && data) inventoryRows = data;
-      } else {
-        const { data, error } = await supabase
-          .from('inventory')
-          .select('product_id, quantity, location')
-          .eq('location', location);
-        if (!error && data) inventoryRows = data;
-      }
-
-      // Map inventory by product_id
-      const inventoryMap = {};
-      inventoryRows.forEach(row => {
-        if (!inventoryMap[row.product_id]) inventoryMap[row.product_id] = 0;
-        inventoryMap[row.product_id] += row.quantity || 0;
-      });
-
-      // Always show all products, even if inventory is empty
-      // If a location is selected, only show products that have inventory records for that location (even if quantity is 0)
-      let productIdsForLocation = null;
-      if (location) {
-        productIdsForLocation = new Set(inventoryRows.map(row => row.product_id));
-      }
-      let merged = productsData
-        .filter(prod => {
-          if (!location) return true;
-          return productIdsForLocation.has(prod.id);
-        })
-        .map(prod => {
-          const quantity = inventoryMap[prod.id] || 0;
-          let standard_price = prod.standard_price;
-          if (standard_price === undefined || standard_price === null || standard_price === '') {
-            standard_price = prod.price !== undefined && prod.price !== null && prod.price !== '' ? prod.price : 0;
-          }
-          return {
-            ...prod,
-            standard_price,
-            quantity,
-            image_url: imageMap[prod.id] || null,
-            currency: prod.currency || '',
-          };
-        });
-      setProducts(merged);
-    }
-    fetchStock();
-  }, [location]);
-
-  // Filter by product name, SKU, and category
+  // Filter products
   const filteredProducts = products.filter(p => {
-    // Category filter
-    if (category && String(p.category_id) !== String(category)) return false;
-    // Search filter
-    if (!search || search.trim() === '') return true;
-    const s = search.toLowerCase();
-    return (
-      (p.name && p.name.toLowerCase().includes(s)) ||
-      (p.sku && p.sku.toLowerCase().includes(s))
+    // Find all location_ids for this product
+    const productLocs = productLocations.filter(pl => pl.product_id === p.id);
+    const locationIds = productLocs.map(pl => pl.location_id);
+    const matchesLocation = !location || locationIds.includes(location);
+    const matchesCategory = !category || p.category_id === Number(category);
+    const searchValue = search.trim().toLowerCase();
+    const matchesSearch = !searchValue || (
+      (p.name && p.name.toLowerCase().includes(searchValue)) ||
+      (p.sku && p.sku.toLowerCase().includes(searchValue))
     );
+    return matchesLocation && matchesCategory && matchesSearch;
   });
 
   return (
-    <div className="stock-report-mobile-container">
-      <h2 className="stock-report-header">Available Stock</h2>
-      <div className="stock-report-controls">
+    <div className="stock-report-container">
+      <div className="stock-report-filters">
         <label>
           Location:
           <select
             className="stock-report-select"
             value={location}
             onChange={e => setLocation(e.target.value)}
-            disabled={user && user.role === 'user'}
           >
             <option value="">All</option>
             {locations.map(l => (
@@ -150,32 +84,31 @@ const StockReport = () => {
       </div>
       <div className="stock-report-list">
         {filteredProducts.map(p => (
-          <div className="stock-report-card" key={p.id}>
-            <div className="stock-report-card-img-wrap">
-              {p.image_url ? (
-                <img
-                  src={p.image_url}
-                  alt={p.name}
-                  className="stock-report-card-img"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => setExpandedImage(p.image_url)}
-                />
-              ) : (
-                <div className="stock-report-card-img-placeholder">No Image</div>
-              )}
+            <div className="stock-report-card" key={p.id}>
+              <div className="stock-report-card-img-wrap">
+                {p.image_url ? (
+                  <img
+                    src={p.image_url}
+                    alt={p.name}
+                    className="stock-report-card-img"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setExpandedImage(p.image_url)}
+                  />
+                ) : (
+                  <div className="stock-report-card-img-placeholder">No Image</div>
+                )}
+              </div>
+              <div className="stock-report-card-info">
+                <div><b>{p.name}</b></div>
+                <div>SKU: {p.sku || '-'}</div>
+                <div>Unit: {p.unit_of_measure || '-'}</div>
+                <div>Stock: <b>{p.quantity}</b></div>
+                <div>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
+                <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
+              </div>
             </div>
-            <div className="stock-report-card-info">
-              <div><b>{p.name}</b></div>
-              <div>SKU: {p.sku || '-'}</div>
-              <div>Unit: {p.unit_of_measure || '-'}</div>
-              <div>Stock: <b>{p.quantity}</b></div>
-              <div>Standard Price: <b>{p.currency ? `${p.currency} ` : ''}{p.standard_price}</b></div>
-              <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? `${p.currency ? `${p.currency} ` : ''}${p.promotional_price}` : '-'}</b></div>
-            </div>
-          </div>
         ))}
       </div>
-
       {/* Modal for expanded image */}
       {expandedImage && (
         <div

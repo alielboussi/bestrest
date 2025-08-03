@@ -50,15 +50,23 @@ const UnitsOfMeasure = () => {
     fetchUnits();
   };
 
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
   return (
     <div className="units-container">
       <h1>Units of Measure</h1>
-      <form className="unit-form" onSubmit={handleSubmit}>
-        <input type="text" placeholder="Name" value={name} onChange={e => setName(e.target.value)} required />
-        <input type="text" placeholder="Abbreviation (optional)" value={abbreviation} onChange={e => setAbbreviation(e.target.value)} />
-        <button type="submit">{editingId ? 'Update' : 'Add'}</button>
-        {editingId && <button type="button" onClick={() => { setEditingId(null); setName(''); setAbbreviation(''); }}>Cancel</button>}
-      </form>
+      {/* Only show Add Unit if allowed */}
+      {canAdd && (
+        <form className="unit-form" onSubmit={handleSubmit}>
+          <input type="text" placeholder="Name" value={name} onChange={e => setName(e.target.value)} required />
+          <input type="text" placeholder="Abbreviation (optional)" value={abbreviation} onChange={e => setAbbreviation(e.target.value)} />
+          <button type="submit">{editingId ? 'Update' : 'Add'}</button>
+          {editingId && <button type="button" onClick={() => { setEditingId(null); setName(''); setAbbreviation(''); }}>Cancel</button>}
+        </form>
+      )}
       {error && <div className="units-error">{error}</div>}
       <table className="units-table">
         <thead>
@@ -73,15 +81,14 @@ const UnitsOfMeasure = () => {
               <td>{unit.abbreviation || '-'}</td>
               <td>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button onClick={() => handleEdit(unit)} style={{ background: '#27c46c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1.08rem', cursor: 'pointer', width: '120px', height: '44px', display: 'inline-block' }}>Edit</button>
-                  <button onClick={() => handleDelete(unit.id)} className="delete-btn" style={{ width: '120px', height: '44px', display: 'inline-block', marginLeft: 0 }}>Delete</button>
+                  {canEdit && <button onClick={() => handleEdit(unit)} style={{ background: '#27c46c', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '1.08rem', cursor: 'pointer', width: '120px', height: '44px', display: 'inline-block' }}>Edit</button>}
+                  {canDelete && <button onClick={() => handleDelete(unit.id)} className="delete-btn" style={{ width: '120px', height: '44px', display: 'inline-block', marginLeft: 0 }}>Delete</button>}
                 </div>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-
     </div>
   );
 };

@@ -3,9 +3,6 @@ import { useNavigate } from "react-router-dom";
 import "./Products.css";
 import supabase from "./supabase";
 
-
-// ...existing code...
-
 const initialForm = {
   name: "",
   sku: "",
@@ -21,7 +18,6 @@ const initialForm = {
   locations: [],
   image: null,
 };
-
 
 function Products() {
   const [products, setProducts] = useState([]);
@@ -241,6 +237,11 @@ function Products() {
     })
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
   return (
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>Products</h1>
@@ -320,7 +321,7 @@ function Products() {
           {imageUrl && <img src={imageUrl} alt="Product" className="product-image-preview" style={{marginLeft: '2rem', maxHeight: '60px', borderRadius: '6px', border: '1px solid #00b4d8'}} />}
           <div style={{flex: 1}} />
           <div className="form-actions" style={{display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', width: 'auto'}}>
-            <button type="submit" disabled={saving} style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer'}}>{editingId ? "Update" : "Add"} Product</button>
+            {canAdd && <button type="submit" disabled={saving} style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer'}}>{editingId ? "Update" : "Add"} Product</button>}
             {editingId && <button type="button" onClick={handleCancelEdit} style={{marginLeft: '1rem', background: '#23272f', color: '#fff', border: '1px solid #00b4d8', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer'}}>Cancel</button>}
           </div>
         </div>
@@ -380,8 +381,8 @@ function Products() {
                     {(product.promo_start_date && product.promo_end_date) ? `${product.promo_start_date} to ${product.promo_end_date}` : '-'}
                   </td>
                   <td style={{textAlign: 'center'}}>
-                    <button className="edit-btn" onClick={() => handleEdit(product)} disabled={saving}>Edit</button>
-                    <button className="delete-btn" onClick={() => handleDelete(product.id)} disabled={saving}>Delete</button>
+                    {canEdit && <button className="edit-btn" onClick={() => handleEdit(product)} disabled={saving}>Edit</button>}
+                    {canDelete && <button className="delete-btn" onClick={() => handleDelete(product.id)} disabled={saving}>Delete</button>}
                   </td>
                 </tr>
               ))}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import supabase from './supabase';
 import './Categories.css';
 import { useNavigate } from 'react-router-dom';
+// Removed user permissions logic
 
 const initialForm = { name: '' };
 
@@ -13,11 +14,14 @@ const Categories = () => {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Removed user permissions state
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCategories();
   }, []);
+
+  // Removed permissions fetching logic
 
   const fetchCategories = async () => {
     setLoading(true);
@@ -95,6 +99,13 @@ const Categories = () => {
     cat.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
+  // Removed permission access check
+
   return (
     <div className="categories-page">
       <h2 className="categories-title">Categories</h2>
@@ -147,8 +158,8 @@ const Categories = () => {
                   <td>{category.name}</td>
                   <td>
                     <div className="actions-container">
-                      <button className="edit-btn" onClick={() => handleEdit(category)} disabled={saving}>Edit</button>
-                      <button className="delete-btn" onClick={() => handleDelete(category.id)} disabled={saving}>Delete</button>
+                      {canEdit && <button className="edit-btn" onClick={() => handleEdit(category)} disabled={saving}>Edit</button>}
+                      {canDelete && <button className="delete-btn" onClick={() => handleDelete(category.id)} disabled={saving}>Delete</button>}
                     </div>
                   </td>
                 </tr>

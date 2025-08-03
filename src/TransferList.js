@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from './supabase';
 import './TransferList.css';
+// Removed user permissions logic
 
 const TransferList = () => {
   const [transfers, setTransfers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [locations, setLocations] = useState([]);
+  // Removed user permissions state
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,6 +26,15 @@ const TransferList = () => {
     };
     fetchTransfers();
   }, []);
+
+  // Removed permissions fetching logic
+
+  // Removed permission helpers
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
+
+  // Removed permission access check
 
   return (
     <div className="transfer-list-container">
@@ -50,7 +61,9 @@ const TransferList = () => {
                   <td>{locations.find(l => l.id === t.to_location)?.name || t.to_location}</td>
                   <td>{t.delivery_number}</td>
                   <td>
-                    <button className="transfer-edit-btn" onClick={() => navigate(`/transfer/${t.id}`)}>Edit</button>
+                    {canEdit && (
+                      <button className="transfer-edit-btn" onClick={() => navigate(`/transfer/${t.id}`)}>Edit</button>
+                    )}
                   </td>
                 </tr>
               ))}

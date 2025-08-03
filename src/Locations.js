@@ -39,7 +39,7 @@ const Locations = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-    const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!form.name.trim() && !form.address.trim()) {

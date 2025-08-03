@@ -18,6 +18,7 @@ const Transfer = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
   // Fetch transfer session and entries if editing
   useEffect(() => {
     if (id) {
@@ -191,6 +192,11 @@ const Transfer = () => {
       setSaving(false);
     }
   };
+
+  // All actions always accessible
+  const canAdd = true;
+  const canEdit = true;
+  const canDelete = true;
 
   return (
     <div className="transfer-container">
