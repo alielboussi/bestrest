@@ -102,7 +102,21 @@ function LaybyManagementMobile() {
     const logoUrl = window.location.origin + '/bestrest-logo.png';
     const companyName = 'BestRest';
     if (type === 'pdf') {
-      exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
+      // On mobile, open PDF in a new tab for download/view
+      try {
+        // Patch exportLaybyPDF to return jsPDF instance
+        const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
+        if (doc && typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          const pdfBlob = doc.output('blob');
+          const pdfUrl = URL.createObjectURL(pdfBlob);
+          window.open(pdfUrl, '_blank');
+        } else if (doc) {
+          doc.save(`${customer.name || 'layby'}_statement.pdf`);
+        }
+      } catch (e) {
+        // fallback: just call the original
+        exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
+      }
     }
   }
 
