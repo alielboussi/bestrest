@@ -129,8 +129,48 @@ function LaybyManagementMobile() {
         alert('Failed to save PDF URL to layby_view: ' + JSON.stringify(insertError));
         return;
       }
-      // Show prompt with clickable link
-      window.prompt('PDF generated! Click the link below to download:', pdfUrl);
+      // Show a custom modal with a real download button and confirmation
+      let downloaded = false;
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
+      modal.style.background = 'rgba(0,0,0,0.55)';
+      modal.style.display = 'flex';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+      modal.style.zIndex = '9999';
+      modal.innerHTML = `
+        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;">
+          <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF generated!</div>
+          <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
+          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;">Download PDF</a>
+          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center;">
+            <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
+            <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      // Download button click
+      modal.querySelector('#pdf-download-link').addEventListener('click', () => {
+        downloaded = true;
+      });
+      // Cancel button
+      modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+      // OK button
+      modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
+        if (!downloaded) {
+          if (!window.confirm('Are you sure you want to close this dialog? You have not downloaded the PDF yet.')) {
+            return;
+          }
+        }
+        document.body.removeChild(modal);
+      });
     } catch (e) {
       alert('Error generating or uploading PDF: ' + (e?.message || e));
     }
