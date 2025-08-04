@@ -71,8 +71,8 @@ function LaybyManagementMobile() {
     }
   }
 
-  // Export PDF/CSV for a layby
-  async function handleExport(layby, type) {
+  // Export or share PDF for a layby
+  async function handleExport(layby, type, shareInstead = false) {
     // Fetch products for this layby (from sales_items)
     const { data: saleItems } = await supabase
       .from('sales_items')
@@ -104,10 +104,25 @@ function LaybyManagementMobile() {
     if (type === 'pdf') {
       try {
         const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
-        if (doc && typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        const fileName = `${customer.name || 'layby'}_statement.pdf`;
+        // If sharing is requested and supported
+        if (shareInstead && navigator.canShare && window.Blob && navigator.share) {
+          const pdfBlob = doc.output('blob');
+          const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: fileName,
+              text: 'Layby Statement PDF'
+            });
+            return;
+          }
+        }
+        // Fallback: open in new window for mobile, download for desktop
+        if (typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
           doc.output('dataurlnewwindow');
-        } else if (doc) {
-          doc.save(`${customer.name || 'layby'}_statement.pdf`);
+        } else {
+          doc.save(fileName);
         }
       } catch (e) {
         exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
@@ -184,6 +199,7 @@ function LaybyManagementMobile() {
                 const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
                 const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
                 const dueStr = `${currency} ${due}`;
+                const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                 return (
                   <tr key={l.id}>
                     <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
@@ -193,7 +209,16 @@ function LaybyManagementMobile() {
                     <td style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{l.status}</td>
                     <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
                     <td style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                      <button style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }} onClick={() => handleExport(l, 'pdf')}>PDF</button>
+                      <button
+                        style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }}
+                        onClick={() => {
+                          if (isMobile && navigator.canShare && window.Blob && navigator.share) {
+                            handleExport(l, 'pdf', true);
+                          } else {
+                            handleExport(l, 'pdf');
+                          }
+                        }}
+                      >PDF</button>
                     </td>
                   </tr>
                 );
