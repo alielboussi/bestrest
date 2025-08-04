@@ -103,6 +103,10 @@ function LaybyManagementMobile() {
     const companyName = 'BestRest';
     try {
       const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
+      if (!doc) {
+        alert('PDF generation failed: exportLaybyPDF did not return a document.');
+        return;
+      }
       const fileName = `${customer.name || 'layby'}_statement.pdf`;
       const pdfBlob = await doc.output('blob');
       // Upload to Supabase Storage bucket 'layby'
