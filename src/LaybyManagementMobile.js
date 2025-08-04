@@ -109,7 +109,7 @@ function LaybyManagementMobile() {
       const filePath = `${layby.id}/${fileName}`;
       const { error: uploadError } = await supabase.storage.from('layby').upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
       if (uploadError) {
-        alert('Failed to upload PDF: ' + uploadError.message);
+        alert('Failed to upload PDF: ' + JSON.stringify(uploadError));
         return;
       }
       // Get public URL
@@ -119,12 +119,16 @@ function LaybyManagementMobile() {
         alert('Could not get public URL for PDF.');
         return;
       }
-      // Save URL in layby_view table
-      await supabase.from('layby_view').insert({ id: layby.id, Layby_URL: pdfUrl });
+      // Save URL in layby_view table (id, Layby_URL)
+      const { error: insertError } = await supabase.from('layby_view').insert({ id: layby.id, Layby_URL: pdfUrl });
+      if (insertError) {
+        alert('Failed to save PDF URL to layby_view: ' + JSON.stringify(insertError));
+        return;
+      }
       // Show prompt with clickable link
       window.prompt('PDF generated! Click the link below to download:', pdfUrl);
     } catch (e) {
-      alert('Error generating or uploading PDF.');
+      alert('Error generating or uploading PDF: ' + (e?.message || e));
     }
   }
 
