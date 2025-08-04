@@ -15,7 +15,7 @@
   color: #00b4d8;
   width: 100%;
   background: #222;
-  padding: 10px 0 10px 8px;
+  padding: 10px 0;
   border-radius: 10px 10px 0 0;
   box-sizing: border-box;
 }
@@ -67,6 +67,7 @@
   .layby-mobile-title {
     font-size: 1.1rem;
     text-align: center;
+    padding: 8px 0;
   }
   .layby-mobile-table th, .layby-mobile-table td {
     padding: 6px 2px;
@@ -81,7 +82,7 @@
 @media (max-width: 700px) {
   .layby-mobile-title {
     font-size: 1.1rem;
-    padding: 8px 0 8px 4px;
+    padding: 8px 0;
     text-align: center;
   }
 }
