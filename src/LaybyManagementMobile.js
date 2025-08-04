@@ -263,7 +263,7 @@ function LaybyManagementMobile() {
         });
 
   return (
-    <div className="layby-mobile-container" style={{ maxWidth: 370, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '90vh', width: '100%' }}>
+    <div className="layby-mobile-container" style={{ maxWidth: 900, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '60vh', width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start' }}>
       <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word' }}>Laybys (Mobile)</h2>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 7 }}>
         <input
@@ -278,15 +278,15 @@ function LaybyManagementMobile() {
         <div className="layby-mobile-loading">Loading...</div>
       ) : (
         <div style={{ width: '100%' }}>
-          <table className="layby-mobile-table" style={{ width: '100%', background: '#23272f', borderRadius: 5, margin: '0 auto', fontSize: '0.74rem', tableLayout: 'fixed' }}>
+          <table className="layby-mobile-table" style={{ width: '100%', background: '#23272f', borderRadius: 5, margin: '0 auto', fontSize: '0.85rem', tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ width: '48px' }}>Date</th>
-                <th style={{ width: '60px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
-                <th style={{ width: '70px' }}>Total</th>
-                <th style={{ width: '70px' }}>Paid</th>
-                <th style={{ width: '70px' }}>Due</th>
-                <th style={{ width: '70px' }}>Export</th>
+                <th style={{ width: '70px' }}>Date</th>
+                <th style={{ width: '120px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
+                <th style={{ width: '120px' }}>Total</th>
+                <th style={{ width: '120px' }}>Paid</th>
+                <th style={{ width: '120px' }}>Due</th>
+                <th style={{ width: '90px' }}>Export</th>
               </tr>
             </thead>
             <tbody>
