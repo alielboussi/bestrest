@@ -119,6 +119,19 @@ function LaybyManagementMobile() {
     // existing PDF generation/upload logic goes here
   }
 
+  // Show all when search is empty
+  const filteredLaybys =
+    search.trim() === ''
+      ? laybys
+      : laybys.filter(l => {
+          const customer = (customersMap[l.customer_id]?.name || '').toLowerCase();
+          const phone = (customersMap[l.customer_id]?.phone || '').toLowerCase();
+          return (
+            customer.includes(search.toLowerCase()) ||
+            phone.includes(search.toLowerCase())
+          );
+        });
+
   if (locked) {
     return (
       <div className="layby-mobile-container">
@@ -140,18 +153,6 @@ function LaybyManagementMobile() {
       </div>
     );
   }
-
-  const filteredLaybys =
-    search.trim() === ''
-      ? []
-      : laybys.filter(l => {
-          const customer = customersMap[l.customer_id]?.name?.toLowerCase() || '';
-          const phone = customersMap[l.customer_id]?.phone?.toLowerCase() || '';
-          return (
-            customer.includes(search.toLowerCase()) ||
-            phone.includes(search.toLowerCase())
-          );
-        });
 
   return (
     <div className="layby-mobile-container">
