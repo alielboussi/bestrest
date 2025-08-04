@@ -72,7 +72,7 @@ function LaybyManagementMobile() {
   }
 
   // Export or share PDF for a layby
-  async function handleExport(layby, type, shareInstead = false) {
+  async function handleExport(layby) {
     // Fetch products for this layby (from sales_items)
     const { data: saleItems } = await supabase
       .from('sales_items')
@@ -101,33 +101,30 @@ function LaybyManagementMobile() {
     const customer = customersMap[layby.customer_id] || {};
     const logoUrl = window.location.origin + '/bestrest-logo.png';
     const companyName = 'BestRest';
-    if (type === 'pdf') {
-      try {
-        const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
-        const fileName = `${customer.name || 'layby'}_statement.pdf`;
-        // If sharing is requested and supported
-        if (shareInstead && navigator.canShare && window.Blob && navigator.share) {
-          // jsPDF's output('blob') returns a Promise
-          const pdfBlob = await doc.output('blob');
-          const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: fileName,
-              text: 'Layby Statement PDF'
-            });
-            return;
-          }
-        }
-        // Fallback: open in new window for mobile, download for desktop
-        if (typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-          doc.output('dataurlnewwindow');
-        } else {
-          doc.save(fileName);
-        }
-      } catch (e) {
-        exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
+    try {
+      const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
+      const fileName = `${customer.name || 'layby'}_statement.pdf`;
+      const pdfBlob = await doc.output('blob');
+      // Upload to Supabase Storage bucket 'layby'
+      const filePath = `${layby.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage.from('layby').upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+      if (uploadError) {
+        alert('Failed to upload PDF: ' + uploadError.message);
+        return;
       }
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage.from('layby').getPublicUrl(filePath);
+      const pdfUrl = publicUrlData?.publicUrl;
+      if (!pdfUrl) {
+        alert('Could not get public URL for PDF.');
+        return;
+      }
+      // Save URL in layby_view table
+      await supabase.from('layby_view').insert({ id: layby.id, Layby_URL: pdfUrl });
+      // Show prompt with clickable link
+      window.prompt('PDF generated! Click the link below to download:', pdfUrl);
+    } catch (e) {
+      alert('Error generating or uploading PDF.');
     }
   }
 
@@ -212,13 +209,7 @@ function LaybyManagementMobile() {
                     <td style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                       <button
                         style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }}
-                        onClick={() => {
-                          if (isMobile && navigator.canShare && window.Blob && navigator.share) {
-                            handleExport(l, 'pdf', true);
-                          } else {
-                            handleExport(l, 'pdf');
-                          }
-                        }}
+                        onClick={() => handleExport(l)}
                       >PDF</button>
                     </td>
                   </tr>
