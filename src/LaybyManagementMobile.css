@@ -13,6 +13,11 @@
   text-align: center;
   margin-bottom: 12px;
   color: #00b4d8;
+  width: 100%;
+  background: #222;
+  padding: 10px 0 10px 8px;
+  border-radius: 10px 10px 0 0;
+  box-sizing: border-box;
 }
 .layby-mobile-loading {
   text-align: center;
@@ -61,6 +66,7 @@
 @media (max-width: 430px) {
   .layby-mobile-title {
     font-size: 1.1rem;
+    text-align: center;
   }
   .layby-mobile-table th, .layby-mobile-table td {
     padding: 6px 2px;
@@ -70,5 +76,12 @@
     min-width: 32px;
     font-size: 0.65rem;
     padding: 1px 0;
+  }
+}
+@media (max-width: 700px) {
+  .layby-mobile-title {
+    font-size: 1.1rem;
+    padding: 8px 0 8px 4px;
+    text-align: center;
   }
 }
