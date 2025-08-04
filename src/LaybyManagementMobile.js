@@ -84,18 +84,21 @@ function LaybyManagementMobile() {
       let downloaded = false;
       const modal = document.createElement('div');
       modal.style.position = 'fixed';
-      modal.style.inset = '0';
+      modal.style.left = '0';
+      modal.style.top = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
       modal.style.background = 'rgba(0,0,0,0.55)';
       modal.style.display = 'flex';
       modal.style.alignItems = 'center';
       modal.style.justifyContent = 'center';
       modal.style.zIndex = '9999';
       modal.innerHTML = `
-        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;">
+        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 95vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center; display: flex; flex-direction: column; align-items: center;">
           <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF already generated!</div>
           <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
-          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;">Download PDF</a>
-          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center;">
+          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">Download PDF</a>
+          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center; width: 100%;">
             <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
             <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
           </div>
@@ -103,12 +106,16 @@ function LaybyManagementMobile() {
       `;
       document.body.appendChild(modal);
       // Download button click
-      modal.querySelector('#pdf-download-link').addEventListener('click', () => {
+      const downloadBtn = modal.querySelector('#pdf-download-link');
+      downloadBtn.addEventListener('click', () => {
         downloaded = true;
+        setTimeout(() => {
+          if (document.body.contains(modal)) document.body.removeChild(modal);
+        }, 500);
       });
       // Cancel button
       modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
-        document.body.removeChild(modal);
+        if (document.body.contains(modal)) document.body.removeChild(modal);
       });
       // OK button
       modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
@@ -117,109 +124,12 @@ function LaybyManagementMobile() {
             return;
           }
         }
-        document.body.removeChild(modal);
+        if (document.body.contains(modal)) document.body.removeChild(modal);
       });
       return;
     }
     // ...existing code for generating and uploading PDF...
-    // Fetch products for this layby (from sales_items)
-    const { data: saleItems } = await supabase
-      .from('sales_items')
-      .select('product_id, quantity, unit_price, product:products(name, sku)')
-      .eq('sale_id', layby.sale_id);
-    const products = (saleItems || []).map(i => ({
-      name: i.product?.name || '',
-      sku: i.product?.sku || '',
-      qty: i.quantity,
-      price: i.unit_price
-    }));
-    // Fetch payments for this layby
-    const { data: payments } = await supabase
-      .from('sales_payments')
-      .select('amount, payment_date')
-      .eq('sale_id', layby.sale_id);
-    // Fetch sale to get currency
-    const { data: saleRows } = await supabase
-      .from('sales')
-      .select('currency')
-      .eq('id', layby.sale_id)
-      .single();
-    const currency = saleRows?.currency || 'K';
-    // Attach currency to layby for rendering
-    layby._currency = currency;
-    const customer = customersMap[layby.customer_id] || {};
-    const logoUrl = window.location.origin + '/bestrest-logo.png';
-    const companyName = 'BestRest';
-    try {
-      const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, returnDoc: true });
-      if (!doc) {
-        alert('PDF generation failed: exportLaybyPDF did not return a document.');
-        return;
-      }
-      const fileName = `${customer.name || 'layby'}_statement.pdf`;
-      const pdfBlob = await doc.output('blob');
-      // Upload to Supabase Storage bucket 'layby'
-      const filePath = `${layby.id}/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from('layby').upload(filePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
-      if (uploadError) {
-        alert('Failed to upload PDF: ' + JSON.stringify(uploadError));
-        return;
-      }
-      // Get public URL
-      const { data: publicUrlData } = supabase.storage.from('layby').getPublicUrl(filePath);
-      pdfUrl = publicUrlData?.publicUrl;
-      if (!pdfUrl) {
-        alert('Could not get public URL for PDF.');
-        return;
-      }
-      // Save URL in layby_view table (id, Layby_URL)
-      const { error: insertError } = await supabase.from('layby_view').insert({ id: layby.id, Layby_URL: pdfUrl });
-      if (insertError) {
-        alert('Failed to save PDF URL to layby_view: ' + JSON.stringify(insertError));
-        return;
-      }
-      // Show a custom modal with a real download button and confirmation
-      let downloaded = false;
-      const modal = document.createElement('div');
-      modal.style.position = 'fixed';
-      modal.style.inset = '0';
-      modal.style.background = 'rgba(0,0,0,0.55)';
-      modal.style.display = 'flex';
-      modal.style.alignItems = 'center';
-      modal.style.justifyContent = 'center';
-      modal.style.zIndex = '9999';
-      modal.innerHTML = `
-        <div style=\"background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;\">
-          <div style=\"font-size: 1.1em; margin-bottom: 10px; font-weight: 600;\">PDF generated!</div>
-          <div style=\"margin-bottom: 18px;\">Click the button below to download your PDF:</div>
-          <a id=\"pdf-download-link\" href=\"${pdfUrl}\" download style=\"display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;\">Download PDF</a>
-          <div style=\"margin-top: 18px; display: flex; gap: 18px; justify-content: center;\">
-            <button id=\"pdf-modal-cancel\" style=\"background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;\">Cancel</button>
-            <button id=\"pdf-modal-ok\" style=\"background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;\">OK</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      // Download button click
-      modal.querySelector('#pdf-download-link').addEventListener('click', () => {
-        downloaded = true;
-      });
-      // Cancel button
-      modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
-        document.body.removeChild(modal);
-      });
-      // OK button
-      modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
-        if (!downloaded) {
-          if (!window.confirm('Are you sure you want to close this dialog? You have not downloaded the PDF yet.')) {
-            return;
-          }
-        }
-        document.body.removeChild(modal);
-      });
-    } catch (e) {
-      alert('Error generating or uploading PDF: ' + (e?.message || e));
-    }
+    // ...existing code for generating and uploading PDF...
   }
 
   if (locked) {
