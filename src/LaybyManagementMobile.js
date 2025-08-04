@@ -103,15 +103,6 @@ function LaybyManagementMobile() {
     const companyName = 'BestRest';
     if (type === 'pdf') {
       exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
-    } else {
-      const csv = exportLaybyCSV({ customer, layby, products, payments });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `layby_statement_${customer.name || 'customer'}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
     }
   }
 
@@ -193,8 +184,7 @@ function LaybyManagementMobile() {
                     <td style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{l.status}</td>
                     <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
                     <td style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                      <button style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', marginBottom: 1, minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }} onClick={() => handleExport(l, 'pdf')}>PDF</button>
-                      <button style={{ background: '#4caf50', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }} onClick={() => handleExport(l, 'csv')}>Excel</button>
+                      <button style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }} onClick={() => handleExport(l, 'pdf')}>PDF</button>
                     </td>
                   </tr>
                 );
