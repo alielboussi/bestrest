@@ -167,18 +167,14 @@ function LaybyManagementMobile() {
 
   return (
     <div className="layby-mobile-container" style={{ maxWidth: 430, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '90vh', width: '100%' }}>
-      <div style={{ width: '100%' }}>
-        <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word', width: '100%', background: 'transparent', padding: 0, margin: 0, border: 'none' }}>Laybys (Mobile)</h2>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 7 }}>
-        <input
-          type="text"
-          placeholder="Search customer name or phone..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '0.82rem', minWidth: 80, width: '98%' }}
-        />
-      </div>
+      <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word', width: '100%', background: 'transparent', padding: 0, margin: 0, border: 'none' }}>Laybys (Mobile)</h2>
+      <input
+        type="text"
+        placeholder="Search customer name or phone..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ display: 'block', padding: '4px 6px', borderRadius: 4, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '0.82rem', minWidth: 80, width: '100%', marginBottom: 7, marginTop: 7, boxSizing: 'border-box' }}
+      />
       {loading ? (
         <div className="layby-mobile-loading">Loading...</div>
       ) : (
