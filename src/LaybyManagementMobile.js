@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 
 import supabase from './supabase';
@@ -85,10 +84,7 @@ function LaybyManagementMobile() {
       let downloaded = false;
       const modal = document.createElement('div');
       modal.style.position = 'fixed';
-      modal.style.top = '0';
-      modal.style.left = '0';
-      modal.style.width = '100vw';
-      modal.style.height = '100vh';
+      modal.style.inset = '0';
       modal.style.background = 'rgba(0,0,0,0.55)';
       modal.style.display = 'flex';
       modal.style.alignItems = 'center';
@@ -186,10 +182,7 @@ function LaybyManagementMobile() {
       let downloaded = false;
       const modal = document.createElement('div');
       modal.style.position = 'fixed';
-      modal.style.top = '0';
-      modal.style.left = '0';
-      modal.style.width = '100vw';
-      modal.style.height = '100vh';
+      modal.style.inset = '0';
       modal.style.background = 'rgba(0,0,0,0.55)';
       modal.style.display = 'flex';
       modal.style.alignItems = 'center';
@@ -264,7 +257,9 @@ function LaybyManagementMobile() {
 
   return (
     <div className="layby-mobile-container" style={{ maxWidth: 430, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '90vh', width: '100%' }}>
-      <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word' }}>Laybys (Mobile)</h2>
+      <div style={{ width: '100%' }}>
+        <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word', width: '100%', background: 'transparent', padding: 0, margin: 0, border: 'none' }}>Laybys (Mobile)</h2>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 7 }}>
         <input
           type="text"
