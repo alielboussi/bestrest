@@ -53,18 +53,17 @@ function LaybyManagementMobile() {
   async function handleUnlock(e) {
     e.preventDefault();
     setError('');
-    // Fetch password from Supabase mobile_laybuy_password table
+    // Fetch password from Supabase mobile_laybuy_password table (key/value structure)
     const { data, error: fetchError } = await supabase
       .from('mobile_laybuy_password')
-      .select('password')
-      .order('id', { ascending: true })
-      .limit(1)
+      .select('value')
+      .eq('key', 'layby_mobile_password')
       .single();
     if (fetchError || !data) {
       setError('Could not verify password.');
       return;
     }
-    if (password === data.password) {
+    if (password === data.value) {
       setLocked(false);
       sessionStorage.setItem('laybyMobileUnlocked', 'true');
     } else {
