@@ -73,6 +73,59 @@ function LaybyManagementMobile() {
 
   // Export or share PDF for a layby
   async function handleExport(layby) {
+    // Check if PDF URL already exists in layby_view
+    const { data: laybyViewRows, error: laybyViewError } = await supabase
+      .from('layby_view')
+      .select('Layby_URL')
+      .eq('id', layby.id)
+      .maybeSingle();
+    let pdfUrl = laybyViewRows?.Layby_URL;
+    if (pdfUrl) {
+      // Show modal with existing URL
+      let downloaded = false;
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
+      modal.style.background = 'rgba(0,0,0,0.55)';
+      modal.style.display = 'flex';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+      modal.style.zIndex = '9999';
+      modal.innerHTML = `
+        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;">
+          <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF already generated!</div>
+          <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
+          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;">Download PDF</a>
+          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center;">
+            <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
+            <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      // Download button click
+      modal.querySelector('#pdf-download-link').addEventListener('click', () => {
+        downloaded = true;
+      });
+      // Cancel button
+      modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
+        document.body.removeChild(modal);
+      });
+      // OK button
+      modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
+        if (!downloaded) {
+          if (!window.confirm('Are you sure you want to close this dialog? You have not downloaded the PDF yet.')) {
+            return;
+          }
+        }
+        document.body.removeChild(modal);
+      });
+      return;
+    }
+    // ...existing code for generating and uploading PDF...
     // Fetch products for this layby (from sales_items)
     const { data: saleItems } = await supabase
       .from('sales_items')
@@ -118,7 +171,7 @@ function LaybyManagementMobile() {
       }
       // Get public URL
       const { data: publicUrlData } = supabase.storage.from('layby').getPublicUrl(filePath);
-      const pdfUrl = publicUrlData?.publicUrl;
+      pdfUrl = publicUrlData?.publicUrl;
       if (!pdfUrl) {
         alert('Could not get public URL for PDF.');
         return;
@@ -143,13 +196,13 @@ function LaybyManagementMobile() {
       modal.style.justifyContent = 'center';
       modal.style.zIndex = '9999';
       modal.innerHTML = `
-        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;">
-          <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF generated!</div>
-          <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
-          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;">Download PDF</a>
-          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center;">
-            <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
-            <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
+        <div style=\"background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 90vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center;\">
+          <div style=\"font-size: 1.1em; margin-bottom: 10px; font-weight: 600;\">PDF generated!</div>
+          <div style=\"margin-bottom: 18px;\">Click the button below to download your PDF:</div>
+          <a id=\"pdf-download-link\" href=\"${pdfUrl}\" download style=\"display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px;\">Download PDF</a>
+          <div style=\"margin-top: 18px; display: flex; gap: 18px; justify-content: center;\">
+            <button id=\"pdf-modal-cancel\" style=\"background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;\">Cancel</button>
+            <button id=\"pdf-modal-ok\" style=\"background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;\">OK</button>
           </div>
         </div>
       `;
@@ -228,13 +281,12 @@ function LaybyManagementMobile() {
           <table className="layby-mobile-table" style={{ width: '100%', background: '#23272f', borderRadius: 5, margin: '0 auto', fontSize: '0.74rem', tableLayout: 'fixed' }}>
             <thead>
               <tr>
-                <th style={{ width: '60px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
-                <th style={{ width: '38px' }}>Total</th>
-                <th style={{ width: '38px' }}>Paid</th>
-                <th style={{ width: '38px' }}>Due</th>
-                <th style={{ width: '34px' }}>Status</th>
                 <th style={{ width: '48px' }}>Date</th>
-                <th style={{ width: '38px' }}>Exp</th>
+                <th style={{ width: '60px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
+                <th style={{ width: '70px' }}>Total</th>
+                <th style={{ width: '70px' }}>Paid</th>
+                <th style={{ width: '70px' }}>Due</th>
+                <th style={{ width: '70px' }}>Export</th>
               </tr>
             </thead>
             <tbody>
@@ -245,18 +297,16 @@ function LaybyManagementMobile() {
                 const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
                 const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
                 const dueStr = `${currency} ${due}`;
-                const isMobile = typeof window !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                 return (
                   <tr key={l.id}>
+                    <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
                     <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
                     <td>{total}</td>
                     <td>{paid}</td>
                     <td>{dueStr}</td>
-                    <td style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{l.status}</td>
-                    <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
-                    <td style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                    <td style={{ minWidth: 0, padding: 0 }}>
                       <button
-                        style={{ background: '#00bfff', color: '#fff', borderRadius: 1, padding: '1px 0', fontWeight: 600, fontSize: '0.55rem', minWidth: 0, lineHeight: 1, letterSpacing: 0.2 }}
+                        style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '8px 0', fontWeight: 700, fontSize: '0.95rem', minWidth: '100%', width: '100%', lineHeight: 1.2, letterSpacing: 0.2, border: 'none', margin: 0 }}
                         onClick={() => handleExport(l)}
                       >PDF</button>
                     </td>
@@ -264,7 +314,7 @@ function LaybyManagementMobile() {
                 );
               })}
               {filteredLaybys.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>No laybys found.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>No laybys found.</td></tr>
               )}
             </tbody>
           </table>
