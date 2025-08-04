@@ -107,7 +107,8 @@ function LaybyManagementMobile() {
         const fileName = `${customer.name || 'layby'}_statement.pdf`;
         // If sharing is requested and supported
         if (shareInstead && navigator.canShare && window.Blob && navigator.share) {
-          const pdfBlob = doc.output('blob');
+          // jsPDF's output('blob') returns a Promise
+          const pdfBlob = await doc.output('blob');
           const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({
