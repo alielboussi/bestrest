@@ -419,6 +419,7 @@ export function exportLaybyPDF({
       y += 14;
     });
   }
+  return doc;
 }
 
 export function exportLaybyCSV({ customer, layby, products, payments }) {
