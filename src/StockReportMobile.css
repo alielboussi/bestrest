@@ -30,6 +30,7 @@
   background: #181c20;
   color: #e0f7fa;
   margin-bottom: 0;
+  margin-left: -4px; /* Move about 1mm to the left */
   width: 100%;
   max-width: 420px;
   box-sizing: border-box;
@@ -143,6 +144,7 @@
     padding: 3vw 1.5vw 3vw 3vw;
     border-radius: 7px;
     max-width: 98vw;
+    margin-left: -4px; /* Move about 1mm to the left on small screens too */
   }
   .stock-report-mobile-search {
     font-size: 1.08rem;

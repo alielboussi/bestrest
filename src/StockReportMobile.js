@@ -9,6 +9,7 @@ const StockReportMobile = () => {
   const [categories, setCategories] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [units, setUnits] = useState([]);
+  const [productImages, setProductImages] = useState([]);
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
@@ -27,6 +28,8 @@ const StockReportMobile = () => {
       setInventory(inv || []);
       const { data: unitData } = await supabase.from('unit_of_measure').select('*');
       setUnits(unitData || []);
+      const { data: images } = await supabase.from('product_images').select('*');
+      setProductImages(images || []);
     };
     fetchData();
   }, []);
@@ -93,12 +96,15 @@ const StockReportMobile = () => {
             const invs = inventory.filter(i => i.product_id === p.id);
             stockQty = invs.reduce((sum, i) => sum + (i.quantity || 0), 0);
           }
+          // Find image from product_images table
+          const imageObj = productImages.find(img => img.product_id === p.id);
+          const imageUrl = imageObj ? imageObj.image_url : p.image_url;
           return (
             <div className="stock-report-mobile-card" key={p.id}>
               <div className="stock-report-mobile-card-img-wrap">
-                {p.image_url ? (
+                {imageUrl ? (
                   <img
-                    src={p.image_url}
+                    src={imageUrl}
                     alt={p.name}
                     className="stock-report-mobile-card-img"
                   />
