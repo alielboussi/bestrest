@@ -1,60 +1,24 @@
-/* Container */
+/* LaybyManagementMobile.css: Mobile-optimized styles for iPhone/Samsung S22 and later */
 .layby-mobile-container {
-  max-width: 100%;
+  max-width: 430px;
   margin: 0 auto;
-  padding: 0;
+  padding: 12px 4px 32px 4px;
   background: #181c23;
   min-height: 100vh;
   color: #e0e6ed;
   font-family: 'Inter', Arial, sans-serif;
-  box-sizing: border-box;
 }
-
-/* Inner wrapper to align title, search, and table uniformly */
-.layby-mobile-inner {
-  padding: 12px 12px 32px;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-/* Title */
 .layby-mobile-title {
   font-size: 1.3rem;
   text-align: center;
-  margin: 0;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
   color: #00b4d8;
-  word-break: break-word;
 }
-
-/* Search input */
-.layby-mobile-search {
-  display: block;
-  padding: 6px 10px;
-  border-radius: 4px;
-  border: 1px solid #333;
-  background: #23272f;
-  color: #fff;
-  font-size: 0.82rem;
-  width: 100%;
-  margin: 6px 0 12px;
-  box-sizing: border-box;
-}
-
-/* Loading indicator */
 .layby-mobile-loading {
   text-align: center;
   margin: 24px 0;
   font-size: 1.1rem;
 }
-
-/* Table wrapper to ensure full width */
-.table-wrapper {
-  width: 100%;
-  overflow-x: auto;
-}
-
-/* Table */
 .layby-mobile-table {
   width: 100%;
   border-collapse: collapse;
@@ -62,109 +26,49 @@
   background: #23272f;
   border-radius: 10px;
   overflow: hidden;
-  table-layout: fixed;
+  table-layout: auto; /* Allow columns to adjust dynamically */
 }
-
-/* Header and cells */
-.layby-mobile-table th,
-.layby-mobile-table td {
-  padding: 8px 6px;
+.layby-mobile-table th, .layby-mobile-table td {
+  padding: 8px 4px;
   text-align: left;
   border-bottom: 1px solid #222;
   word-break: break-word;
   white-space: normal;
 }
+.layby-mobile-table th:last-child, .layby-mobile-table td:last-child {
+  text-align: center; /* Center align the 'Export' column */
+}
 
+/* Ensure export buttons always show text and are not clipped */
+.layby-mobile-table button {
+  min-width: 32px;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: unset;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
 .layby-mobile-table th {
   background: #222;
   color: #00b4d8;
   font-size: 1.05em;
 }
-
-/* Last row no border */
 .layby-mobile-table tr:last-child td {
   border-bottom: none;
 }
-
-/* No data row */
-.no-data-cell {
-  text-align: center;
-  color: #aaa;
-  padding: 8px;
-}
-
-/* Export PDF button */
-.export-pdf-btn {
-  background: #00bfff;
-  color: #fff;
-  border-radius: 4px;
-  padding: 8px 0;
-  font-weight: 700;
-  font-size: 0.95rem;
-  min-width: 100%;
-  width: 100%;
-  line-height: 1.2;
-  letter-spacing: 0.2px;
-  border: none;
-  margin: 0;
-  display: inline-block;
-  text-align: center;
-  cursor: pointer;
-}
-
-/* Locked view form styling */
-.locked-container {
-  max-width: 340px;
-  margin: 60px auto;
-  background: #23272f;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
-}
-
-.password-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.password-input {
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid #333;
-  background: #181c20;
-  color: #fff;
-  font-size: 1.1rem;
-}
-
-.error-text {
-  color: #ff5252;
-  font-size: 15px;
-}
-
-.unlock-btn {
-  background: #00bfff;
-  color: #fff;
-  border-radius: 6px;
-  padding: 10px 0;
-  font-weight: 600;
-  font-size: 1.1rem;
-  border: none;
-  cursor: pointer;
-}
-
-/* Responsive tweaks */
 @media (max-width: 430px) {
   .layby-mobile-title {
     font-size: 1.1rem;
   }
-  .layby-mobile-table th,
-  .layby-mobile-table td {
-    padding: 6px 4px;
-    font-size: 0.92rem;
+  .layby-mobile-table th, .layby-mobile-table td {
+    padding: 6px 2px;
+    font-size: 0.98em;
   }
-  .export-pdf-btn {
-    font-size: 0.75rem;
-    padding: 6px 0;
+  .layby-mobile-table button {
+    min-width: 32px;
+    font-size: 0.65rem;
+    padding: 1px 0;
   }
 }

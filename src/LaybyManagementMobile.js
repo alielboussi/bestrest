@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
+
 import supabase from './supabase';
 import { exportLaybyPDF, exportLaybyCSV } from './exportLaybyUtils';
 import './LaybyManagementMobile.css';
+
+
 
 function LaybyManagementMobile() {
   const [laybys, setLaybys] = useState([]);
@@ -25,6 +28,7 @@ function LaybyManagementMobile() {
         setLoading(false);
         return;
       }
+      // Fetch customer names for display
       const customerIds = Array.from(new Set((laybyData || []).map(l => l.customer_id).filter(Boolean)));
       let customersMap = {};
       if (customerIds.length) {
@@ -44,9 +48,11 @@ function LaybyManagementMobile() {
     fetchLaybys();
   }, [locked]);
 
+  // Password check handler
   async function handleUnlock(e) {
     e.preventDefault();
     setError('');
+    // Fetch password from Supabase mobile_laybuy_password table (key/value structure)
     const { data, error: fetchError } = await supabase
       .from('mobile_laybuy_password')
       .select('value')
@@ -64,7 +70,9 @@ function LaybyManagementMobile() {
     }
   }
 
+  // Export or share PDF for a layby
   async function handleExport(layby) {
+    // Check if PDF URL already exists in layby_view
     const { data: laybyViewRows, error: laybyViewError } = await supabase
       .from('layby_view')
       .select('Layby_URL')
@@ -72,6 +80,7 @@ function LaybyManagementMobile() {
       .maybeSingle();
     let pdfUrl = laybyViewRows?.Layby_URL;
     if (pdfUrl) {
+      // Show modal with existing URL
       let downloaded = false;
       const modal = document.createElement('div');
       modal.style.position = 'fixed';
@@ -96,6 +105,7 @@ function LaybyManagementMobile() {
         </div>
       `;
       document.body.appendChild(modal);
+      // Download button click
       const downloadBtn = modal.querySelector('#pdf-download-link');
       downloadBtn.addEventListener('click', () => {
         downloaded = true;
@@ -103,9 +113,11 @@ function LaybyManagementMobile() {
           if (document.body.contains(modal)) document.body.removeChild(modal);
         }, 500);
       });
+      // Cancel button
       modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
         if (document.body.contains(modal)) document.body.removeChild(modal);
       });
+      // OK button
       modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
         if (!downloaded) {
           if (!window.confirm('Are you sure you want to close this dialog? You have not downloaded the PDF yet.')) {
@@ -116,103 +128,99 @@ function LaybyManagementMobile() {
       });
       return;
     }
-    // existing PDF generation/upload logic goes here
+    // ...existing code for generating and uploading PDF...
+    // ...existing code for generating and uploading PDF...
   }
 
-  // Show all when search is empty
+  if (locked) {
+    return (
+      <div className="layby-mobile-container" style={{ maxWidth: 340, margin: '60px auto', background: '#23272f', borderRadius: 12, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
+        <h2 className="layby-mobile-title" style={{ textAlign: 'center', marginBottom: 18 }}>Enter Password</h2>
+        <form onSubmit={handleUnlock} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Password"
+            style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid #333', background: '#181c20', color: '#fff', fontSize: '1.1rem' }}
+            autoFocus
+          />
+          {error && <div style={{ color: '#ff5252', fontSize: 15 }}>{error}</div>}
+          <button type="submit" style={{ background: '#00bfff', color: '#fff', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: '1.1rem', marginTop: 6 }}>Unlock</button>
+        </form>
+      </div>
+    );
+  }
+
+  // Only show laybys if search is not empty and matches customer name or phone
   const filteredLaybys =
     search.trim() === ''
-      ? laybys
+      ? []
       : laybys.filter(l => {
-          const customer = (customersMap[l.customer_id]?.name || '').toLowerCase();
-          const phone = (customersMap[l.customer_id]?.phone || '').toLowerCase();
+          const customer = customersMap[l.customer_id]?.name?.toLowerCase() || '';
+          const phone = customersMap[l.customer_id]?.phone?.toLowerCase() || '';
           return (
             customer.includes(search.toLowerCase()) ||
             phone.includes(search.toLowerCase())
           );
         });
 
-  if (locked) {
-    return (
-      <div className="layby-mobile-container">
-        <div className="layby-mobile-inner locked-container">
-          <h2 className="layby-mobile-title">Enter Password</h2>
-          <form onSubmit={handleUnlock} className="password-form">
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Password"
-              className="password-input"
-              autoFocus
-            />
-            {error && <div className="error-text">{error}</div>}
-            <button type="submit" className="unlock-btn">Unlock</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="layby-mobile-container">
-      <div className="layby-mobile-inner">
-        <h2 className="layby-mobile-title">Laybys (Mobile)</h2>
-        <input
-          type="text"
-          placeholder="Search customer name or phone..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="layby-mobile-search"
-        />
-        {loading ? (
-          <div className="layby-mobile-loading">Loading...</div>
-        ) : (
-          <div className="table-wrapper">
-            <table className="layby-mobile-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '60px' }}>Date</th>
-                  <th style={{ width: '80px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
-                  <th style={{ width: '80px' }}>Total</th>
-                  <th style={{ width: '80px' }}>Paid</th>
-                  <th style={{ width: '80px' }}>Due</th>
-                  <th style={{ width: '50px' }}>Export</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLaybys.map(l => {
-                  const currency = l._currency || 'K';
-                  const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
-                  const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
-                  const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
-                  const dueStr = `${currency} ${due}`;
-                  return (
-                    <tr key={l.id}>
-                      <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
-                      <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
-                      <td>{total}</td>
-                      <td>{paid}</td>
-                      <td>{dueStr}</td>
-                      <td style={{ minWidth: 0, padding: 0 }}>
-                        <button
-                          className="export-pdf-btn"
-                          onClick={() => handleExport(l)}
-                        >PDF</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredLaybys.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="no-data-cell">No laybys found.</td>
+    <div className="layby-mobile-container" style={{ maxWidth: 430, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '90vh', width: '100%' }}>
+      <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word', width: '100%', background: 'transparent', padding: 0, margin: 0, border: 'none' }}>Laybys (Mobile)</h2>
+      <input
+        type="text"
+        placeholder="Search customer name or phone..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ display: 'block', padding: '4px 6px', borderRadius: 4, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '0.82rem', minWidth: 80, width: '100%', marginBottom: 7, marginTop: 7, boxSizing: 'border-box' }}
+      />
+      {loading ? (
+        <div className="layby-mobile-loading">Loading...</div>
+      ) : (
+        <div style={{ width: '100%' }}>
+          <table className="layby-mobile-table" style={{ width: '100%', background: '#23272f', borderRadius: 5, margin: '0 auto', fontSize: '0.85rem', tableLayout: 'fixed' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '60px' }}>Date</th>
+                <th style={{ width: '80px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
+                <th style={{ width: '80px' }}>Total</th>
+                <th style={{ width: '80px' }}>Paid</th>
+                <th style={{ width: '80px' }}>Due</th>
+                <th style={{ width: '50px' }}>Export</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLaybys.map(l => {
+                // Fetch currency for this layby (if not already fetched)
+                const currency = l._currency || 'K';
+                const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
+                const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
+                const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
+                const dueStr = `${currency} ${due}`;
+                return (
+                  <tr key={l.id}>
+                    <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
+                    <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
+                    <td>{total}</td>
+                    <td>{paid}</td>
+                    <td>{dueStr}</td>
+                    <td style={{ minWidth: 0, padding: 0 }}>
+                      <button
+                        style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '8px 0', fontWeight: 700, fontSize: '0.95rem', minWidth: '100%', width: '100%', lineHeight: 1.2, letterSpacing: 0.2, border: 'none', margin: 0 }}
+                        onClick={() => handleExport(l)}
+                      >PDF</button>
+                    </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                );
+              })}
+              {filteredLaybys.length === 0 && (
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>No laybys found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
