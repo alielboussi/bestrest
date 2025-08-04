@@ -1,6 +1,6 @@
 /* LaybyManagementMobile.css: Mobile-optimized styles for iPhone/Samsung S22 and later */
 .layby-mobile-container {
-  max-width: 430px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 12px 4px 32px 4px;
   background: #181c23;
