@@ -95,17 +95,22 @@ fun WebViewScreen(url: String, activity: MainActivity) {
                 loadUrl(url)
 
                 setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-                    val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
-                    val cookies = CookieManager.getInstance().getCookie(url)
-                    val request = DownloadRequest(
-                        url = url,
-                        userAgent = userAgent,
-                        contentDisposition = contentDisposition,
-                        mimeType = mimeType,
-                        fileName = fileName,
-                        cookies = cookies ?: ""
-                    )
-                    activity.checkAndDownload(request)
+                    // Only handle HTTP/HTTPS URLs, ignore blob: and other schemes
+                    if (url.startsWith("http://") || url.startsWith("https://")) {
+                        val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+                        val cookies = CookieManager.getInstance().getCookie(url)
+                        val request = DownloadRequest(
+                            url = url,
+                            userAgent = userAgent,
+                            contentDisposition = contentDisposition,
+                            mimeType = mimeType,
+                            fileName = fileName,
+                            cookies = cookies ?: ""
+                        )
+                        activity.checkAndDownload(request)
+                    } else {
+                        // Ignore blob: URLs to prevent DownloadManager crash
+                    }
                 }
             }
         }
