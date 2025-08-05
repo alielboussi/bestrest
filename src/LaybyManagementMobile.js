@@ -82,7 +82,7 @@ function LaybyManagementMobile() {
     if (pdfUrl) {
       // Scroll to top to ensure modal is centered in viewport
       window.scrollTo({ top: 0, behavior: 'auto' });
-      // Show modal with existing URL
+      // Show modal with customer-friendly label and filename
       let downloaded = false;
       const modal = document.createElement('div');
       modal.style.position = 'fixed';
@@ -95,11 +95,15 @@ function LaybyManagementMobile() {
       modal.style.alignItems = 'flex-start';
       modal.style.justifyContent = 'center';
       modal.style.zIndex = '9999';
+      // Get customer name for label and filename
+      const customerName = (customersMap[layby.customer_id]?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+      const downloadLabel = `Download PDF for ${customersMap[layby.customer_id]?.name || 'Customer'}`;
+      const downloadFilename = `${customerName}.pdf`;
       modal.innerHTML = `
         <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 95vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center; display: flex; flex-direction: column; align-items: center; margin-top: 4cm;">
           <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF already generated!</div>
           <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
-          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">${pdfUrl}</a>
+          <a id="pdf-download-link" href="${pdfUrl}" download="${downloadFilename}" style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">${downloadLabel}</a>
           <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center; width: 100%;">
             <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
             <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
