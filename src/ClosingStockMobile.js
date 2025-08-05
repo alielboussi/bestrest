@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import supabase from './supabase';
 import './ClosingStock.css';
 
@@ -12,10 +13,12 @@ function ClosingStockMobile() {
   const [units, setUnits] = useState([]);
   const [search, setSearch] = useState('');
   const [entries, setEntries] = useState({});
+  const [conductor, setConductor] = useState('');
+  const [sessionId, setSessionId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [confirmChecked, setConfirmChecked] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [resuming, setResuming] = useState(false);
 
   // Password check
   const checkPassword = async () => {
@@ -65,6 +68,48 @@ function ClosingStockMobile() {
       });
     setSearch('');
   }, [selectedLocation, passwordOk]);
+
+  // Resume open session if exists for this conductor/location
+  useEffect(() => {
+    const tryResume = async () => {
+      if (!selectedLocation || !conductor || !passwordOk) return;
+      setResuming(true);
+      // Find open session for this conductor/location
+      const { data: session, error: sessionError } = await supabase
+        .from('closing_stock_sessions')
+        .select('*')
+        .eq('location_id', selectedLocation)
+        .eq('user_id', conductor)
+        .eq('status', 'open')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sessionError) {
+        setError('Error checking for open session.');
+        setResuming(false);
+        return;
+      }
+      if (session) {
+        setSessionId(session.id);
+        // Load previous entries
+        const { data: prevEntries } = await supabase
+          .from('closing_stock_entries')
+          .select('product_id, qty')
+          .eq('session_id', session.id);
+        if (prevEntries) {
+          const entryMap = {};
+          prevEntries.forEach(e => { entryMap[e.product_id] = e.qty; });
+          setEntries(entryMap);
+        }
+      } else {
+        setSessionId(null);
+        setEntries({});
+      }
+      setResuming(false);
+    };
+    tryResume();
+    // eslint-disable-next-line
+  }, [selectedLocation, conductor, passwordOk]);
 
   // Build confirmation table rows
   const confirmRows = products
@@ -122,6 +167,17 @@ function ClosingStockMobile() {
             ))}
           </select>
         </label>
+        <label style={{ marginTop: 12, display: 'block' }}>
+          Stocktake Conductor Name:
+          <input
+            type="text"
+            value={conductor}
+            onChange={e => setConductor(e.target.value)}
+            placeholder="Enter your name"
+            style={{ width: '100%', padding: 8, borderRadius: 5, marginTop: 4 }}
+            disabled={!selectedLocation}
+          />
+        </label>
         <input
           className="product-search-input"
           type="text"
@@ -153,11 +209,129 @@ function ClosingStockMobile() {
                 }}
                 placeholder="Qty"
                 style={{ width: 80, marginLeft: 12 }}
+                disabled={!selectedLocation || !conductor}
               />
             </div>
           ))}
         </div>
-        {/* Save/Confirm section, confirmation modal, and rest of logic can be copied from desktop version as needed */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+          <button
+            className="save-btn"
+            style={{ flex: 1 }}
+            disabled={saving || !selectedLocation || !conductor}
+            onClick={async () => {
+              setSaving(true);
+              setError('');
+              setSuccess('');
+              try {
+                let sid = sessionId;
+                if (!sid) {
+                  // Create new session
+                  const { data: newSession, error: sessionError } = await supabase.from('closing_stock_sessions').insert({
+                    id: uuidv4(),
+                    user_id: conductor,
+                    location_id: selectedLocation,
+                    started_at: new Date().toISOString(),
+                    status: 'open',
+                  }).select().single();
+                  if (sessionError) throw sessionError;
+                  sid = newSession.id;
+                  setSessionId(sid);
+                }
+                // Upsert all entries for this session
+                const rows = Object.entries(entries)
+                  .filter(([pid, qty]) => qty && Number(qty) > 0)
+                  .map(([pid, qty]) => ({
+                    id: uuidv4(),
+                    session_id: sid,
+                    product_id: pid,
+                    qty: Number(qty),
+                    stocktake_conductor: conductor
+                  }));
+                // Remove previous entries for this session
+                await supabase.from('closing_stock_entries').delete().eq('session_id', sid);
+                if (rows.length > 0) {
+                  const { error: insertError } = await supabase.from('closing_stock_entries').insert(rows);
+                  if (insertError) throw insertError;
+                }
+                setSuccess('Progress saved. You can resume later.');
+              } catch (err) {
+                setError(err.message || 'Failed to save progress.');
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? 'Saving...' : 'Pause'}
+          </button>
+          <button
+            className="save-btn"
+            style={{ flex: 1 }}
+            disabled={saving || !selectedLocation || !conductor || Object.values(entries).every(qty => !qty || Number(qty) <= 0)}
+            onClick={async () => {
+              setSaving(true);
+              setError('');
+              setSuccess('');
+              try {
+                let sid = sessionId;
+                if (!sid) {
+                  // Create new session
+                  const { data: newSession, error: sessionError } = await supabase.from('closing_stock_sessions').insert({
+                    id: uuidv4(),
+                    user_id: conductor,
+                    location_id: selectedLocation,
+                    started_at: new Date().toISOString(),
+                    status: 'open',
+                  }).select().single();
+                  if (sessionError) throw sessionError;
+                  sid = newSession.id;
+                  setSessionId(sid);
+                }
+                // Upsert all entries for this session
+                const rows = Object.entries(entries)
+                  .filter(([pid, qty]) => qty && Number(qty) > 0)
+                  .map(([pid, qty]) => ({
+                    id: uuidv4(),
+                    session_id: sid,
+                    product_id: pid,
+                    qty: Number(qty),
+                    stocktake_conductor: conductor
+                  }));
+                // Remove previous entries for this session
+                await supabase.from('closing_stock_entries').delete().eq('session_id', sid);
+                if (rows.length > 0) {
+                  const { error: insertError } = await supabase.from('closing_stock_entries').insert(rows);
+                  if (insertError) throw insertError;
+                }
+                // Mark session as closed
+                await supabase.from('closing_stock_sessions').update({ status: 'closed', ended_at: new Date().toISOString() }).eq('id', sid);
+                // Check if any open sessions remain for this location/period
+                const { data: openSessions } = await supabase
+                  .from('closing_stock_sessions')
+                  .select('id')
+                  .eq('location_id', selectedLocation)
+                  .eq('status', 'open');
+                if (openSessions && openSessions.length > 0) {
+                  setSuccess('Your session is submitted, but other sessions are still open. Period will close when all are submitted.');
+                } else {
+                  setSuccess('All sessions submitted. Period will now close and new opening stock will be set.');
+                  // Here you would trigger backend logic to aggregate and close period, set new opening stock, etc.
+                }
+                setEntries({});
+                setConductor('');
+                setSessionId(null);
+              } catch (err) {
+                setError(err.message || 'Failed to submit closing stock.');
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? 'Saving...' : 'Submit Closing Stock'}
+          </button>
+        </div>
+        {error && <div style={{ color: '#ff4d4d', marginTop: 10 }}>{error}</div>}
+        {success && <div style={{ color: 'green', marginTop: 10 }}>{success}</div>}
       </div>
     </div>
   );

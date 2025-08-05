@@ -16,15 +16,15 @@ const StocktakeReport = () => {
   const [locations, setLocations] = useState([]);
   const [location, setLocation] = useState('');
   const [search, setSearch] = useState('');
-  const [periods, setPeriods] = useState([]); // Stocktake periods for selected location
-  const [selectedPeriod, setSelectedPeriod] = useState(null); // { opening, closing, started_at, ended_at }
+  const [periods, setPeriods] = useState([]); // Closing stock periods for selected location
+  const [selectedPeriod, setSelectedPeriod] = useState(null); // { started_at, ended_at, id }
 
   useEffect(() => {
     // Fetch locations for filter dropdown
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
   }, []);
 
-  // Fetch stocktake periods for selected location
+  // Fetch closing stock periods for selected location
   useEffect(() => {
     if (!location) {
       setPeriods([]);
@@ -32,30 +32,30 @@ const StocktakeReport = () => {
       return;
     }
     async function fetchPeriods() {
-      // Get all stocktakes for this location, order by started_at
-      const { data: stocktakes, error } = await supabase
-        .from('stocktakes')
-        .select('id, started_at, ended_at, type')
+      // Get all closed sessions for this location, group by period (ended_at)
+      const { data: sessions, error } = await supabase
+        .from('closing_stock_sessions')
+        .select('id, started_at, ended_at, location_id, status')
         .eq('location_id', location)
-        .order('started_at', { ascending: true });
-      if (error || !stocktakes) {
+        .eq('status', 'closed')
+        .order('ended_at', { ascending: true });
+      if (error || !sessions) {
         setPeriods([]);
         setSelectedPeriod(null);
         return;
       }
-      // Pair opening/closing stocktakes by started_at (assume opening then closing)
-      let periods = [];
-      for (let i = 0; i < stocktakes.length - 1; i++) {
-        if (stocktakes[i].type === 'opening' && stocktakes[i + 1].type === 'closing') {
-          periods.push({
-            opening: stocktakes[i],
-            closing: stocktakes[i + 1],
-            started_at: stocktakes[i].started_at,
-            ended_at: stocktakes[i + 1].ended_at
-          });
-          i++; // skip next (closing)
+      // Group sessions by period (use ended_at date as period end)
+      // For simplicity, treat each unique ended_at as a period
+      const periodMap = {};
+      sessions.forEach(s => {
+        const key = s.ended_at;
+        if (!periodMap[key]) {
+          periodMap[key] = { started_at: s.started_at, ended_at: s.ended_at, sessionIds: [s.id] };
+        } else {
+          periodMap[key].sessionIds.push(s.id);
         }
-      }
+      });
+      let periods = Object.values(periodMap).sort((a, b) => new Date(a.ended_at) - new Date(b.ended_at));
       // Only keep the latest period (most recent)
       if (periods.length > 1) {
         periods = periods.slice(-1);
@@ -66,7 +66,7 @@ const StocktakeReport = () => {
     fetchPeriods();
   }, [location]);
 
-  // Fetch products and period-based stock data
+  // Fetch products and period-based stock data using closing_stock_entries
   useEffect(() => {
     async function fetchStockPeriod() {
       if (!location || !selectedPeriod) {
@@ -82,27 +82,49 @@ const StocktakeReport = () => {
         return;
       }
 
-      // Fetch opening stocktake entries and aggregate by product_id
-      const { data: openingEntriesRaw } = await supabase
-        .from('stocktake_entries')
-        .select('product_id, qty')
-        .eq('stocktake_id', selectedPeriod.opening.id);
-      const openingEntries = {};
-      (openingEntriesRaw || []).forEach(e => {
-        if (!openingEntries[e.product_id]) openingEntries[e.product_id] = 0;
-        openingEntries[e.product_id] += Number(e.qty || 0);
-      });
+      // Fetch closing stock entries for this period/location
+      const { data: closingSessions } = await supabase
+        .from('closing_stock_sessions')
+        .select('id')
+        .eq('location_id', location)
+        .eq('ended_at', selectedPeriod.ended_at)
+        .eq('status', 'closed');
+      const sessionIds = (closingSessions || []).map(s => s.id);
+      // Aggregate closing entries by product_id
+      let closingEntries = {};
+      if (sessionIds.length > 0) {
+        const { data: closingEntriesRaw } = await supabase
+          .from('closing_stock_entries')
+          .select('product_id, qty')
+          .in('session_id', sessionIds);
+        (closingEntriesRaw || []).forEach(e => {
+          closingEntries[e.product_id] = (closingEntries[e.product_id] || 0) + Number(e.qty || 0);
+        });
+      }
 
-      // Fetch closing stocktake entries and aggregate by product_id
-      const { data: closingEntriesRaw } = await supabase
-        .from('stocktake_entries')
-        .select('product_id, qty')
-        .eq('stocktake_id', selectedPeriod.closing.id);
-      const closingEntries = {};
-      (closingEntriesRaw || []).forEach(e => {
-        if (!closingEntries[e.product_id]) closingEntries[e.product_id] = 0;
-        closingEntries[e.product_id] += Number(e.qty || 0);
-      });
+      // Fetch opening stock for this period (from previous period's closing)
+      let openingEntries = {};
+      if (periods.length > 0) {
+        const prevPeriod = periods[periods.length - 2];
+        if (prevPeriod) {
+          const { data: prevSessions } = await supabase
+            .from('closing_stock_sessions')
+            .select('id')
+            .eq('location_id', location)
+            .eq('ended_at', prevPeriod.ended_at)
+            .eq('status', 'closed');
+          const prevSessionIds = (prevSessions || []).map(s => s.id);
+          if (prevSessionIds.length > 0) {
+            const { data: prevEntries } = await supabase
+              .from('closing_stock_entries')
+              .select('product_id, qty')
+              .in('session_id', prevSessionIds);
+            (prevEntries || []).forEach(e => {
+              openingEntries[e.product_id] = (openingEntries[e.product_id] || 0) + Number(e.qty || 0);
+            });
+          }
+        }
+      }
 
       // Fetch transfers in (to this location) during period
       const { data: transferSessions } = await supabase
@@ -123,10 +145,8 @@ const StocktakeReport = () => {
         });
       }
 
-
       // Fetch sales during period for this location (use sale_date from sales table for filtering)
       let salesMap = {};
-      // 1. Get all sales for this location and period
       const { data: sales } = await supabase
         .from('sales')
         .select('id')
@@ -135,7 +155,6 @@ const StocktakeReport = () => {
         .lte('sale_date', selectedPeriod.ended_at);
       const saleIds = (sales || []).map(s => s.id);
       if (saleIds.length > 0) {
-        // 2. Get all sales_items for those sales
         const { data: salesItems } = await supabase
           .from('sales_items')
           .select('product_id, quantity, sale_id')
@@ -158,7 +177,6 @@ const StocktakeReport = () => {
         if (standard_price === undefined || standard_price === null || standard_price === '') {
           standard_price = prod.price !== undefined && prod.price !== null && prod.price !== '' ? prod.price : 0;
         }
-        // Amount: variance * promo price if available, else standard price
         let price = (prod.promotional_price !== undefined && prod.promotional_price !== null && prod.promotional_price !== '') ? prod.promotional_price : standard_price;
         let amount = (variance * price);
         return {
@@ -177,7 +195,7 @@ const StocktakeReport = () => {
       setProducts(merged);
     }
     fetchStockPeriod();
-  }, [location, selectedPeriod]);
+  }, [location, selectedPeriod, periods]);
 
 
   // Filter: only show products with non-zero data for this location/period, or matching the search
@@ -514,15 +532,15 @@ const StocktakeReport = () => {
             Period:
             <select
               className="stock-report-select"
-              value={selectedPeriod ? `${selectedPeriod.opening.id}|${selectedPeriod.closing.id}` : ''}
+              value={selectedPeriod ? `${selectedPeriod.started_at}|${selectedPeriod.ended_at}` : ''}
               onChange={e => {
-                const [openingId, closingId] = e.target.value.split('|');
-                const period = periods.find(p => p.opening.id === openingId && p.closing.id === closingId);
+                const [started_at, ended_at] = e.target.value.split('|');
+                const period = periods.find(p => p.started_at === started_at && p.ended_at === ended_at);
                 setSelectedPeriod(period || null);
               }}
             >
               {periods.map(p => (
-                <option key={p.opening.id + p.closing.id} value={`${p.opening.id}|${p.closing.id}`}>{
+                <option key={p.started_at + p.ended_at} value={`${p.started_at}|${p.ended_at}`}>{
                   `${new Date(p.started_at).toLocaleString()} - ${new Date(p.ended_at).toLocaleString()}`
                 }</option>
               ))}
