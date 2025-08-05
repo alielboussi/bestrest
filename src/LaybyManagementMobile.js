@@ -80,6 +80,8 @@ function LaybyManagementMobile() {
       .maybeSingle();
     let pdfUrl = laybyViewRows?.Layby_URL;
     if (pdfUrl) {
+      // Scroll to top to ensure modal is centered in viewport
+      window.scrollTo({ top: 0, behavior: 'auto' });
       // Show modal with existing URL
       let downloaded = false;
       const modal = document.createElement('div');
