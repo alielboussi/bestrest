@@ -112,3 +112,27 @@
     text-align: center;
   }
 }
+
+/* Make sure all main elements are 100% width of the container */
+.layby-mobile-title,
+.layby-mobile-search,
+.layby-mobile-table {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Make the search input fill its container */
+.layby-mobile-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #23272f;
+  color: #e0e6ed;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  outline: none;
+}

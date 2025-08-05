@@ -166,20 +166,22 @@ function LaybyManagementMobile() {
         });
 
   return (
-    <div className="layby-mobile-container" style={{ maxWidth: 430, margin: '18px auto', background: '#181c20', borderRadius: 10, padding: '6px 1px 10px 1px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)', minHeight: '90vh', width: '100%' }}>
-      <h2 className="layby-mobile-title" style={{ fontSize: '1.05rem', color: '#4cafef', textAlign: 'center', marginBottom: 7, wordBreak: 'break-word', width: '100%', background: 'transparent', padding: 0, margin: 0, border: 'none' }}>Laybys (Mobile)</h2>
-      <input
-        type="text"
-        placeholder="Search customer name or phone..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        style={{ display: 'block', padding: '4px 6px', borderRadius: 4, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '0.82rem', minWidth: 80, width: '100%', marginBottom: 7, marginTop: 7, boxSizing: 'border-box' }}
-      />
+    <div className="layby-mobile-container">
+      <div className="layby-mobile-title">Laybys (Mobile)</div>
+      <div className="layby-mobile-search">
+        <input
+          type="text"
+          className="layby-mobile-search-input"
+          placeholder="Search customer name or phone..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
       {loading ? (
         <div className="layby-mobile-loading">Loading...</div>
       ) : (
-        <div style={{ width: '100%' }}>
-          <table className="layby-mobile-table" style={{ width: '100%', background: '#23272f', borderRadius: 5, margin: '0 auto', fontSize: '0.85rem', tableLayout: 'fixed' }}>
+        <div>
+          <table className="layby-mobile-table">
             <thead>
               <tr>
                 <th style={{ width: '60px' }}>Date</th>
@@ -192,7 +194,6 @@ function LaybyManagementMobile() {
             </thead>
             <tbody>
               {filteredLaybys.map(l => {
-                // Fetch currency for this layby (if not already fetched)
                 const currency = l._currency || 'K';
                 const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
                 const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
@@ -205,9 +206,9 @@ function LaybyManagementMobile() {
                     <td>{total}</td>
                     <td>{paid}</td>
                     <td>{dueStr}</td>
-                    <td style={{ minWidth: 0, padding: 0 }}>
+                    <td>
                       <button
-                        style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '8px 0', fontWeight: 700, fontSize: '0.95rem', minWidth: '100%', width: '100%', lineHeight: 1.2, letterSpacing: 0.2, border: 'none', margin: 0 }}
+                        className="layby-mobile-export-btn"
                         onClick={() => handleExport(l)}
                       >PDF</button>
                     </td>
@@ -215,7 +216,11 @@ function LaybyManagementMobile() {
                 );
               })}
               {filteredLaybys.length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>No laybys found.</td></tr>
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>
+                    No laybys found.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
