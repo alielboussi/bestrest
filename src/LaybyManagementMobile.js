@@ -184,12 +184,12 @@ function LaybyManagementMobile() {
           <table className="layby-mobile-table">
             <thead>
               <tr>
-                <th style={{ width: '60px' }}>Date</th>
-                <th style={{ width: '80px', wordBreak: 'break-word', whiteSpace: 'normal' }}>Customer</th>
-                <th style={{ width: '80px' }}>Total</th>
-                <th style={{ width: '80px' }}>Paid</th>
-                <th style={{ width: '80px' }}>Due</th>
-                <th style={{ width: '50px' }}>Export</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Export</th>
               </tr>
             </thead>
             <tbody>
