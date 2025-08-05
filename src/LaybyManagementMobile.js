@@ -166,66 +166,62 @@ function LaybyManagementMobile() {
         });
 
   return (
-    <div className="layby-mobile-container">
-      <div className="layby-mobile-title">Laybys (Mobile)</div>
-      <div className="layby-mobile-search">
-        <input
-          type="text"
-          className="layby-mobile-search-input"
-          placeholder="Search customer name or phone..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-      {loading ? (
-        <div className="layby-mobile-loading">Loading...</div>
-      ) : (
-        <div>
-          <table className="layby-mobile-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Customer</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Due</th>
-                <th>Export</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredLaybys.map(l => {
-                const currency = l._currency || 'K';
-                const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
-                const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
-                const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
-                const dueStr = `${currency} ${due}`;
-                return (
-                  <tr key={l.id}>
-                    <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
-                    <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
-                    <td>{total}</td>
-                    <td>{paid}</td>
-                    <td>{dueStr}</td>
-                    <td>
-                      <button
-                        className="layby-mobile-export-btn"
-                        onClick={() => handleExport(l)}
-                      >PDF</button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredLaybys.length === 0 && (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>
-                    No laybys found.
+    <div className="layby-mobile-landscape-root">
+      <div className="layby-mobile-scroll-x">
+        <div className="layby-mobile-title">Laybys (Mobile)</div>
+        <div className="layby-mobile-search">
+          <input
+            type="text"
+            className="layby-mobile-search-input"
+            placeholder="Search customer name or phone..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <table className="layby-mobile-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Total</th>
+              <th>Paid</th>
+              <th>Due</th>
+              <th>Export</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLaybys.map(l => {
+              const currency = l._currency || 'K';
+              const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
+              const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
+              const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
+              const dueStr = `${currency} ${due}`;
+              return (
+                <tr key={l.id}>
+                  <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
+                  <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
+                  <td>{total}</td>
+                  <td>{paid}</td>
+                  <td>{dueStr}</td>
+                  <td>
+                    <button
+                      className="layby-mobile-export-btn"
+                      onClick={() => handleExport(l)}
+                    >PDF</button>
                   </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+              );
+            })}
+            {filteredLaybys.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', color: '#aaa', padding: 8 }}>
+                  No laybys found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

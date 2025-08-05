@@ -123,7 +123,44 @@
   box-sizing: border-box;
 }
 
-/* Make the search input fill its container */
+/* Root: use full viewport width and height */
+.layby-mobile-landscape-root {
+  width: 100vw;
+  height: 100vh;
+  background: #181c23;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+/* Horizontal scroll for wide content */
+.layby-mobile-scroll-x {
+  overflow-x: auto;
+  width: 100vw;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Make header, search, and table wide */
+.layby-mobile-title,
+.layby-mobile-search,
+.layby-mobile-table {
+  min-width: 900px; /* Adjust as needed for your columns */
+  width: max-content;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Prevent wrapping in table cells */
+.layby-mobile-table th,
+.layby-mobile-table td {
+  white-space: nowrap;
+}
+
+/* Search input styling */
 .layby-mobile-search-input {
   width: 100%;
   box-sizing: border-box;
@@ -135,6 +172,39 @@
   font-size: 1rem;
   margin-bottom: 12px;
   outline: none;
+}
+
+/* Table and header styling (keep your existing styles for colors, etc.) */
+.layby-mobile-title {
+  font-size: 1.3rem;
+  text-align: center;
+  color: #00b4d8;
+  background: #222;
+  padding: 10px 0;
+  border-radius: 10px 10px 0 0;
+  margin-bottom: 0;
+}
+
+.layby-mobile-table {
+  background: #23272f;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  table-layout: fixed;
+  margin-bottom: 24px;
+}
+
+.layby-mobile-table th {
+  background: #222;
+  color: #00b4d8;
+  font-weight: bold;
+  font-size: 1.1em;
+  padding: 10px 8px;
+}
+
+.layby-mobile-table td {
+  color: #e0e6ed;
+  font-size: 1em;
+  padding: 10px 8px;
 }
 
 /* PDF Modal Styles */
