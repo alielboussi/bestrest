@@ -92,14 +92,14 @@ function LaybyManagementMobile() {
       modal.style.height = '100vh';
       modal.style.background = 'rgba(0,0,0,0.55)';
       modal.style.display = 'flex';
-      modal.style.alignItems = 'center';
+      modal.style.alignItems = 'flex-start';
       modal.style.justifyContent = 'center';
       modal.style.zIndex = '9999';
       modal.innerHTML = `
-        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 95vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center; display: flex; flex-direction: column; align-items: center;">
+        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 95vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center; display: flex; flex-direction: column; align-items: center; margin-top: 4cm;">
           <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF already generated!</div>
           <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
-          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">Download PDF</a>
+          <a id="pdf-download-link" href="${pdfUrl}" download style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">${pdfUrl}</a>
           <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center; width: 100%;">
             <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
             <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
