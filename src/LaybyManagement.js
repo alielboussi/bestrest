@@ -32,6 +32,7 @@ export default function LaybyManagement() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [showPdfPrompt, setShowPdfPrompt] = useState(false);
   const navigate = useNavigate();
 
   // Fetch all layby sales with outstanding balances
@@ -347,6 +348,38 @@ export default function LaybyManagement() {
           <button type="submit" disabled={loading}>{loading ? "Processing..." : "Add Payment"}</button>
           <button type="button" style={{ marginLeft: 8 }} onClick={() => setSelectedLayby(null)}>Cancel</button>
         </form>
+      )}
+      {/* PDF download prompt modal */}
+      {showPdfPrompt && (
+        <div className="pdf-modal-overlay">
+          <div className="pdf-modal-content">
+            <h2>Download PDF</h2>
+            <p>Would you like to download or share the PDF?</p>
+            <button onClick={() => setShowPdfPrompt(false)}>Cancel</button>
+            <button onClick={async () => {
+              setShowPdfPrompt(false);
+              // Proceed with PDF generation and sharing
+              const { data: saleItems } = await supabase
+                .from("sales_items")
+                .select("product_id, quantity, unit_price, product:products(name, sku)")
+                .eq("sale_id", selectedLayby.sale_id);
+              const products = (saleItems || []).map(i => ({
+                name: i.product?.name || '',
+                sku: i.product?.sku || '',
+                qty: i.quantity,
+                price: i.unit_price
+              }));
+              const { data: payments } = await supabase
+                .from("sales_payments")
+                .select("amount, payment_date")
+                .eq("sale_id", selectedLayby.sale_id);
+              const customer = selectedLayby.customerInfo || {};
+              const logoUrl = window.location.origin + '/bestrest-logo.png';
+              const companyName = 'BestRest';
+              exportLaybyPDF({ companyName, logoUrl, customer, layby: selectedLayby, products, payments });
+            }}>OK</button>
+          </div>
+        </div>
       )}
     </div>
   );
