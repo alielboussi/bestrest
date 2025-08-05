@@ -134,19 +134,19 @@ function LaybyManagementMobile() {
 
   if (locked) {
     return (
-      <div className="layby-mobile-container" style={{ maxWidth: 340, margin: '60px auto', background: '#23272f', borderRadius: 12, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
-        <h2 className="layby-mobile-title" style={{ textAlign: 'center', marginBottom: 18 }}>Enter Password</h2>
-        <form onSubmit={handleUnlock} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="layby-mobile-login-container">
+        <h2 className="layby-mobile-title">Enter Password</h2>
+        <form className="layby-mobile-login-form" onSubmit={handleUnlock}>
           <input
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             placeholder="Password"
-            style={{ padding: '10px 12px', borderRadius: 6, border: '1px solid #333', background: '#181c20', color: '#fff', fontSize: '1.1rem' }}
+            className="layby-mobile-login-input"
             autoFocus
           />
-          {error && <div style={{ color: '#ff5252', fontSize: 15 }}>{error}</div>}
-          <button type="submit" style={{ background: '#00bfff', color: '#fff', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: '1.1rem', marginTop: 6 }}>Unlock</button>
+          {error && <div className="layby-mobile-login-error">{error}</div>}
+          <button type="submit" className="layby-mobile-login-btn">Unlock</button>
         </form>
       </div>
     );
@@ -166,18 +166,18 @@ function LaybyManagementMobile() {
         });
 
   return (
-    <div className="layby-mobile-landscape-root">
-      <div className="layby-mobile-scroll-x">
-        <div className="layby-mobile-title">Laybys (Mobile)</div>
-        <div className="layby-mobile-search">
-          <input
-            type="text"
-            className="layby-mobile-search-input"
-            placeholder="Search customer name or phone..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
+    <div className="layby-mobile-container">
+      <div className="layby-mobile-title">Laybys (Mobile)</div>
+      <div className="layby-mobile-search">
+        <input
+          type="text"
+          className="layby-mobile-search-input"
+          placeholder="Search customer name or phone..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="layby-mobile-table-wrapper">
         <table className="layby-mobile-table">
           <thead>
             <tr>

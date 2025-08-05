@@ -1,3 +1,49 @@
+/* Login screen alignment and styling */
+.layby-mobile-login-container {
+  max-width: 340px;
+  margin: 60px auto;
+  background: #23272f;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+.layby-mobile-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+.layby-mobile-login-input {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #181c20;
+  color: #fff;
+  font-size: 1.1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.layby-mobile-login-btn {
+  background: #00bfff;
+  color: #fff;
+  border-radius: 6px;
+  padding: 10px 0;
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-top: 6px;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+.layby-mobile-login-error {
+  color: #ff5252;
+  font-size: 15px;
+  text-align: center;
+}
 /* LaybyManagementMobile.css: Mobile-optimized styles for iPhone/Samsung S22 and later */
 .layby-mobile-container {
   max-width: 430px;
@@ -124,40 +170,72 @@
 }
 
 /* Root: use full viewport width and height */
-.layby-mobile-landscape-root {
-  width: 100vw;
-  height: 100vh;
+
+/* Portrait layout: center and align all main elements, allow horizontal scroll only for table */
+.layby-mobile-container {
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 12px 4px 32px 4px;
   background: #181c23;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-  overflow: hidden;
+  min-height: 100vh;
+  color: #e0e6ed;
+  font-family: 'Inter', Arial, sans-serif;
 }
-
-/* Horizontal scroll for wide content */
-.layby-mobile-scroll-x {
-  overflow-x: auto;
-  width: 100vw;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-/* Make header, search, and table wide */
 .layby-mobile-title,
-.layby-mobile-search,
-.layby-mobile-table {
-  min-width: 900px; /* Adjust as needed for your columns */
-  width: max-content;
-  margin: 0;
+.layby-mobile-search {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
   box-sizing: border-box;
 }
-
-/* Prevent wrapping in table cells */
-.layby-mobile-table th,
-.layby-mobile-table td {
+.layby-mobile-title {
+  font-size: 1.3rem;
+  text-align: center;
+  color: #00b4d8;
+  background: #222;
+  padding: 10px 0;
+  border-radius: 10px 10px 0 0;
+  margin-bottom: 0;
+}
+.layby-mobile-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: none;
+  background: #23272f;
+  color: #e0e6ed;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  outline: none;
+}
+.layby-mobile-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0 auto 24px auto;
+  box-sizing: border-box;
+  max-width: 430px;
+}
+.layby-mobile-table {
+  min-width: 600px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+  background: #23272f;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  table-layout: fixed;
+  margin-bottom: 0;
+}
+.layby-mobile-table th, .layby-mobile-table td {
+  padding: 8px 4px;
+  text-align: left;
+  border-bottom: 1px solid #222;
+  word-break: break-word;
   white-space: nowrap;
+}
+.layby-mobile-table th:last-child, .layby-mobile-table td:last-child {
+  text-align: center;
 }
 
 /* Search input styling */
