@@ -131,75 +131,130 @@ function ClosingStockMobile() {
 
   if (!passwordOk) {
     return (
-      <div className="closing-stock-container">
-        <div className="closing-stock-form">
+      <div className="closing-stock-container mobile-friendly">
+        <div className="closing-stock-form mobile-friendly-form">
           <h2 className="closing-stock-title">Mobile Closing Stock</h2>
           <input
             type="password"
             placeholder="Enter access password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            style={{ width: '100%', padding: 12, fontSize: '1.1em', borderRadius: 7, marginBottom: 12 }}
+            className="mobile-input"
           />
           <button
-            className="save-btn"
-            style={{ width: '100%' }}
+            className="save-btn mobile-btn"
             onClick={checkPassword}
           >
             Access
           </button>
-          {passwordError && <div style={{ color: '#ff4d4d', marginTop: 10 }}>{passwordError}</div>}
+          {passwordError && <div className="error-message">{passwordError}</div>}
         </div>
       </div>
     );
   }
 
+  // CSV Export logic
+  const handleExportCSV = async () => {
+    // Fetch opening qty and current stock for each product
+    const csvRows = [
+      ['Location', 'Product', 'Opening Qty', 'Current Stock', 'Closing Stock Entered']
+    ];
+    // Fetch opening stock for products in this location
+    const { data: openingStocks } = await supabase
+      .from('opening_stock')
+      .select('product_id, qty')
+      .eq('location_id', selectedLocation);
+
+    // Fetch transfers for products in this location
+    const { data: transfers } = await supabase
+      .from('stock_transfers')
+      .select('product_id, qty, direction')
+      .eq('location_id', selectedLocation);
+
+    // Fetch sales for products in this location
+    const { data: sales } = await supabase
+      .from('sales')
+      .select('product_id, qty')
+      .eq('location_id', selectedLocation);
+
+    products.forEach(prod => {
+      // Opening Qty
+      const openingQty = openingStocks?.find(os => os.product_id === prod.id)?.qty || 0;
+      // Transfers: sum in and out
+      const transferIn = transfers?.filter(t => t.product_id === prod.id && t.direction === 'in').reduce((sum, t) => sum + t.qty, 0) || 0;
+      const transferOut = transfers?.filter(t => t.product_id === prod.id && t.direction === 'out').reduce((sum, t) => sum + t.qty, 0) || 0;
+      // Sales
+      const salesQty = sales?.filter(s => s.product_id === prod.id).reduce((sum, s) => sum + s.qty, 0) || 0;
+      // Current Stock = Opening + Transfers In - Transfers Out - Sales
+      const currentStock = openingQty + transferIn - transferOut - salesQty;
+      // Closing Stock Entered
+      const closingStock = entries[prod.id] || '';
+      csvRows.push([
+        locations.find(l => l.id === selectedLocation)?.name || '',
+        prod.name,
+        openingQty,
+        currentStock,
+        closingStock
+      ]);
+    });
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `closing_stock_${selectedLocation}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="closing-stock-container">
-      <div className="closing-stock-form">
+    <div className="closing-stock-container mobile-friendly">
+      <div className="closing-stock-form mobile-friendly-form">
         <h2 className="closing-stock-title">Mobile Closing Stock</h2>
-        <label>
+        <label className="mobile-label">
           Location:
-          <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+          <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} className="mobile-select">
             <option value="">Select Location</option>
             {locations.map(loc => (
               <option key={loc.id} value={loc.id}>{loc.name}</option>
             ))}
           </select>
         </label>
-        <label style={{ marginTop: 12, display: 'block' }}>
+        <label className="mobile-label">
           Stocktake Conductor Name:
           <input
             type="text"
             value={conductor}
             onChange={e => setConductor(e.target.value)}
             placeholder="Enter your name"
-            style={{ width: '100%', padding: 8, borderRadius: 5, marginTop: 4 }}
+            className="mobile-input"
             disabled={!selectedLocation}
           />
         </label>
         <input
-          className="product-search-input"
+          className="product-search-input mobile-input"
           type="text"
           placeholder="Search products by name or SKU..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           disabled={!selectedLocation}
         />
-        <div className="product-list">
+        <div className="product-list mobile-product-list">
           {filteredProducts.length === 0 && (
-            <div style={{ color: '#aaa', padding: '1.2rem', textAlign: 'center' }}>
+            <div className="mobile-no-products">
               {selectedLocation ? 'No products found.' : 'Select a location to begin.'}
             </div>
           )}
           {filteredProducts.map(prod => (
-            <div className="product-row" key={prod.id}>
-              <div className="product-name">
-                <b>{prod.name}</b> <span style={{ color: '#00bfff', fontSize: '0.95em' }}>({prod.sku})</span>
-                <div style={{ fontSize: '0.95em', color: '#aaa' }}>Unit: {units.find(u => u.id === prod.unit_of_measure_id)?.name || '-'}</div>
+            <div className="product-row mobile-product-row" key={prod.id}>
+              <div className="product-name mobile-product-name">
+                <b>{prod.name}</b> <span className="mobile-sku">({prod.sku})</span>
+                <div className="mobile-unit">Unit: {units.find(u => u.id === prod.unit_of_measure_id)?.name || '-'}</div>
               </div>
               <input
-                className="qty-input"
+                className="qty-input mobile-qty-input"
                 type="number"
                 min="0"
                 value={entries[prod.id] || ''}
@@ -208,16 +263,14 @@ function ClosingStockMobile() {
                   setEntries(prev => ({ ...prev, [prod.id]: val === '' ? '' : Math.max(0, Number(val)) }));
                 }}
                 placeholder="Qty"
-                style={{ width: 80, marginLeft: 12 }}
                 disabled={!selectedLocation || !conductor}
               />
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+        <div className="mobile-btn-row">
           <button
-            className="save-btn"
-            style={{ flex: 1 }}
+            className="save-btn mobile-btn"
             disabled={saving || !selectedLocation || !conductor}
             onClick={async () => {
               setSaving(true);
@@ -265,8 +318,7 @@ function ClosingStockMobile() {
             {saving ? 'Saving...' : 'Pause'}
           </button>
           <button
-            className="save-btn"
-            style={{ flex: 1 }}
+            className="save-btn mobile-btn"
             disabled={saving || !selectedLocation || !conductor || Object.values(entries).every(qty => !qty || Number(qty) <= 0)}
             onClick={async () => {
               setSaving(true);
@@ -330,8 +382,16 @@ function ClosingStockMobile() {
             {saving ? 'Saving...' : 'Submit Closing Stock'}
           </button>
         </div>
-        {error && <div style={{ color: '#ff4d4d', marginTop: 10 }}>{error}</div>}
-        {success && <div style={{ color: 'green', marginTop: 10 }}>{success}</div>}
+        <button
+          className="save-btn mobile-btn"
+          style={{ marginTop: 16, background: '#4caf50' }}
+          onClick={handleExportCSV}
+          disabled={!selectedLocation || products.length === 0}
+        >
+          Export as CSV
+        </button>
+        {error && <div className="error-message">{error}</div>}
+        {success && <div className="success-message">{success}</div>}
       </div>
     </div>
   );
