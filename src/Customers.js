@@ -43,9 +43,14 @@ const Customers = () => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Capitalize first letter of each word in a string
+  // Capitalize first letter of each word in a string, ensure single spaces
   const capitalizeWords = (str) =>
-    str.replace(/\b\w/g, (char) => char.toUpperCase()).replace(/\s+/g, ' ').trim();
+    str
+      .replace(/\s+/g, ' ') // collapse multiple spaces
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,6 +58,7 @@ const Customers = () => {
     try {
       // Capitalize name before saving
       const formToSave = { ...form, name: capitalizeWords(form.name) };
+      // Phone, address, city, tpin are optional
       if (editingId) {
         // Update
         const { error } = await supabase
@@ -132,28 +138,28 @@ const Customers = () => {
           <input
             name="phone"
             type="text"
-            placeholder="Phone Number"
+            placeholder="Phone Number (optional)"
             value={form.phone}
             onChange={handleChange}
           />
           <input
             name="address"
             type="text"
-            placeholder="Address"
+            placeholder="Address (optional)"
             value={form.address}
             onChange={handleChange}
           />
           <input
             name="city"
             type="text"
-            placeholder="City"
+            placeholder="City (optional)"
             value={form.city}
             onChange={handleChange}
           />
           <input
             name="tpin"
             type="text"
-            placeholder="TPIN"
+            placeholder="TPIN (optional)"
             value={form.tpin}
             onChange={handleChange}
           />

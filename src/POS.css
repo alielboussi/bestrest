@@ -109,7 +109,7 @@
   flex-wrap: wrap;
   gap: 18px;
   justify-content: center;
-  margin: 24px 0 18px 0;
+  margin: 24px 0 80px 0; /* Further increased bottom margin to push table down more */
   min-height: 80px;
 }
 

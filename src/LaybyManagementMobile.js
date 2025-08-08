@@ -19,18 +19,17 @@ function LaybyManagementMobile() {
     if (locked) return;
     async function fetchLaybys() {
       setLoading(true);
-      const { data: laybyData, error } = await supabase
+      const { data: laybys, error } = await supabase
         .from('laybys')
-        .select('id, customer_id, total_amount, paid_amount, status, created_at, sale_id')
-        .order('created_at', { ascending: false });
+        .select('id, customer_id, sale_id, total_amount, paid_amount, status, notes, updated_at')
+        .not('status', 'eq', 'completed');
       if (error) {
         setLaybys([]);
         setLoading(false);
         return;
       }
       // Fetch customer names for display
-      const customerIds = Array.from(new Set((laybyData || []).map(l => l.customer_id).filter(Boolean)));
-      let customersMap = {};
+      const customerIds = Array.from(new Set((laybys || []).map(l => l.customer_id).filter(Boolean)));
       if (customerIds.length) {
         const { data: customers } = await supabase
           .from('customers')
@@ -42,7 +41,7 @@ function LaybyManagementMobile() {
         }, {});
       }
       setCustomersMap(customersMap);
-      setLaybys(laybyData || []);
+      setLaybys(laybys || []);
       setLoading(false);
     }
     fetchLaybys();
@@ -158,18 +157,19 @@ function LaybyManagementMobile() {
     );
   }
 
-  // Only show laybys if search is not empty and matches customer name or phone
-  const filteredLaybys =
-    search.trim() === ''
-      ? []
-      : laybys.filter(l => {
-          const customer = customersMap[l.customer_id]?.name?.toLowerCase() || '';
-          const phone = customersMap[l.customer_id]?.phone?.toLowerCase() || '';
-          return (
-            customer.includes(search.toLowerCase()) ||
-            phone.includes(search.toLowerCase())
-          );
-        });
+  // Show all laybys by default, filter by search (customer name, phone, or due amount)
+  const filteredLaybys = laybys.filter(layby => {
+    const name = layby.customerInfo?.name?.toLowerCase() || customersMap[layby.customer_id]?.name?.toLowerCase() || "";
+    const phone = layby.customerInfo?.phone?.toLowerCase() || customersMap[layby.customer_id]?.phone?.toLowerCase() || "";
+    const due = ((Number(layby.total_amount) || 0) - (Number(layby.paid) || Number(layby.paid_amount) || 0)).toString();
+    const searchTerm = search.toLowerCase();
+    return (
+      !searchTerm ||
+      name.includes(searchTerm) ||
+      phone.includes(searchTerm) ||
+      due.includes(searchTerm)
+    );
+  });
 
   return (
     <div className="layby-mobile-container">

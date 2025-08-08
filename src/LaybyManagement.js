@@ -46,13 +46,17 @@ export default function LaybyManagement() {
       if (error) return setError(error.message);
 
       // 2. Get all sales for these laybys
-      const saleIds = (laybys || []).map(l => l.sale_id).filter(Boolean);
+      const saleIds = (laybys || []).map(l => Number(l.sale_id)).filter(id => !isNaN(id));
+      console.log('saleIds for Supabase query:', saleIds);
       let salesMap = {};
       if (saleIds.length) {
-        const { data: sales } = await supabase
+        const { data: sales, error: salesError } = await supabase
           .from("sales")
-          .select("id, down_payment, created_at, reminder_date")
+          .select("id, down_payment, reminder_date")
           .in("id", saleIds);
+        if (salesError) {
+          console.error('Supabase sales query error:', salesError.message);
+        }
         salesMap = (sales || []).reduce((acc, s) => {
           acc[s.id] = s;
           return acc;
@@ -62,10 +66,13 @@ export default function LaybyManagement() {
       // 3. Get all payments for these sales
       let paymentsMap = {};
       if (saleIds.length) {
-        const { data: payments } = await supabase
+        const { data: payments, error: paymentsError } = await supabase
           .from("sales_payments")
           .select("sale_id, amount")
           .in("sale_id", saleIds);
+        if (paymentsError) {
+          console.error('Supabase payments query error:', paymentsError.message);
+        }
         paymentsMap = (payments || []).reduce((acc, p) => {
           acc[p.sale_id] = (acc[p.sale_id] || 0) + Number(p.amount || 0);
           return acc;
@@ -88,8 +95,18 @@ export default function LaybyManagement() {
 
       // 5. Build layby list
       const laybyList = (laybys || []).map(layby => {
-        const sale = salesMap[layby.sale_id] || {};
-        const paid = (paymentsMap[layby.sale_id] || 0) + Number(sale.down_payment || 0);
+        const saleIdNum = Number(layby.sale_id);
+        const sale = salesMap[saleIdNum] || {};
+        let paid = 0;
+        const downPayment = sale.down_payment;
+        const payments = paymentsMap[saleIdNum];
+        if (downPayment) {
+          paid += Number(downPayment);
+        }
+        if (payments) {
+          paid += Number(payments);
+        }
+        console.log('Layby:', layby.id, 'Sale ID:', layby.sale_id, 'SaleIdNum:', saleIdNum, 'Down Payment:', downPayment, 'Payments:', payments, 'Paid:', paid);
         return {
           ...layby,
           total_amount: layby.total_amount,

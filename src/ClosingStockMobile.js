@@ -1,9 +1,66 @@
 import React, { useState, useEffect } from 'react';
+import { getMaxSetQty } from './utils/setInventoryUtils';
 import { v4 as uuidv4 } from 'uuid';
 import supabase from './supabase';
 import './ClosingStock.css';
 
 function ClosingStockMobile() {
+  // ...existing state declarations...
+  useEffect(() => {
+    let barcode = '';
+    let barcodeTimeout = null;
+    function handleKeyDown(e) {
+      if (!selectedLocation || !passwordOk) return;
+      if (e.key === 'Enter') {
+        if (barcode.length > 0) {
+          // Find product or set by SKU (barcode)
+          const scanned = products.find(p => String(p.sku) === barcode);
+          if (scanned) {
+            if (scanned.is_combo && scanned.components) {
+              // Check if enough product stock exists before incrementing
+              const productStock = { ...entries };
+              scanned.components.forEach(ci => {
+                productStock[ci.product_id] = (Number(productStock[ci.product_id]) || 0);
+              });
+              const possibleSets = getMaxSetQty(scanned.components, productStock);
+              if (possibleSets > 0) {
+                setEntries(prev => {
+                  const newEntries = { ...prev };
+                  scanned.components.forEach(ci => {
+                    newEntries[ci.product_id] = (Number(newEntries[ci.product_id]) || 0) + (ci.quantity || 1);
+                  });
+                  // Increment the set's own qty by 1
+                  newEntries[scanned.id] = (Number(newEntries[scanned.id]) || 0) + 1;
+                  return newEntries;
+                });
+              } else {
+                setError(`Cannot increment set '${scanned.name}' due to insufficient product stock.`);
+              }
+            } else {
+              // If it's a product, increment its qty
+              setEntries(prev => ({
+                ...prev,
+                [scanned.id]: (Number(prev[scanned.id]) || 0) + 1
+              }));
+            }
+          }
+        }
+        barcode = '';
+        clearTimeout(barcodeTimeout);
+        barcodeTimeout = null;
+      } else if (e.key.length === 1) {
+        barcode += e.key;
+        clearTimeout(barcodeTimeout);
+        barcodeTimeout = setTimeout(() => { barcode = ''; }, 300);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(barcodeTimeout);
+    };
+  }, [products, selectedLocation, passwordOk, entries]);
+  // ...existing state declarations...
   const [password, setPassword] = useState('');
   const [passwordOk, setPasswordOk] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -59,15 +116,99 @@ function ClosingStockMobile() {
   // Fetch products for selected location
   useEffect(() => {
     if (!selectedLocation || !passwordOk) return;
-    supabase
-      .from('product_locations')
-      .select('product_id, products(id, name, sku, unit_of_measure_id)')
-      .eq('location_id', selectedLocation)
-      .then(({ data }) => {
-        setProducts((data || []).map(row => row.products));
+    async function fetchProductsAndCombos() {
+      // Fetch products
+      const { data: prodLocs } = await supabase
+        .from('product_locations')
+        .select('product_id, products(id, name, sku, unit_of_measure_id)')
+        .eq('location_id', selectedLocation);
+      const products = (prodLocs || []).map(row => row.products);
+
+      // Fetch combos (sets) and their components
+      const { data: combos } = await supabase
+        .from('combos')
+        .select('id, sku, combo_name');
+      const comboIds = (combos || []).map(c => c.id);
+      let comboItems = [];
+      if (comboIds.length > 0) {
+        const { data: items } = await supabase
+          .from('combo_items')
+          .select('combo_id, product_id, quantity')
+          .in('combo_id', comboIds);
+        comboItems = items || [];
+      }
+      // Attach components to combos
+      const combosWithComponents = (combos || []).map(combo => {
+        const components = comboItems.filter(ci => ci.combo_id === combo.id);
+        return {
+          ...combo,
+          is_combo: true,
+          components,
+          name: `Set: ${combo.combo_name}`
+        };
       });
+      // Merge products and combos
+      setProducts([...products, ...combosWithComponents]);
+    }
+    fetchProductsAndCombos();
     setSearch('');
   }, [selectedLocation, passwordOk]);
+
+  // Barcode scanning logic: listen for barcode input and increment product qty
+  useEffect(() => {
+    let barcode = '';
+    let barcodeTimeout = null;
+    function handleKeyDown(e) {
+      if (!selectedLocation || !passwordOk) return;
+      if (e.key === 'Enter') {
+        if (barcode.length > 0) {
+          // Find product or set by SKU (barcode)
+          const scanned = products.find(p => String(p.sku) === barcode);
+          if (scanned) {
+            if (scanned.is_combo && scanned.components) {
+              // Check if enough product stock exists before incrementing
+              const productStock = { ...entries };
+              scanned.components.forEach(ci => {
+                productStock[ci.product_id] = (Number(productStock[ci.product_id]) || 0);
+              });
+              const possibleSets = getMaxSetQty(scanned.components, productStock);
+              if (possibleSets > 0) {
+                setEntries(prev => {
+                  const newEntries = { ...prev };
+                  scanned.components.forEach(ci => {
+                    newEntries[ci.product_id] = (Number(newEntries[ci.product_id]) || 0) + (ci.quantity || 1);
+                  });
+                  // Increment the set's own qty by 1
+                  newEntries[scanned.id] = (Number(newEntries[scanned.id]) || 0) + 1;
+                  return newEntries;
+                });
+              } else {
+                setError(`Cannot increment set '${scanned.name}' due to insufficient product stock.`);
+              }
+            } else {
+              // If it's a product, increment its qty
+              setEntries(prev => ({
+                ...prev,
+                [scanned.id]: (Number(prev[scanned.id]) || 0) + 1
+              }));
+            }
+          }
+        }
+        barcode = '';
+        clearTimeout(barcodeTimeout);
+        barcodeTimeout = null;
+      } else if (e.key.length === 1) {
+        barcode += e.key;
+        clearTimeout(barcodeTimeout);
+        barcodeTimeout = setTimeout(() => { barcode = ''; }, 300);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(barcodeTimeout);
+    };
+  }, [products, selectedLocation, passwordOk, entries]);
 
   // Resume open session if exists for this conductor/location
   useEffect(() => {
@@ -251,7 +392,15 @@ function ClosingStockMobile() {
             <div className="product-row mobile-product-row" key={prod.id}>
               <div className="product-name mobile-product-name">
                 <b>{prod.name}</b> <span className="mobile-sku">({prod.sku})</span>
-                <div className="mobile-unit">Unit: {units.find(u => u.id === prod.unit_of_measure_id)?.name || '-'}</div>
+                {!prod.is_combo && <div className="mobile-unit">Unit: {units.find(u => u.id === prod.unit_of_measure_id)?.name || '-'}</div>}
+                {prod.is_combo && prod.components && (
+                  <div className="mobile-unit">
+                    Components: {prod.components.map(ci => {
+                      const cp = products.find(p => p.id === ci.product_id);
+                      return cp ? `${cp.name} (${ci.quantity})` : `ID ${ci.product_id} (${ci.quantity})`;
+                    }).join(', ')}
+                  </div>
+                )}
               </div>
               <input
                 className="qty-input mobile-qty-input"
@@ -260,7 +409,18 @@ function ClosingStockMobile() {
                 value={entries[prod.id] || ''}
                 onChange={e => {
                   const val = e.target.value;
-                  setEntries(prev => ({ ...prev, [prod.id]: val === '' ? '' : Math.max(0, Number(val)) }));
+                  if (prod.is_combo && prod.components) {
+                    // Update all component products
+                    setEntries(prev => {
+                      const newEntries = { ...prev, [prod.id]: val === '' ? '' : Math.max(0, Number(val)) };
+                      prod.components.forEach(ci => {
+                        newEntries[ci.product_id] = val === '' ? '' : Math.max(0, Number(val)) * ci.quantity;
+                      });
+                      return newEntries;
+                    });
+                  } else {
+                    setEntries(prev => ({ ...prev, [prod.id]: val === '' ? '' : Math.max(0, Number(val)) }));
+                  }
                 }}
                 placeholder="Qty"
                 disabled={!selectedLocation || !conductor}
@@ -278,13 +438,14 @@ function ClosingStockMobile() {
               setSuccess('');
               try {
                 let sid = sessionId;
+                const now = new Date().toISOString();
                 if (!sid) {
                   // Create new session
                   const { data: newSession, error: sessionError } = await supabase.from('closing_stock_sessions').insert({
                     id: uuidv4(),
                     user_id: conductor,
                     location_id: selectedLocation,
-                    started_at: new Date().toISOString(),
+                    started_at: now,
                     status: 'open',
                   }).select().single();
                   if (sessionError) throw sessionError;
@@ -307,9 +468,111 @@ function ClosingStockMobile() {
                   const { error: insertError } = await supabase.from('closing_stock_entries').insert(rows);
                   if (insertError) throw insertError;
                 }
-                setSuccess('Progress saved. You can resume later.');
+                // Mark session as closed
+                await supabase.from('closing_stock_sessions').update({ status: 'closed', ended_at: now }).eq('id', sid);
+
+                // 2. Close current period (opening stock, sales, transfers)
+                // Find latest opening stocktake for this location
+                const { data: openings, error: openErr } = await supabase
+                  .from('stocktakes')
+                  .select('*')
+                  .eq('location_id', selectedLocation)
+                  .eq('type', 'opening')
+                  .order('started_at', { ascending: false });
+                if (openErr || !openings || openings.length === 0) throw new Error('No opening stocktake found.');
+                let opening = null;
+                for (const o of openings) {
+                  const { data: closing } = await supabase
+                    .from('stocktakes')
+                    .select('id')
+                    .eq('location_id', selectedLocation)
+                    .eq('type', 'closing')
+                    .gte('started_at', o.started_at)
+                    .lte('started_at', o.ended_at || now);
+                  if (!closing || closing.length === 0) {
+                    opening = o;
+                    break;
+                  }
+                }
+                if (!opening) throw new Error('No open period to close.');
+                // Update opening stocktake's ended_at to now
+                const { error: updateErr, data: updateData } = await supabase
+                  .from('stocktakes')
+                  .update({ ended_at: now })
+                  .eq('id', opening.id)
+                  .select();
+                if (updateErr || !updateData || updateData.length === 0) {
+                  throw new Error('Failed to update ended_at for opening stocktake.');
+                }
+
+                // Automatically create a stocktake row for closing stock if not exists
+                const { data: existingClosingStocktake } = await supabase
+                  .from('stocktakes')
+                  .select('id')
+                  .eq('location_id', selectedLocation)
+                  .eq('type', 'closing')
+                  .eq('started_at', opening.started_at)
+                  .eq('ended_at', now)
+                  .limit(1)
+                  .maybeSingle();
+                let closingStocktakeId = null;
+                if (!existingClosingStocktake) {
+                  const { data: closingStocktake, error: closingErr } = await supabase
+                    .from('stocktakes')
+                    .insert({
+                      location_id: selectedLocation,
+                      type: 'closing',
+                      started_at: opening.started_at,
+                      ended_at: now
+                    })
+                    .select()
+                    .single();
+                  if (closingErr || !closingStocktake) throw new Error('Failed to create closing stocktake.');
+                  closingStocktakeId = closingStocktake.id;
+                } else {
+                  closingStocktakeId = existingClosingStocktake.id;
+                }
+                // Insert all product entries into stocktake_entries for closing
+                const entriesToInsert = Object.entries(entries)
+                  .filter(([pid, qty]) => qty && Number(qty) > 0)
+                  .map(([pid, qty]) => ({
+                    stocktake_id: closingStocktakeId,
+                    product_id: pid,
+                    qty: Number(qty)
+                  }));
+                const { error: entriesError } = await supabase
+                  .from('stocktake_entries')
+                  .insert(entriesToInsert);
+                if (entriesError) throw new Error('Failed to insert stocktake entries.');
+
+                // 3. Start a new period with previous closing stock as new opening stock
+                const { data: newOpening, error: newOpeningErr } = await supabase
+                  .from('stocktakes')
+                  .insert({
+                    location_id: selectedLocation,
+                    type: 'opening',
+                    started_at: now
+                  })
+                  .select()
+                  .single();
+                if (newOpeningErr || !newOpening) throw new Error('Failed to create new opening stocktake.');
+                // Copy closing stocktake entries to new opening stocktake
+                const openingEntries = entriesToInsert.map(e => ({
+                  stocktake_id: newOpening.id,
+                  product_id: e.product_id,
+                  qty: e.qty
+                }));
+                const { error: openingEntriesErr } = await supabase
+                  .from('stocktake_entries')
+                  .insert(openingEntries);
+                if (openingEntriesErr) throw new Error('Failed to copy opening stocktake entries.');
+
+                setEntries({});
+                setConductor('');
+                setSessionId(null);
+                setSuccess('All sessions submitted. Period closed and new opening stock set.');
               } catch (err) {
-                setError(err.message || 'Failed to save progress.');
+                setError(err.message || 'Failed to submit closing stock.');
               } finally {
                 setSaving(false);
               }

@@ -200,6 +200,13 @@
   transition: background 0.2s;
 }
 
+.sets-products-table th {
+  position: sticky;
+  top: 0;
+  background: #23272f;
+  z-index: 2;
+}
+
 
 @media (max-width: 900px) {
   .sets-form-row {

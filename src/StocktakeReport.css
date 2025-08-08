@@ -26,25 +26,96 @@
   gap: 16px;
 }
 
-.export-btn {
-  font-size: 0.95em;
-  padding: 6px 18px;
-  background: #00bfff;
+
+.stocktake-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 24px;
+  box-shadow: 0 2px 16px #00aeef44;
+  background: #102a38;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.stocktake-table th {
+  background: linear-gradient(90deg, #00aeef 60%, #00796b 100%);
   color: #fff;
-  border: 2px solid #00bfff;
+  font-weight: bold;
+  padding: 12px 10px;
+  font-size: 1.08em;
+  border-bottom: 2px solid #00aeef;
+}
+.stocktake-table td {
+  background: #143a2a;
+  color: #eaffea;
+  padding: 10px 8px;
+  border-bottom: 1px solid #00aeef;
+  border-right: 1px solid #00796b;
+  font-size: 1em;
+}
+.stocktake-table tr:last-child td {
+  border-bottom: none;
+}
+.stocktake-table tr td:last-child {
+  border-right: none;
+}
+.combo-row {
+  background: linear-gradient(90deg, #00796b 60%, #00aeef 100%) !important;
+  color: #fff !important;
+  font-weight: bold;
+}
+.combo-comp-row td {
+  background: #102a38 !important;
+  color: #00aeef !important;
+  font-style: italic;
+}
+.stocktake-title {
+  color: #00aeef;
+  font-size: 2em;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+.stocktake-bg {
+  background: #0a2233;
+  min-height: 100vh;
+  padding: 32px 0 0 0;
+}
+.stocktake-period-info {
+  color: #eaffea;
+  font-size: 1.08em;
+  margin-bottom: 12px;
+}
+.stocktake-select {
+  background: #143a2a;
+  color: #00aeef;
+  border: 1px solid #00aeef;
   border-radius: 6px;
-  font-weight: 600;
-  box-shadow: 0 1px 4px #0003;
+  padding: 6px 12px;
+  font-size: 1em;
+  margin-left: 8px;
+}
+.stocktake-loading {
+  color: #00aeef;
+  font-size: 1.1em;
+  margin-top: 18px;
+}
+.export-btn {
+  background: #00aeef;
+  color: #fff;
+  border: none;
+  padding: 10px 24px;
+  margin-left: 24px;
+  border-radius: 6px;
   cursor: pointer;
+  font-weight: bold;
+  font-size: 1.08em;
+  box-shadow: 0 2px 8px #00aeef33;
   transition: background 0.2s, color 0.2s;
-  min-width: 120px;
 }
 .export-btn:hover {
-  background: #fff;
-  color: #00bfff;
-  border-color: #00bfff;
+  background: #00796b;
+  color: #fff;
 }
-
 .back-to-dashboard-btn {
   font-size: 0.95em;
   padding: 6px 18px;

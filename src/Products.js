@@ -2,6 +2,44 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./Products.css";
 import supabase from "./supabase";
+import * as XLSX from "xlsx";
+
+// Fields available for import mapping
+const productFields = [
+  // Products table
+  { value: "name", label: "Product Name", table: "products" },
+  { value: "sku", label: "SKU", table: "products" },
+  { value: "sku_type", label: "SKU Type (auto/manual)", table: "products" },
+  { value: "cost_price", label: "Cost Price", table: "products" },
+  { value: "price", label: "Standard Price", table: "products" },
+  { value: "promotional_price", label: "Promotional Price", table: "products" },
+  { value: "promo_start_date", label: "Promo Start Date", table: "products" },
+  { value: "promo_end_date", label: "Promo End Date", table: "products" },
+  { value: "currency", label: "Currency", table: "products" },
+  // Categories table
+  { value: "category_name", label: "Category Name", table: "categories" },
+  { value: "category_name_cat", label: "Category Name (alt)", table: "categories" },
+  // Locations table
+  { value: "location_name", label: "Location Name", table: "locations" },
+  { value: "address", label: "Location Address", table: "locations" },
+  { value: "city", label: "Location City", table: "locations" },
+  // Units table
+  { value: "unit_name", label: "Unit Name", table: "unit_of_measure" },
+  { value: "abbreviation", label: "Unit Abbreviation", table: "unit_of_measure" },
+  // Combos table
+  { value: "combo_name", label: "Combo Name", table: "combos" },
+  { value: "combo_price", label: "Combo Price", table: "combos" },
+  { value: "standard_price", label: "Combo Standard Price", table: "combos" },
+  { value: "promotional_price_combo", label: "Combo Promotional Price", table: "combos" },
+  { value: "promo_start_date_combo", label: "Combo Promo Start Date", table: "combos" },
+  { value: "promo_end_date_combo", label: "Combo Promo End Date", table: "combos" },
+  { value: "sku_combo", label: "Combo SKU", table: "combos" },
+  { value: "picture_url", label: "Combo Picture URL", table: "combos" },
+  // Combo Items (for future extension)
+  { value: "items", label: "Combo Items", table: "combo_items" },
+  // Ignore option
+  { value: "ignore", label: "Ignore Column", table: "ignore" },
+];
 
 const initialForm = {
   name: "",
@@ -20,6 +58,57 @@ const initialForm = {
 };
 
 function Products() {
+  // State for direct inventory edit modal
+  const [showInventoryModal, setShowInventoryModal] = useState(false);
+  const [inventoryEditProduct, setInventoryEditProduct] = useState(null);
+  const [inventoryEditQty, setInventoryEditQty] = useState('');
+  const [inventoryEditLocation, setInventoryEditLocation] = useState('');
+  const [inventoryEditError, setInventoryEditError] = useState('');
+  const [inventoryEditSaving, setInventoryEditSaving] = useState(false);
+
+  // Handler to open inventory modal
+  const openInventoryModal = (product) => {
+    setInventoryEditProduct(product);
+    setInventoryEditQty('');
+    setInventoryEditLocation('');
+    setInventoryEditError('');
+    setShowInventoryModal(true);
+  };
+
+  // Handler to save inventory edit
+  const handleInventoryEditSave = async () => {
+    setInventoryEditError('');
+    setInventoryEditSaving(true);
+    try {
+      if (!inventoryEditProduct || !inventoryEditLocation || inventoryEditQty === '') {
+        setInventoryEditError('Select location and enter quantity.');
+        setInventoryEditSaving(false);
+        return;
+      }
+      const qtyNum = Number(inventoryEditQty);
+      if (isNaN(qtyNum) || qtyNum < 0) {
+        setInventoryEditError('Enter a valid quantity (>= 0).');
+        setInventoryEditSaving(false);
+        return;
+      }
+      // Update or insert inventory for this product/location only
+      const { data: inv } = await supabase.from('inventory').select('id').eq('product_id', inventoryEditProduct.id).eq('location', inventoryEditLocation).single();
+      if (inv) {
+        await supabase.from('inventory').update({ quantity: qtyNum, updated_at: new Date() }).eq('id', inv.id);
+      } else {
+        await supabase.from('inventory').insert({ product_id: inventoryEditProduct.id, location: inventoryEditLocation, quantity: qtyNum, updated_at: new Date() });
+      }
+      setShowInventoryModal(false);
+      setInventoryEditProduct(null);
+      setInventoryEditQty('');
+      setInventoryEditLocation('');
+      setInventoryEditSaving(false);
+      fetchInventory();
+    } catch (err) {
+      setInventoryEditError('Failed to update inventory.');
+      setInventoryEditSaving(false);
+    }
+  };
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
@@ -32,12 +121,61 @@ function Products() {
   const [error, setError] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [search, setSearch] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [showMapping, setShowMapping] = useState(false);
+  const [sheetNames, setSheetNames] = useState([]);
+  const [selectedSheet, setSelectedSheet] = useState("");
+  const [importColumns, setImportColumns] = useState([]);
+  const [importRows, setImportRows] = useState([]);
+  const [columnMap, setColumnMap] = useState({});
+  const [workbook, setWorkbook] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchAll();
     fetchUnits();
     fetchInventory();
+
+    // Check for ?edit=ID in URL and load product for editing
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    if (editId) {
+      // Wait for products to load, then set editingId and form
+      const loadProduct = async () => {
+        // If products already loaded, use them
+        let product = products.find(p => String(p.id) === String(editId));
+        if (!product) {
+          // Fetch single product if not loaded
+          const { data } = await supabase
+            .from('products')
+            .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, product_locations(id, location_id), product_images(image_url)`)
+            .eq('id', editId)
+            .single();
+          product = data;
+        }
+        if (product) {
+          setForm({
+            name: product.name || "",
+            sku: product.sku || "",
+            sku_type: product.sku_type ? "auto" : "manual",
+            cost_price: product.cost_price || "",
+            price: product.price || "",
+            promotional_price: product.promotional_price || "",
+            promo_start_date: product.promo_start_date || "",
+            promo_end_date: product.promo_end_date || "",
+            currency: product.currency || "",
+            category_id: product.category_id || "",
+            unit_of_measure_id: product.unit_of_measure_id || "",
+            locations: product.product_locations ? product.product_locations.map((pl) => pl.location_id) : [],
+            image: null,
+          });
+          setEditingId(product.id);
+          setImageUrl(product.product_images && product.product_images[0] ? product.product_images[0].image_url : "");
+        }
+      };
+      loadProduct();
+    }
   }, []);
 
   const fetchInventory = async () => {
@@ -56,8 +194,12 @@ function Products() {
   const fetchAll = async () => {
     setLoading(true);
     try {
+      // Fetch products with product_locations and product_images
       const [{ data: products }, { data: categories }, { data: locations }] = await Promise.all([
-        supabase.from("products").select("id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at").order("created_at", { ascending: false }),
+        supabase
+          .from("products")
+          .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, product_locations(id, location_id), product_images(image_url)`)
+          .order("created_at", { ascending: false }),
         supabase.from("categories").select("id, name"),
         supabase.from("locations").select("id, name"),
       ]);
@@ -126,8 +268,8 @@ function Products() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() && !form.sku.trim() && !form.price) {
-      setError('Please enter at least one field (name, SKU, or price).');
+    if (!form.name.trim() && !form.sku.trim()) {
+      setError('Please enter at least one field (name or SKU).');
       return;
     }
     setSaving(true);
@@ -156,8 +298,8 @@ function Products() {
         name: form.name,
         sku: skuToUse,
         sku_type: form.sku_type === "auto",
-        cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
-        price: form.price ? parseFloat(form.price) : null,
+        cost_price: form.cost_price ? parseFloat(form.cost_price) : 0,
+        price: form.price ? parseFloat(form.price) : 0,
         promotional_price: form.promotional_price ? parseFloat(form.promotional_price) : null,
         promo_start_date: form.promo_start_date || null,
         promo_end_date: form.promo_end_date || null,
@@ -225,22 +367,11 @@ function Products() {
     }
   };
 
-  // Filter products by search
-  const filteredProducts = products
-    .filter((product) => {
-      const searchLower = search.toLowerCase();
-      return (
-        product.name?.toLowerCase().includes(searchLower) ||
-        product.sku?.toLowerCase().includes(searchLower) ||
-        (categories.find((c) => c.id === product.category_id)?.name?.toLowerCase().includes(searchLower))
-      );
-    })
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
   // All actions always accessible
   const canAdd = true;
   const canEdit = true;
   const canDelete = true;
+
 
   return (
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
@@ -265,7 +396,6 @@ function Products() {
               <option key={unit.id} value={unit.id}>{unit.name}{unit.abbreviation ? ` (${unit.abbreviation})` : ''}</option>
             ))}
           </select>
-
           {/* Auto SKU, SKU, Product Name, Cost Price */}
           <select name="sku_type" value={form.sku_type} onChange={handleChange}>
             <option value="auto">Auto SKU</option>
@@ -273,18 +403,13 @@ function Products() {
           </select>
           <input name="sku" type="text" placeholder="SKU (leave blank for auto)" value={form.sku} onChange={handleChange} />
           <input name="name" type="text" placeholder="Product Name" value={form.name} onChange={handleChange} required />
-          <input name="cost_price" type="number" step="0.01" placeholder="Cost Price" value={form.cost_price} onChange={handleChange} />
-
+          <input name="cost_price" type="number" step="0.01" placeholder="Cost Price (optional)" value={form.cost_price} onChange={handleChange} />
           {/* Standard Price, Promotional Price, Promo Start, Promo End */}
-          <input name="price" type="number" step="0.01" placeholder="Standard Price" value={form.price} onChange={handleChange} />
+          <input name="price" type="number" step="0.01" placeholder="Standard Price (optional)" value={form.price} onChange={handleChange} />
           <input name="promotional_price" type="number" step="0.01" placeholder="Promotional Price" value={form.promotional_price} onChange={handleChange} />
           <input name="promo_start_date" type="date" value={form.promo_start_date} onChange={handleChange} className="from-date" />
           <input name="promo_end_date" type="date" value={form.promo_end_date} onChange={handleChange} className="to-date" />
         </div>
-        <div className="form-grid-search-row">
-          <input className="products-search-bar" type="text" placeholder="Search products by name, SKU, or category..." value={search} onChange={e => setSearch(e.target.value)} style={{marginBottom: 0}} />
-        </div>
-        {/* Removed duplicate locations-checkbox-row using selectedLocations and handleLocationChange */}
         {/* Locations, Image, Actions */}
         <div className="form-row" style={{display: 'flex', alignItems: 'flex-start', minHeight: '120px', width: '100%'}}>
           <div className="locations-checkbox-group" style={{display: 'flex', flexDirection: 'row', gap: '2rem', justifyContent: 'flex-start', alignItems: 'center', flexWrap: 'wrap'}}>
@@ -327,69 +452,8 @@ function Products() {
         </div>
       </form>
       {error && <div className="products-error">{error}</div>}
-      {/* Table moved directly below the checkboxes/image row, and only shows last entered product unless searching */}
-      <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflowX: 'auto', maxHeight: 'none'}}>
-        {/* Show only 2 products, and make sure both rows are visible by setting maxHeight and overflowY */}
-        {loading ? (
-          <div>Loading...</div>
-        ) : filteredProducts.length === 0 ? (
-          <div>No products found.</div>
-        ) : (
-          <div style={{maxHeight: 300, overflowY: 'auto', width: '100%'}}>
-            <table style={{width: '100%', minWidth: 900, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
-            <thead>
-              <tr style={{background: '#23272f'}}>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Image</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'left'}}>Name</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>SKU</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Category</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Unit</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Stock Qty</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Price</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Promo</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Duration</th>
-                <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.slice(0, 1).map((product) => (
-                <tr key={product.id} style={{background: editingId === product.id ? '#1a222b' : 'inherit'}}>
-                  <td style={{textAlign: 'center'}}>
-                    {product.product_images && product.product_images[0] && (
-                      <img src={product.product_images[0].image_url} alt="Product" className="product-image-thumb" />
-                    )}
-                  </td>
-                  <td style={{textAlign: 'left'}}>{product.name}</td>
-                  <td style={{textAlign: 'center'}}>{product.sku || '(auto)'}</td>
-                  <td style={{textAlign: 'center'}}>{categories.find((c) => c.id === product.category_id)?.name || '-'}</td>
-                  <td style={{textAlign: 'center'}}>{units.find((u) => u.id === product.unit_of_measure_id)?.abbreviation || units.find((u) => u.id === product.unit_of_measure_id)?.name || '-'}</td>
-                  <td style={{textAlign: 'center'}}>{
-                    (() => {
-                      if (!inventory || inventory.length === 0) return <span style={{color:'#ff4d4f'}}>No inventory</span>;
-                      const matchingInventory = inventory.filter((inv) => inv.product_id === product.id);
-                      const totalQty = matchingInventory.reduce((sum, inv) => sum + (Number(inv.quantity) || 0), 0);
-                      return matchingInventory.length > 0 ? totalQty : '-';
-                    })()
-                  }</td>
-                  <td style={{textAlign: 'center'}}>
-                    {product.price ? product.price : '-'}
-                  </td>
-                  <td style={{textAlign: 'center'}}>
-                    {product.promotional_price ? product.promotional_price : '-'}
-                  </td>
-                  <td style={{textAlign: 'center'}}>
-                    {(product.promo_start_date && product.promo_end_date) ? `${product.promo_start_date} to ${product.promo_end_date}` : '-'}
-                  </td>
-                  <td style={{textAlign: 'center'}}>
-                    {canEdit && <button className="edit-btn" onClick={() => handleEdit(product)} disabled={saving}>Edit</button>}
-                    {canDelete && <button className="delete-btn" onClick={() => handleDelete(product.id)} disabled={saving}>Delete</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            </table>
-          </div>
-        )}
+      <div style={{marginTop: '2rem', color: '#e0e6ed', fontSize: '1.1rem'}}>
+        <b>To view all products, search, and filter by location, go to the <span style={{color:'#00b4d8'}}>Products List</span> page.</b>
       </div>
     </div>
   );

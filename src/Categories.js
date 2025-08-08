@@ -94,10 +94,12 @@ const Categories = () => {
     setEditingId(null);
   };
 
-  // Filter categories by search
-  const filteredCategories = categories.filter(cat =>
-    cat.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filter categories by search (show all if search is empty)
+  const filteredCategories = search.trim() === ''
+    ? categories
+    : categories.filter(cat =>
+        cat.name.toLowerCase().includes(search.toLowerCase())
+      );
 
   // All actions always accessible
   const canAdd = true;

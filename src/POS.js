@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
-import supabase from "./supabase";
+import { getMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
+import { FaCashRegister, FaUserPlus, FaPlus } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { FaCashRegister, FaPlus, FaSearch, FaUserPlus } from "react-icons/fa";
+import supabase from "./supabase";
 import "./POS.css";
-// Removed user permissions imports
-
-
 
 export default function POS() {
-  const navigate = useNavigate();
-  // All hooks at the top, before any return
+  // Place ALL hooks here, inside the function!
+  const [saleTypeFilter, setSaleTypeFilter] = useState('all');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [amountFilter, setAmountFilter] = useState('');
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -43,14 +43,8 @@ export default function POS() {
   const [showCustomProductModal, setShowCustomProductModal] = useState(false);
   const [customProductForm, setCustomProductForm] = useState({ name: '', price: '', qty: 1 });
   const [customProductError, setCustomProductError] = useState('');
-  // Removed userPermissions, actionsList, checkingUser, and user state for open access
-
-  // User check: always check localStorage in useEffect
-  // Removed user check and login redirect for open access
-
-
-
-
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [inventoryDeductedMsg, setInventoryDeductedMsg] = useState(""); // New state for inventory deducted message
 
   // Fetch locations and customers (only once)
   useEffect(() => {
@@ -59,45 +53,120 @@ export default function POS() {
   }, []);
 
 
-  // Fetch products and sets for selected location (always call the hook, handle logic inside)
+  // --- FIXED LOGIC BELOW ---
   useEffect(() => {
     if (!selectedLocation) {
       setProducts([]);
       setSets([]);
       return;
     }
-    // Fetch products and aggregate stock by product_id
-    supabase
-      .from("inventory")
-      .select("product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency), updated_at, created_at")
-      .eq("location", selectedLocation)
-      .then(({ data }) => {
-        const productMap = {};
-        (data || []).forEach(row => {
-          if (!row.product) return;
-          const pid = row.product.id;
-          const current = productMap[pid];
-          const rowTime = row.updated_at || row.created_at || '';
-          const currentTime = current ? (current.updated_at || current.created_at || '') : '';
-          if (!current || rowTime > currentTime) {
-            productMap[pid] = { ...row.product, stock: Number(row.quantity) || 0, updated_at: row.updated_at, created_at: row.created_at };
-          }
-        });
-        setProducts(Object.values(productMap));
+
+    async function fetchProductsAndSets() {
+      // Fetch inventory (with products joined)
+      const { data: invData } = await supabase
+        .from("inventory")
+        .select(
+          "product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency, product_locations(location_id))"
+        )
+        .eq("location", selectedLocation);
+
+      // Build productMap
+      const productMap = {};
+      (invData || []).forEach(row => {
+        if (!row.product) return;
+        const pid = row.product.id;
+        const locationIds = row.product.product_locations
+          ? row.product.product_locations.map(pl => pl.location_id)
+          : [];
+        if (!locationIds.includes(selectedLocation)) return;
+        productMap[pid] = {
+          ...row.product,
+          stock: Number(row.quantity) || 0,
+        };
       });
-    // Fetch sets/kits (combos)
-    supabase
-      .from("combo_inventory")
-      .select("combo_id, quantity, combo:combos(id, combo_name, sku, price:price, promotional_price, currency)")
-      .eq("location_id", selectedLocation)
-      .then(({ data }) => {
-        setSets((data || []).map(row => ({
-          ...row.combo,
-          stock: row.quantity,
-          isSet: true
-        })));
+      // Debug: print productMap after building
+      console.log('DEBUG productMap:', productMap);
+
+      // Fetch combos, combo_items
+      const { data: combosData, error: combosError } = await supabase
+        .from("combos")
+        .select("id, combo_name, sku, standard_price, promotional_price, combo_price, currency, combo_locations:combo_locations(location_id)");
+      // Debug: print combosData after fetching
+      console.log('DEBUG combosData:', combosData);
+      if (combosError) {
+        console.error('DEBUG combosError:', combosError.message);
+      }
+      const { data: comboItemsData } = await supabase
+        .from("combo_items")
+        .select("combo_id, product_id, quantity");
+      // Debug: print comboItemsData after fetching
+      console.log('DEBUG comboItemsData:', comboItemsData);
+
+      // Filter combos for this location
+      const combosForLocation = (combosData || []).filter(combo => {
+        const locationIds = Array.isArray(combo.combo_locations)
+          ? combo.combo_locations.map(cl => String(cl.location_id))
+          : [];
+        return locationIds.includes(String(selectedLocation));
       });
+      // Debug: print combosForLocation after filtering
+      console.log('DEBUG combosForLocation:', combosForLocation);
+      // Debug logs
+      console.log('DEBUG combosForLocation:', combosForLocation);
+      console.log('DEBUG comboItemsData:', comboItemsData);
+      // Centralized set inventory calculation
+      function getSetQty(comboId) {
+        const items = comboItemsData.filter(ci => String(ci.combo_id) === String(comboId));
+        const productStock = {};
+        Object.values(productMap).forEach(p => { productStock[p.id] = p.stock; });
+        return getMaxSetQty(items, productStock);
+      }
+
+      // Create filtered sets
+      const filteredSets = combosForLocation
+        .map(combo => {
+          const setQty = getSetQty(combo.id);
+          const usePrice = selectPrice(combo.promotional_price, combo.standard_price);
+          return {
+            ...combo,
+            price: usePrice,
+            currency: combo.currency ?? '',
+            stock: setQty,
+            isSet: true,
+          };
+        })
+        .filter(set => set.stock > 0);
+      // Debug log for filtered sets (after creation)
+      console.log('DEBUG filteredSets:', filteredSets);
+
+      setSets(filteredSets);
+
+      // Calculate used stock per product for sets
+      const usedStock = {};
+      filteredSets.forEach(set => {
+        const setQty = set.stock;
+        comboItemsData
+          .filter(ci => ci.combo_id === set.id)
+          .forEach(item => {
+            usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
+          });
+      });
+
+      // Show products only if there is excess stock after sets are accounted for
+      const filteredProducts = Object.values(productMap)
+        .map(p => {
+          const remainingStock = p.stock - (usedStock[p.id] || 0);
+          return remainingStock > 0 ? { ...p, stock: remainingStock } : null;
+        })
+        .filter(Boolean);
+
+      setProducts(filteredProducts);
+    }
+
+    fetchProductsAndSets();
   }, [selectedLocation]);
+  // --- END OF FIXED LOGIC ---
+
 
 
   // When customer changes, fetch laybys
@@ -114,26 +183,7 @@ export default function POS() {
   // Removed user and checkingUser checks for open access
 
   // Helper: get correct price (use promo if present and > 0, else use price if present and > 0)
-  const getBestPrice = (item) => {
-    // Defensive: handle null, undefined, empty string, string 'null', and string numbers
-    let std = item.price;
-    let promo = item.promotional_price;
-    if (std === null || std === undefined || std === '' || std === 'null') std = 0;
-    if (promo === null || promo === undefined || promo === '' || promo === 'null') promo = 0;
-    std = Number(std);
-    promo = Number(promo);
-    const hasStandard = !isNaN(std) && std > 0;
-    const hasPromo = !isNaN(promo) && promo > 0;
-    if (hasPromo) {
-      // Use promo if present and > 0
-      return promo;
-    } else if (hasStandard) {
-      // Use standard if promo is not present or not > 0
-      return std;
-    } else {
-      return 0;
-    }
-  };
+  const getBestPrice = (item) => selectPrice(item.promotional_price, item.price);
 
   // Add product or set to cart
   const addToCart = (item) => {
@@ -196,11 +246,12 @@ export default function POS() {
       setCustomerLoading(false);
       return;
     }
-    // Insert customer with TPIN, address, city
+    // Capitalize name before saving
+    const name = capitalizeWords(customerForm.name.trim());
     const { data, error } = await supabase
       .from("customers")
       .insert([{ 
-        name: customerForm.name.trim(), 
+        name,
         phone: customerForm.phone.trim(),
         tpin: customerForm.tpin.trim(),
         address: customerForm.address.trim(),
@@ -236,15 +287,17 @@ export default function POS() {
     e.preventDefault();
     setEditCustomerError("");
     setEditCustomerLoading(true);
-    if (!editCustomerForm.name.trim() && !editCustomerForm.phone.trim()) {
-      setEditCustomerError("Please enter at least one field (name or phone).");
+    if (!editCustomerForm.name.trim()) {
+      setEditCustomerError("Please enter a name or business name.");
       setEditCustomerLoading(false);
       return;
     }
+    // Capitalize name before saving
+    const name = capitalizeWords(editCustomerForm.name.trim());
     const { error } = await supabase
       .from("customers")
       .update({
-        name: editCustomerForm.name.trim(),
+        name,
         phone: editCustomerForm.phone.trim(),
         tpin: editCustomerForm.tpin.trim(),
         address: editCustomerForm.address.trim(),
@@ -254,7 +307,7 @@ export default function POS() {
     if (error) {
       setEditCustomerError(error.message);
     } else {
-      setCustomers((prev) => prev.map(c => c.id === editCustomerForm.id ? { ...c, ...editCustomerForm } : c));
+      setCustomers((prev) => prev.map(c => c.id === editCustomerForm.id ? { ...c, ...editCustomerForm, name } : c));
       setShowEditCustomerModal(false);
       // If the edited customer is selected, update their info
       if (selectedCustomer === editCustomerForm.id) {
@@ -271,6 +324,123 @@ export default function POS() {
 
 
   // Handle checkout (Supabase integration, supports partial payments/layby)
+  // --- Restore inventory logic ---
+  // Restore inventory for all products in a layby
+  const restoreInventoryForLayby = async (laybyId) => {
+    // Get sale_id and location_id from layby and sale
+    const { data: laybyData, error: laybyError } = await supabase
+      .from('laybys')
+      .select('sale_id')
+      .eq('id', laybyId)
+      .single();
+    if (laybyError || !laybyData || !laybyData.sale_id) return;
+    const saleId = laybyData.sale_id;
+    // Get location_id from sale
+    const { data: saleRow, error: saleRowError } = await supabase
+      .from('sales')
+      .select('location_id')
+      .eq('id', saleId)
+      .single();
+    if (saleRowError || !saleRow || !saleRow.location_id) return;
+    const restoreLocation = saleRow.location_id;
+    // Get sale_items for this sale
+    const { data: saleItems } = await supabase
+      .from('sales_items')
+      .select('product_id, quantity, custom_name')
+      .eq('sale_id', saleId);
+    // Get combos for this location
+    const { data: combosData } = await supabase
+      .from('combos')
+      .select('id, combo_name, sku, standard_price, promotional_price, combo_price, currency, combo_locations:combo_locations(location_id)');
+    // Get combo_items
+    const { data: comboItemsData } = await supabase
+      .from('combo_items')
+      .select('combo_id, product_id, quantity');
+    // For each sale item, restore inventory
+    const promises = [];
+    for (const item of saleItems || []) {
+      if (!item.product_id) continue; // skip custom products
+      // Check if this product is part of a set (combo)
+      // If the sale was for a set, restore all products in the set
+      const combo = combosData && combosData.find(c => c.product_id === item.product_id);
+      if (combo) {
+        // Restore all products in the set
+        const comboIdInt = typeof combo.id === 'string' ? parseInt(combo.id, 10) : combo.id;
+        const setItems = comboItemsData.filter(ci => ci.combo_id === comboIdInt);
+        for (const setItem of setItems) {
+          promises.push((async () => {
+            const { data: invRows } = await supabase
+              .from('inventory')
+              .select('id, quantity')
+              .eq('product_id', setItem.product_id)
+              .eq('location', restoreLocation);
+            if (invRows && invRows.length > 0) {
+              const invId = invRows[0].id;
+              const newQty = (Number(invRows[0].quantity) || 0) + Number(setItem.quantity) * Number(item.quantity);
+              await supabase
+                .from('inventory')
+                .update({ quantity: newQty, updated_at: new Date().toISOString() })
+                .eq('id', invId);
+            } else {
+              await supabase
+                .from('inventory')
+                .insert([
+                  {
+                    product_id: setItem.product_id,
+                    location: restoreLocation,
+                    quantity: Number(setItem.quantity) * Number(item.quantity),
+                    updated_at: new Date().toISOString()
+                  }
+                ]);
+            }
+          })());
+        }
+      } else {
+        // Restore single product
+        promises.push((async () => {
+          const { data: invRows } = await supabase
+            .from('inventory')
+            .select('id, quantity')
+            .eq('product_id', item.product_id)
+            .eq('location', restoreLocation);
+          if (invRows && invRows.length > 0) {
+            const invId = invRows[0].id;
+            const newQty = (Number(invRows[0].quantity) || 0) + Number(item.quantity);
+            await supabase
+              .from('inventory')
+              .update({ quantity: newQty, updated_at: new Date().toISOString() })
+              .eq('id', invId);
+          } else {
+            await supabase
+              .from('inventory')
+              .insert([
+                {
+                  product_id: item.product_id,
+                  location: restoreLocation,
+                  quantity: Number(item.quantity),
+                  updated_at: new Date().toISOString()
+                }
+              ]);
+          }
+        })());
+      }
+    }
+    await Promise.all(promises);
+  };
+
+  // Restore inventory for all laybys of a customer
+  const restoreInventoryForCustomer = async (customerId) => {
+    // Get all laybys for customer
+    const { data: laybys } = await supabase
+      .from('laybys')
+      .select('id')
+      .eq('customer_id', customerId);
+    for (const layby of laybys || []) {
+      await restoreInventoryForLayby(layby.id);
+    }
+  };
+
+  // Handle checkout (Supabase integration, supports partial payments/layby)
   const handleCheckout = async () => {
     setCheckoutError("");
     setCheckoutSuccess("");
@@ -278,10 +448,37 @@ export default function POS() {
       setCheckoutError("Please select location, customer, and add products to cart.");
       return;
     }
+    // Accept both UUID and integer customer IDs
+    const customerObj = customers.find(c => String(c.id) === String(selectedCustomer));
+    const customerId = customerObj ? customerObj.id : null;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const intRegex = /^\d+$/;
+    if (!customerId || (!uuidRegex.test(String(customerId)) && !intRegex.test(String(customerId)))) {
+      setCheckoutError("Selected customer is not valid. Please select a valid customer.");
+      return;
+    }
     // Require receipt number
     if (!receiptNumber.trim()) {
       setCheckoutError("Please enter a receipt number.");
       return;
+    }
+    // Prevent selling more than available stock
+    for (const item of cart) {
+      if (item.isCustom) continue;
+      // Find product in products or sets
+      let availableStock = null;
+      if (item.isSet) {
+        // For sets, use sets array
+        const setObj = sets.find(s => s.id === item.id || s.id === (item.id && item.id.replace('set-', '')));
+        availableStock = setObj ? setObj.stock : null;
+      } else {
+        const prodObj = products.find(p => p.id === item.id);
+        availableStock = prodObj ? prodObj.stock : null;
+      }
+      if (availableStock !== null && item.qty > availableStock) {
+        setCheckoutError(`Cannot sell more than available stock for ${item.name}. Requested: ${item.qty}, Available: ${availableStock}`);
+        return;
+      }
     }
     // If paymentAmount is not set or 0, treat as layby/partial
     let payAmt = Number(paymentAmount);
@@ -291,59 +488,57 @@ export default function POS() {
     }
     if (!payAmt || payAmt === 0) payAmt = 0;
     setCheckoutLoading(true);
+
     try {
       let laybyId = null;
-      let saleIdValue = null;
-      // 1. If partial payment, create layby record first to get layby_id
+      let saleId = null;
+      // 1. If partial payment, create layby record first to get layby_id (UUID)
       if (payAmt < total) {
         const { data: laybyData, error: laybyError } = await supabase
           .from("laybys")
           .insert([
             {
-              customer_id: selectedCustomer,
+              customer_id: customerId,
               total_amount: total,
               paid_amount: payAmt,
               status: 'active',
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
             },
           ])
           .select();
         if (laybyError) throw laybyError;
-        laybyId = laybyData[0].id;
-      } else {
-        // For non-layby, generate a unique sale_id (e.g., SALE-<timestamp>-<random>)
-        saleIdValue = `SALE-${Date.now()}-${Math.floor(Math.random()*10000)}`;
+        laybyId = laybyData[0].id; // UUID
       }
 
-      // 2. Insert sale with all required columns
+      // 2. Insert sale with all required columns (let DB generate integer id)
       const { data: saleData, error: saleError } = await supabase
         .from("sales")
         .insert([
           {
-            customer_id: selectedCustomer,
+            customer_id: customerId,
             sale_date: date,
             total_amount: total,
             status: payAmt < total ? 'layby' : 'completed',
             updated_at: new Date().toISOString(),
             location_id: selectedLocation,
-            layby_id: laybyId,
+            layby_id: laybyId || null,
             currency: currency,
             discount: discountAmount,
-            sale_id: saleIdValue,
+            down_payment: payAmt,
             receipt_number: `#${receiptNumber.trim().replace(/^#*/, "")}`,
           },
         ])
         .select();
       if (saleError) throw saleError;
-      const saleId = saleData[0].id;
+      saleId = saleData[0].id; // integer
 
       // 3. Update layby with sale_id if layby was created
       if (laybyId) {
         await supabase.from("laybys").update({ sale_id: saleId }).eq("id", laybyId);
       }
 
-      // 4. Insert sale_items
+      // 4. Insert sale_items (use integer saleId)
       const saleItems = cart.map((item) => (
         item.isCustom
           ? {
@@ -365,12 +560,13 @@ export default function POS() {
       const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
       if (itemsError) throw itemsError;
 
-      // 5. Insert payment (partial or full)
+      // 5. Insert payment (partial or full, use integer saleId)
+      const paymentType = payAmt < total ? 'layby' : 'cash';
       const { error: payError } = await supabase.from("sales_payments").insert([
         {
           sale_id: saleId,
           amount: payAmt,
-          payment_type: 'cash', // or allow user to select in future
+          payment_type: paymentType,
           currency,
           payment_date: new Date().toISOString(),
         },
@@ -378,62 +574,211 @@ export default function POS() {
       if (payError) throw payError;
 
       setCheckoutSuccess("Sale completed successfully!");
-        // 6. Deduct inventory for each product in the cart at the selected location
+      // Deduct inventory ONLY for completed sales (not layby/partial)
+      if (payAmt >= total) {
         for (const item of cart) {
           if (item.isCustom) continue; // Skip inventory for custom products/services
-          // Defensive: skip if item.id or selectedLocation is missing
           if (!item.id || !selectedLocation) continue;
-          // ...existing code for inventory and product_locations...
-          const { data: invRows, error: invError } = await supabase
-            .from('inventory')
-            .select('id, quantity')
-            .eq('product_id', item.id)
-            .eq('location', selectedLocation);
-          if (invError) throw invError;
-          if (invRows && invRows.length > 0) {
-            const invId = invRows[0].id;
-            const newQty = Math.max(0, (Number(invRows[0].quantity) || 0) - Number(item.qty));
-            const { error: updateError } = await supabase
-              .from('inventory')
-              .update({ quantity: newQty, updated_at: new Date().toISOString() })
-              .eq('id', invId);
-            if (updateError) throw updateError;
+          if (item.isSet) {
+            // Deduct inventory for all products in the set
+            // Find combo_items for this set
+            const comboIdInt = typeof item.id === 'string' ? parseInt(item.id.replace('set-', ''), 10) : item.id;
+            const { data: comboItemsData, error: comboItemsError } = await supabase
+              .from('combo_items')
+              .select('product_id, quantity')
+              .eq('combo_id', comboIdInt);
+            if (comboItemsError) throw comboItemsError;
+            for (const comboItem of comboItemsData || []) {
+              // Deduct comboItem.quantity * item.qty from inventory for each product in the set
+              const { data: invRows, error: invError } = await supabase
+                .from('inventory')
+                .select('id, quantity')
+                .eq('product_id', comboItem.product_id)
+                .eq('location', selectedLocation);
+              if (invError) throw invError;
+              const deductQty = Number(comboItem.quantity) * Number(item.qty);
+              if (invRows && invRows.length > 0) {
+                const invId = invRows[0].id;
+                const newQty = Math.max(0, (Number(invRows[0].quantity) || 0) - deductQty);
+                const { error: updateError } = await supabase
+                  .from('inventory')
+                  .update({ quantity: newQty, updated_at: new Date().toISOString() })
+                  .eq('id', invId);
+                if (updateError) throw updateError;
+              } else {
+                const { error: insertError } = await supabase
+                  .from('inventory')
+                  .insert([
+                    {
+                      product_id: comboItem.product_id,
+                      location: selectedLocation,
+                      quantity: Math.max(0, 0 - deductQty),
+                      updated_at: new Date().toISOString()
+                    }
+                  ]);
+                if (insertError) throw insertError;
+              }
+              // Ensure product_locations exists
+              const { data: prodLocRows, error: prodLocError } = await supabase
+                .from('product_locations')
+                .select('id')
+                .eq('product_id', comboItem.product_id)
+                .eq('location_id', selectedLocation);
+              if (prodLocError) throw prodLocError;
+              if (!prodLocRows || prodLocRows.length === 0) {
+                const { error: insertProdLocError } = await supabase
+                  .from('product_locations')
+                  .insert([
+                    {
+                      product_id: comboItem.product_id,
+                      location_id: selectedLocation
+                    }
+                  ]);
+                if (insertProdLocError) throw insertProdLocError;
+              }
+            }
           } else {
-            const { error: insertError } = await supabase
+            // Deduct inventory for single product
+            const { data: invRows, error: invError } = await supabase
               .from('inventory')
-              .insert([
-                {
-                  product_id: item.id,
-                  location: selectedLocation,
-                  quantity: Math.max(0, 0 - Number(item.qty)),
-                  updated_at: new Date().toISOString()
-                }
-              ]);
-            if (insertError) throw insertError;
-          }
-          const { data: prodLocRows, error: prodLocError } = await supabase
-            .from('product_locations')
-            .select('id')
-            .eq('product_id', item.id)
-            .eq('location_id', selectedLocation);
-          if (prodLocError) throw prodLocError;
-          if (!prodLocRows || prodLocRows.length === 0) {
-            const { error: insertProdLocError } = await supabase
+              .select('id, quantity')
+              .eq('product_id', item.id)
+              .eq('location', selectedLocation);
+            if (invError) throw invError;
+            if (invRows && invRows.length > 0) {
+              const invId = invRows[0].id;
+              const newQty = Math.max(0, (Number(invRows[0].quantity) || 0) - Number(item.qty));
+              const { error: updateError } = await supabase
+                .from('inventory')
+                .update({ quantity: newQty, updated_at: new Date().toISOString() })
+                .eq('id', invId);
+              if (updateError) throw updateError;
+            } else {
+              const { error: insertError } = await supabase
+                .from('inventory')
+                .insert([
+                  {
+                    product_id: item.id,
+                    location: selectedLocation,
+                    quantity: Math.max(0, 0 - Number(item.qty)),
+                    updated_at: new Date().toISOString()
+                  }
+                ]);
+              if (insertError) throw insertError;
+            }
+            // Ensure product_locations exists
+            const { data: prodLocRows, error: prodLocError } = await supabase
               .from('product_locations')
-              .insert([
-                {
-                  product_id: item.id,
-                  location_id: selectedLocation
-                }
-              ]);
-            if (insertProdLocError) throw insertProdLocError;
+              .select('id')
+              .eq('product_id', item.id)
+              .eq('location_id', selectedLocation);
+            if (prodLocError) throw prodLocError;
+            if (!prodLocRows || prodLocRows.length === 0) {
+              const { error: insertProdLocError } = await supabase
+                .from('product_locations')
+                .insert([
+                  {
+                    product_id: item.id,
+                    location_id: selectedLocation
+                  }
+                ]);
+              if (insertProdLocError) throw insertProdLocError;
+            }
           }
         }
+      }
+      // After checkout, refresh products and sets to update stock
       setCart([]);
       setPaymentAmount(0);
       setReceiptNumber("");
       // Optionally, refresh laybys for this customer
       fetchCustomerLaybys(selectedCustomer);
+      // Refresh products and sets for selected location
+      if (selectedLocation) {
+        // Re-run fetchProductsAndSets logic
+        // Use same logic as useEffect for selectedLocation
+        async function refreshProductsAndSets() {
+          const { data: invData } = await supabase
+            .from("inventory")
+            .select(
+              "product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency, product_locations(location_id))"
+            )
+            .eq("location", selectedLocation);
+          const productMap = {};
+          (invData || []).forEach(row => {
+            if (!row.product) return;
+            const pid = row.product.id;
+            const locationIds = row.product.product_locations
+              ? row.product.product_locations.map(pl => pl.location_id)
+              : [];
+            if (!locationIds.includes(selectedLocation)) return;
+            productMap[pid] = {
+              ...row.product,
+              stock: Number(row.quantity) || 0,
+            };
+          });
+          const { data: combosData } = await supabase
+            .from("combos")
+            .select("id, combo_name, sku, standard_price, promotional_price, combo_price, currency, combo_locations:combo_locations(location_id)");
+          const { data: comboItemsData } = await supabase
+            .from("combo_items")
+            .select("combo_id, product_id, quantity");
+          const combosForLocation = (combosData || []).filter(combo => {
+            const locationIds = Array.isArray(combo.combo_locations)
+              ? combo.combo_locations.map(cl => String(cl.location_id))
+              : [];
+            return locationIds.includes(String(selectedLocation));
+          });
+          function getMaxSetQty(comboId) {
+            const comboIdInt = typeof comboId === 'string' ? parseInt(comboId, 10) : comboId;
+            const items = comboItemsData.filter(ci => {
+              const ciComboIdInt = typeof ci.combo_id === 'string' ? parseInt(ci.combo_id, 10) : ci.combo_id;
+              return ciComboIdInt === comboIdInt;
+            });
+            if (!items.length) return 0;
+            let minQty = Infinity;
+            for (const item of items) {
+              const prod = productMap[item.product_id];
+              const stock = prod ? prod.stock : 0;
+              if (stock < item.quantity)
+              minQty = Math.min(minQty, Math.floor(stock / item.quantity));
+            }
+            return minQty;
+          }
+          const filteredSets = combosForLocation
+            .map(combo => {
+              const setQty = getMaxSetQty(combo.id);
+              return {
+                ...combo,
+                price: combo.combo_price ?? combo.standard_price ?? 0,
+                promotional_price: combo.promotional_price ?? 0,
+                currency: combo.currency ?? '',
+                stock: setQty,
+                isSet: true,
+              };
+            })
+            .filter(set => set.stock > 0);
+          setSets(filteredSets);
+          // Calculate used stock per product for sets
+          const usedStock = {};
+          filteredSets.forEach(set => {
+            const setQty = set.stock;
+            comboItemsData
+              .filter(ci => ci.combo_id === set.id)
+              .forEach(item => {
+                usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
+              });
+          });
+          const filteredProducts = Object.values(productMap)
+            .map(p => {
+              const remainingStock = p.stock - (usedStock[p.id] || 0);
+              return remainingStock > 0 ? { ...p, stock: remainingStock } : null;
+            })
+            .filter(Boolean);
+          setProducts(filteredProducts);
+        }
+        await refreshProductsAndSets();
+      }
     } catch (err) {
       setCheckoutError(err.message || "Checkout failed.");
     }
@@ -451,12 +796,238 @@ export default function POS() {
     setCustomerLaybys(data || []);
   };
 
+  // Delete sale and restore inventory
+  const deleteSale = async (saleId) => {
+    setCheckoutError("");
+    setCheckoutSuccess("");
+    setDeleteLoading(true);
+    try {
+      // 1. Restore inventory for all products in the sale
+      const { data: saleItems, error: saleItemsError } = await supabase
+        .from('sales_items')
+        .select('product_id, quantity')
+        .eq('sale_id', saleId);
+      if (saleItemsError) throw saleItemsError;
+      for (const item of saleItems || []) {
+        if (!item.product_id) continue;
+        // Update inventory quantity for each product
+        const { data: invRows, error: invError } = await supabase
+          .from('inventory')
+          .select('id, quantity')
+          .eq('product_id', item.product_id);
+        if (invError) throw invError;
+        if (invRows && invRows.length > 0) {
+          const invId = invRows[0].id;
+          const newQty = (Number(invRows[0].quantity) || 0) + Number(item.quantity);
+          const { error: updateError } = await supabase
+            .from('inventory')
+            .update({ quantity: newQty, updated_at: new Date().toISOString() })
+            .eq('id', invId);
+          if (updateError) throw updateError;
+        }
+      }
+      // 2. Delete layby if exists
+      await supabase.from('laybys').delete().eq('sale_id', saleId);
+      // 3. Delete sale
+      await supabase.from('sales').delete().eq('id', saleId);
+      // 4. Delete sales_items and sales_payments for cleanup
+      await supabase.from('sales_items').delete().eq('sale_id', saleId);
+      await supabase.from('sales_payments').delete().eq('sale_id', saleId);
+      // 5. Refresh laybys and products for UI
+      await fetchCustomerLaybys(selectedCustomer);
+      if (selectedLocation) {
+        // Re-run fetchProductsAndSets logic
+        async function refreshProductsAndSets() {
+          const { data: invData } = await supabase
+            .from("inventory")
+            .select(
+              "product_id, quantity, product:products(id, name, sku, price:price, promotional_price, currency, product_locations(location_id))"
+            )
+            .eq("location", selectedLocation);
+          const productMap = {};
+          (invData || []).forEach(row => {
+            if (!row.product) return;
+            const pid = row.product.id;
+            const locationIds = row.product.product_locations
+              ? row.product.product_locations.map(pl => pl.location_id)
+              : [];
+            if (!locationIds.includes(selectedLocation)) return;
+            productMap[pid] = {
+              ...row.product,
+              stock: Number(row.quantity) || 0,
+            };
+          });
+          const { data: combosData } = await supabase
+            .from("combos")
+            .select("id, combo_name, sku, standard_price, promotional_price, combo_price, currency, combo_locations:combo_locations(location_id)");
+          const { data: comboItemsData } = await supabase
+            .from("combo_items")
+            .select("combo_id, product_id, quantity");
+          const combosForLocation = (combosData || []).filter(combo => {
+            const locationIds = Array.isArray(combo.combo_locations)
+              ? combo.combo_locations.map(cl => String(cl.location_id))
+              : [];
+            return locationIds.includes(String(selectedLocation));
+          });
+          function getMaxSetQty(comboId) {
+            const comboIdInt = typeof comboId === 'string' ? parseInt(comboId, 10) : comboId;
+            const items = comboItemsData.filter(ci => {
+              const ciComboIdInt = typeof ci.combo_id === 'string' ? parseInt(ci.combo_id, 10) : ci.combo_id;
+              return ciComboIdInt === comboIdInt;
+            });
+            if (!items.length) return 0;
+            let minQty = Infinity;
+            for (const item of items) {
+              const prod = productMap[item.product_id];
+              const stock = prod ? prod.stock : 0;
+              if (stock < item.quantity)
+              minQty = Math.min(minQty, Math.floor(stock / item.quantity));
+            }
+            return minQty;
+          }
+          const filteredSets = combosForLocation
+            .map(combo => {
+              const setQty = getMaxSetQty(combo.id);
+              return {
+                ...combo,
+                price: combo.combo_price ?? combo.standard_price ?? 0,
+                promotional_price: combo.promotional_price ?? 0,
+                currency: combo.currency ?? '',
+                stock: setQty,
+                isSet: true,
+              };
+            })
+            .filter(set => set.stock > 0);
+          setSets(filteredSets);
+          // Calculate used stock per product for sets
+          const usedStock = {};
+          filteredSets.forEach(set => {
+            const setQty = set.stock;
+            comboItemsData
+              .filter(ci => ci.combo_id === set.id)
+              .forEach(item => {
+                usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
+              });
+          });
+          const filteredProducts = Object.values(productMap)
+            .map(p => {
+              const remainingStock = p.stock - (usedStock[p.id] || 0);
+              return remainingStock > 0 ? { ...p, stock: remainingStock } : null;
+            })
+            .filter(Boolean);
+          setProducts(filteredProducts);
+        }
+        await refreshProductsAndSets();
+      }
+      setCheckoutSuccess("Sale deleted and inventory restored.");
+    } catch (err) {
+      setCheckoutError(err.message || "Failed to delete sale.");
+    }
+    setDeleteLoading(false);
+  };
+
+  // Delete layby and restore inventory
+  // Robust layby deletion: restore inventory, delete sales, delete layby
+  const deleteLayby = async (laybyId) => {
+    setCheckoutError("");
+    setCheckoutSuccess("");
+    setDeleteLoading(true);
+    try {
+      // 1. Restore inventory for this layby
+      await restoreInventoryForLayby(laybyId);
+      // 2. Find all sales referencing this layby
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('id')
+        .eq('layby_id', laybyId);
+      if (salesError) throw salesError;
+      let allSaleIds = salesData ? salesData.map(s => s.id) : [];
+      // 3. Delete sales_items, sales_payments, then sales
+      if (allSaleIds.length > 0) {
+        // Delete sales_items
+        const { error: itemsDeleteError } = await supabase.from('sales_items').delete().in('sale_id', allSaleIds);
+        if (itemsDeleteError) throw itemsDeleteError;
+        // Delete sales_payments
+        const { error: paymentsDeleteError } = await supabase.from('sales_payments').delete().in('sale_id', allSaleIds);
+        if (paymentsDeleteError) throw paymentsDeleteError;
+        // Delete sales
+        const { error: salesDeleteError } = await supabase.from('sales').delete().in('id', allSaleIds);
+        if (salesDeleteError) throw salesDeleteError;
+      }
+      // 4. Delete layby record
+      const { error: laybyDeleteError } = await supabase.from('laybys').delete().eq('id', laybyId);
+      if (laybyDeleteError) throw laybyDeleteError;
+      await fetchCustomerLaybys(selectedCustomer);
+      setCheckoutSuccess("Layby and related sales deleted, inventory restored.");
+    } catch (err) {
+      setCheckoutError(err.message || "Failed to delete layby.");
+    }
+    setDeleteLoading(false);
+  };
+
+  // Delete customer and restore inventory for all their laybys
+  // Robust customer deletion: restore inventory, delete laybys, delete sales, then customer
+  const deleteCustomer = async (customerId) => {
+    setCheckoutError("");
+    try {
+      // 1. Restore inventory for all laybys
+      await restoreInventoryForCustomer(customerId);
+      // 2. Find all laybys for customer
+      const { data: laybys } = await supabase.from('laybys').select('id').eq('customer_id', customerId);
+      for (const layby of laybys || []) {
+        await deleteLayby(layby.id);
+      }
+      // 3. Find all sales for customer (not layby)
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('id')
+        .eq('customer_id', customerId);
+      if (salesError) throw salesError;
+      let allSaleIds = salesData ? salesData.map(s => s.id) : [];
+      if (allSaleIds.length > 0) {
+        // Delete sales_items
+        const { error: itemsDeleteError } = await supabase.from('sales_items').delete().in('sale_id', allSaleIds);
+        if (itemsDeleteError) throw itemsDeleteError;
+        // Delete sales_payments
+        const { error: paymentsDeleteError } = await supabase.from('sales_payments').delete().in('sale_id', allSaleIds);
+        if (paymentsDeleteError) throw paymentsDeleteError;
+        // Delete sales
+        const { error: salesDeleteError } = await supabase.from('sales').delete().in('id', allSaleIds);
+        if (salesDeleteError) throw salesDeleteError;
+      }
+      // 4. Delete customer
+      await supabase.from('customers').delete().eq('id', customerId);
+      setCustomers(customers.filter(c => c.id !== customerId));
+      setSelectedCustomer("");
+      setCheckoutSuccess("Customer, laybys, and sales deleted, inventory restored.");
+    } catch (err) {
+      setCheckoutError(err.message || "Failed to delete customer.");
+    }
+  };
+
 
 
   // All actions always accessible
   const canAdd = true;
   const canEdit = true;
   const canDelete = true;
+
+  // Filter products and sets by search
+  const searchValue = search.trim().toLowerCase();
+  const filteredProducts = products.filter(product => {
+  if (!searchValue) return true;
+  return (
+    (product.name && product.name.toLowerCase().includes(searchValue)) ||
+    (product.sku && product.sku.toLowerCase().includes(searchValue))
+  );
+  });
+  const filteredSets = sets.filter(set => {
+  if (!searchValue) return true;
+  return (
+    (set.combo_name && set.combo_name.toLowerCase().includes(searchValue)) ||
+    (set.sku && set.sku.toLowerCase().includes(searchValue))
+  );
+  });
 
   return (
     <div className="pos-container">
@@ -545,31 +1116,33 @@ export default function POS() {
           style={{ fontSize: '0.95rem', height: 38, minHeight: 38, maxHeight: 38, flex: 1, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', marginLeft: 0 }}
         />
       </div>
+      {/* Product/set cards above the table */}
       <div className="pos-products" style={{ gap: 0 }}>
-        {/* Only show products/sets if search is not empty */}
-        {search.trim() && [
-          ...products.filter(p =>
-            p.name.toLowerCase().includes(search.toLowerCase()) ||
-            (p.sku || "").toLowerCase().includes(search.toLowerCase())
-          ).map(product => (
-            <button key={product.id} className="pos-product-btn" onClick={() => addToCart(product)}>
+        {/* Always show all matching products/sets, no limit applied */}
+        {[
+          ...filteredProducts.map(product => (
+            <button
+              key={product.id}
+              className="pos-product-btn"
+              onClick={() => addToCart(product)}
+            >
               {product.name} ({product.sku})<br />Stock: {product.stock}<br />
               <b>Price: {getBestPrice(product).toFixed(2)} {product.currency || currency}</b>
               <div style={{fontSize:'0.8em',color:'#aaa'}}>std: {String(product.price)} | promo: {String(product.promotional_price)}</div>
             </button>
           )),
-          ...sets.filter(s =>
-            (s.combo_name || "").toLowerCase().includes(search.toLowerCase()) ||
-            (s.sku || "").toLowerCase().includes(search.toLowerCase())
-          ).map(set => (
-            <button key={"set-" + set.id} className="pos-product-btn" onClick={() => addToCart(set)}>
-              {set.combo_name} (Set) ({set.sku})<br />Stock: {set.stock}<br />
+          ...filteredSets.map(set => (
+            <button
+              key={"set-" + set.id}
+              className="pos-product-btn"
+              onClick={() => addToCart(set)}
+            >
+              {set.combo_name} (Set) ({set.sku})<br />
+              <span style={{color:'#00b4d8',fontWeight:'bold'}}>Stock: {set.stock}</span><br />
               <b>Price: {getBestPrice(set).toFixed(2)} {set.currency || currency}</b>
             </button>
           ))
         ]}
-        {/* Show a message if no search */}
-        {/* No message or spacer when search is empty; table will move up */}
       </div>
       <table className="pos-table" style={{ fontSize: '0.95rem', marginTop: '-85px' }}>
         <thead>
@@ -585,7 +1158,10 @@ export default function POS() {
           {cart.map((item, idx) => (
             <tr key={idx}>
               <td className="text-col" style={{ padding: 4 }}>{item.sku || (item.isCustom ? '-' : '')}</td>
-              <td className="text-col" style={{ padding: 4 }}>{item.name}{item.isCustom && <span style={{ color: '#00b4d8', fontSize: '0.9em', marginLeft: 4 }}>(Custom)</span>}</td>
+              <td className="text-col" style={{ padding: 4 }}>
+                {item.name}{item.isCustom && <span style={{ color: '#00b4d8', fontSize: '0.9em', marginLeft: 4 }}>(Custom)</span>}
+                {item.isSet && <span style={{ color: '#00b4d8', fontSize: '0.9em', marginLeft: 8 }}>(Stock: {item.stock})</span>}
+              </td>
               <td className="num-col" style={{ padding: 4 }}><input type="number" min="1" max={item.stock || 9999} value={item.qty} onChange={e => updateCartItem(idx, { qty: Number(e.target.value) })} style={{ width: 48, fontSize: '0.95rem', height: 24, textAlign: 'center' }} /></td>
               <td className="num-col" style={{ padding: 4 }}>{Number(item.price).toFixed(2)}</td>
               <td className="action-col" style={{ padding: 4, display: 'flex', gap: 4 }}>
@@ -692,10 +1268,31 @@ export default function POS() {
             : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout")}
         </button>
       </div>
-      {/* Show layby history for customer */}
+      {/* Sales/Layby search/filter section */}
       {customerLaybys.length > 0 && (
         <div style={{ margin: '24px 0', background: '#23272f', borderRadius: 8, padding: 16 }}>
           <h4 style={{ color: '#00b4d8', margin: 0, marginBottom: 8 }}>Layby / Partial Payment History</h4>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+            <select value={saleTypeFilter} onChange={e => setSaleTypeFilter(e.target.value)} style={{ fontSize: 15, borderRadius: 6, padding: '2px 8px' }}>
+              <option value="all">All Types</option>
+              <option value="completed">Completed</option>
+              <option value="layby">Layby</option>
+              <option value="active">Active</option>
+            </select>
+            <select value={customerFilter} onChange={e => setCustomerFilter(e.target.value)} style={{ fontSize: 15, borderRadius: 6, padding: '2px 8px' }}>
+              <option value="all">All Customers</option>
+              {customers.map(c => (
+                <option key={c.id} value={String(c.id)}>{c.name} ({c.phone})</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              placeholder="Amount (min)"
+              value={amountFilter}
+              onChange={e => setAmountFilter(e.target.value)}
+              style={{ fontSize: 15, borderRadius: 6, padding: '2px 8px', width: 120 }}
+            />
+          </div>
           <table style={{ width: '100%', color: '#fff', fontSize: 15 }}>
             <thead>
               <tr style={{ color: '#00b4d8' }}>
@@ -705,120 +1302,51 @@ export default function POS() {
                 <th>Paid</th>
                 <th>Balance</th>
                 <th className="customer-col">Customer</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {customerLaybys.map(l => {
-                const customer = customers.find(c => c.id === selectedCustomer);
-                return (
+              {customerLaybys
+                .filter(l => {
+                  // Sale type filter
+                  if (saleTypeFilter !== 'all' && l.status !== saleTypeFilter) return false;
+                  // Customer filter
+                  if (customerFilter !== 'all' && String(l.customer_id) !== String(customerFilter)) return false;
+                  // Amount filter (min total)
+                  if (amountFilter && Number(l.total_amount) < Number(amountFilter)) return false;
+                  return true;
+                })
+                .map(l => (
                   <tr key={l.id}>
                     <td>{new Date(l.created_at).toLocaleDateString()}</td>
                     <td>{l.status}</td>
-                    <td>{l.total_amount}</td>
-                    <td>{l.paid_amount}</td>
-                    <td>{(l.total_amount - l.paid_amount).toFixed(2)}</td>
-                    <td className="customer-col">{customer ? customer.name : ''}</td>
+                    <td>{Number(l.total_amount).toFixed(2)}</td>
+                    <td>{Number(l.paid_amount).toFixed(2)}</td>
+                    <td>{(Number(l.total_amount) - Number(l.paid_amount)).toFixed(2)}</td>
+                    <td>{customers.find(c => String(c.id) === String(l.customer_id))?.name || '-'}</td>
+                    <td></td>
                   </tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
         </div>
       )}
       {checkoutError && <div style={{ color: "#ff5252", marginBottom: 10 }}>{checkoutError}</div>}
       {checkoutSuccess && <div style={{ color: "#4caf50", marginBottom: 10 }}>{checkoutSuccess}</div>}
+      {inventoryDeductedMsg && <div style={{ color: "#2196f3", marginBottom: 10 }}>{inventoryDeductedMsg}</div>}
 
       {/* Customer Modal */}
       {showCustomerModal && (
         <div className="pos-modal">
           <div className="pos-modal-content">
-            <h3>Add New Customer</h3>
-            <form onSubmit={handleAddCustomer}>
-              <input
-                type="text"
-                placeholder="Customer Name"
-                value={customerForm.name}
-                onChange={e => setCustomerForm(f => ({ ...f, name: e.target.value }))}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Phone Number"
-                value={customerForm.phone}
-                onChange={e => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
-                required
-              />
-              <input
-                type="text"
-                placeholder="TPIN (optional)"
-                value={customerForm.tpin}
-                onChange={e => setCustomerForm(f => ({ ...f, tpin: e.target.value }))}
-              />
-              <input
-                type="text"
-                placeholder="Address (optional)"
-                value={customerForm.address}
-                onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
-              />
-              <input
-                type="text"
-                placeholder="City (optional)"
-                value={customerForm.city}
-                onChange={e => setCustomerForm(f => ({ ...f, city: e.target.value }))}
-              />
-              {customerError && <div style={{ color: "#ff5252", marginBottom: 8 }}>{customerError}</div>}
-              <button type="submit" disabled={customerLoading}>{customerLoading ? "Adding..." : "Add Customer"}</button>
-              <button type="button" style={{ background: '#888', marginTop: 8 }} onClick={() => { setShowCustomerModal(false); setCustomerError(""); }}>Cancel</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Customer Modal */}
-      {showEditCustomerModal && (
-        <div className="pos-modal">
-          <div className="pos-modal-content">
-            <h3>Edit Customer</h3>
-            <form onSubmit={handleEditCustomer}>
-              <input
-                type="text"
-                placeholder="Customer Name"
-                value={editCustomerForm.name}
-                onChange={e => setEditCustomerForm(f => ({ ...f, name: e.target.value }))}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Phone Number"
-                value={editCustomerForm.phone}
-                onChange={e => setEditCustomerForm(f => ({ ...f, phone: e.target.value }))}
-                required
-              />
-              <input
-                type="text"
-                placeholder="TPIN (optional)"
-                value={editCustomerForm.tpin}
-                onChange={e => setEditCustomerForm(f => ({ ...f, tpin: e.target.value }))}
-              />
-              <input
-                type="text"
-                placeholder="Address (optional)"
-                value={editCustomerForm.address}
-                onChange={e => setEditCustomerForm(f => ({ ...f, address: e.target.value }))}
-              />
-              <input
-                type="text"
-                placeholder="City (optional)"
-                value={editCustomerForm.city}
-                onChange={e => setEditCustomerForm(f => ({ ...f, city: e.target.value }))}
-              />
-              {editCustomerError && <div style={{ color: "#ff5252", marginBottom: 8 }}>{editCustomerError}</div>}
-              <button type="submit" disabled={editCustomerLoading}>{editCustomerLoading ? "Saving..." : "Save Changes"}</button>
-              <button type="button" style={{ background: '#888', marginTop: 8 }} onClick={() => { setShowEditCustomerModal(false); setEditCustomerError(""); }}>Cancel</button>
-            </form>
+            {/* Customer Modal content goes here */}
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function capitalizeWords(str) {
+  return str.replace(/\b\w/g, char => char.toUpperCase());
 }

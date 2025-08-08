@@ -7,6 +7,7 @@ import CompanySettings from './CompanySettings';
 import Customers from './Customers';
 import Locations from './Locations';
 import Products from './Products';
+import ProductsListPage from './ProductsListPage';
 import Categories from './Categories';
 import UnitsOfMeasure from './UnitsOfMeasure';
 import OpeningStock from './OpeningStock';
@@ -21,9 +22,9 @@ import SalesReport from './SalesReport';
 import StockReport from './StockReport';
 import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
-import Roneth113ResetButton from './Roneth113ResetButton';
 import LaybyManagement from "./LaybyManagement";
 import LaybyManagementMobile from "./LaybyManagementMobile";
+import EditSet from './EditSet';
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 // SmartRedirect: redirects / based on user role
@@ -63,6 +64,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/locations" element={<Locations />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/products-list" element={<ProductsListPage />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/pos" element={<POS />} />
@@ -83,10 +85,10 @@ function App() {
         {/* <Route path="/stock-viewer" element={<StockViewer />} /> */}
         <Route path="/transfers" element={<TransferList />} />
         <Route path="/closing-stock" element={<ClosingStock />} />
+        <Route path="/edit-set/:id" element={<EditSet />} />
         {/* Add more routes as needed */}
         <Route path="*" element={<LoginPage />} />
       </Routes>
-      <Roneth113ResetButton />
     </div>
   );
 }

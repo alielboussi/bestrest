@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
 import supabase from './supabase';
 import './StockReportMobile.css';
 
@@ -13,6 +14,9 @@ const StockReportMobile = () => {
   const [location, setLocation] = useState('');
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
+  const [combos, setCombos] = useState([]);
+  const [comboItems, setComboItems] = useState([]);
+  const [comboInventory, setComboInventory] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -30,21 +34,68 @@ const StockReportMobile = () => {
       setUnits(unitData || []);
       const { data: images } = await supabase.from('product_images').select('*');
       setProductImages(images || []);
+      const { data: combosData } = await supabase.from('combos').select('*');
+      setCombos(combosData || []);
+      const { data: comboItemsData } = await supabase.from('combo_items').select('*');
+      setComboItems(comboItemsData || []);
+      const { data: comboInvData } = await supabase.from('combo_inventory').select('*');
+      setComboInventory(comboInvData || []);
     };
     fetchData();
   }, []);
 
+  // Calculate max sets for a combo (global or by location)
+  function getMaxSetQty(comboId, loc) {
+    const items = comboItems.filter(ci => ci.combo_id === comboId);
+    if (!items.length) return 0;
+    const productStock = {};
+    items.forEach(item => {
+      const stock = loc
+        ? productLocations.filter(pl => pl.product_id === item.product_id && pl.location_id === loc).reduce((sum, pl) => sum + (pl.quantity || 0), 0)
+        : productLocations.filter(pl => pl.product_id === item.product_id).reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+      productStock[item.product_id] = stock;
+    });
+    return getMaxSetQty(items, productStock);
+  }
+
+  // Filter combos (sets) that can be made globally or per location, and match search/category
+  const filteredCombos = combos.filter(combo => {
+    const setQty = getMaxSetQty(combo.id, location || '');
+    if (setQty <= 0) return false;
+    const matchesCategory = !category || combo.category_id === Number(category);
+    const searchValue = search.trim().toLowerCase();
+    const matchesSearch =
+      !searchValue ||
+      (combo.combo_name && combo.combo_name.toLowerCase().includes(searchValue)) ||
+      (combo.sku && combo.sku.toLowerCase().includes(searchValue));
+    return matchesCategory && matchesSearch;
+  });
+
+  // Used stock per product (from only actually buildable combos)
+  const usedStock = {};
+  filteredCombos.forEach(combo => {
+    const setQty = getMaxSetQty(combo.id, location || '');
+    comboItems.filter(ci => ci.combo_id === combo.id).forEach(item => {
+      usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
+    });
+  });
+
+  // Filter products: only show if stock remains after sets
   const filteredProducts = products.filter(p => {
-    const productLocs = productLocations.filter(pl => pl.product_id === p.id);
-    const locationIds = productLocs.map(pl => pl.location_id);
-    const matchesLocation = !location || locationIds.includes(location);
+    // Sum global or location stock
+    const productLocs = location
+      ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
+      : productLocations.filter(pl => pl.product_id === p.id);
+    const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+    const remainingStock = totalStock - (usedStock[p.id] || 0);
+    if (remainingStock <= 0) return false;
     const matchesCategory = !category || p.category_id === Number(category);
     const searchValue = search.trim().toLowerCase();
-    const matchesSearch = !searchValue || (
+    const matchesSearch =
+      !searchValue ||
       (p.name && p.name.toLowerCase().includes(searchValue)) ||
-      (p.sku && p.sku.toLowerCase().includes(searchValue))
-    );
-    return matchesLocation && matchesCategory && matchesSearch;
+      (p.sku && p.sku.toLowerCase().includes(searchValue));
+    return matchesCategory && matchesSearch;
   });
 
   return (
@@ -86,16 +137,12 @@ const StockReportMobile = () => {
             const unitObj = units.find(u => u.id === p.unit_of_measure_id);
             unit = unitObj ? (unitObj.abbreviation || unitObj.name || '') : '';
           }
-          // Find the correct stock quantity for this product at the selected location
-          let stockQty = 0;
-          if (location) {
-            const inv = inventory.find(i => i.product_id === p.id && i.location === location);
-            stockQty = inv ? inv.quantity : 0;
-          } else {
-            // Sum across all locations
-            const invs = inventory.filter(i => i.product_id === p.id);
-            stockQty = invs.reduce((sum, i) => sum + (i.quantity || 0), 0);
-          }
+          // Use *remaining* stock (after sets) for display
+          const productLocs = location
+            ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
+            : productLocations.filter(pl => pl.product_id === p.id);
+          const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+          const remainingStock = totalStock - (usedStock[p.id] || 0);
           // Find image from product_images table
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
@@ -115,7 +162,7 @@ const StockReportMobile = () => {
               <div className="stock-report-mobile-card-info">
                 <div className="stock-report-mobile-card-title">{p.name}</div>
                 <div className="stock-report-mobile-card-sku">SKU: {p.sku || '-'}</div>
-                <div>Stock: <b>{stockQty}</b> {unit}</div>
+                <div>Stock: <b>{remainingStock}</b> {unit}</div>
                 <div>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
                 <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
               </div>

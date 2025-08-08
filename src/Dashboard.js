@@ -44,6 +44,7 @@ function Dashboard() {
     { name: 'categories', label: 'Categories', route: '/categories', icon: FaBox },
     { name: 'products', label: 'Products', route: '/products', icon: FaTags },
     { name: 'sets', label: 'Sets', route: '/sets', icon: FaBox },
+    { name: 'productslist', label: 'Products List', route: '/products-list', icon: FaTags },
     { name: 'openingstock', label: 'Opening Stock', route: '/opening-stock', icon: FaRegEdit },
     { name: 'transfer', label: 'Stock Transfers', route: '/transfer', icon: FaExchangeAlt },
     { name: 'transferlist', label: 'Edit Transfers', route: '/transfers', icon: FaRegEdit },
@@ -129,16 +130,11 @@ useEffect(() => {
   };
 
   const handleFactoryReset = () => {
-    setShowResetConfirm(true);
+    // Removed: Factory reset logic and button
   };
 
   const confirmFactoryReset = async () => {
-    try {
-      localStorage.clear();
-      window.location.reload();
-    } catch (err) {
-      alert('Factory reset failed: ' + err.message);
-    }
+    // Removed: Factory reset logic and button
   };
 
 
@@ -150,28 +146,9 @@ useEffect(() => {
 
   return (
     <>
+
+
       <div className="dashboard-container">
-        {showReset && !showResetConfirm && (
-          <button
-            style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, background: '#b71c1c', color: '#fff', fontWeight: 'bold', padding: '14px 28px', borderRadius: 8, border: 'none', fontSize: 18, boxShadow: '0 2px 8px #0008', cursor: 'pointer' }}
-            onClick={handleFactoryReset}
-          >
-            FACTORY RESET
-          </button>
-        )}
-
-        {showReset && showResetConfirm && (
-          <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 10000, background: '#fff', color: '#b71c1c', fontWeight: 'bold', padding: '22px 32px', borderRadius: 10, border: '2px solid #b71c1c', fontSize: 18, boxShadow: '0 2px 12px #000a', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ marginBottom: 16, textAlign: 'center' }}>
-              Are you absolutely sure?<br />This will <span style={{ color: '#b71c1c', fontWeight: 'bold' }}>delete ALL data</span> and cannot be undone!
-            </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <button style={{ background: '#b71c1c', color: '#fff', fontWeight: 'bold', padding: '10px 22px', borderRadius: 8, border: 'none', fontSize: 17, cursor: 'pointer' }} onClick={confirmFactoryReset}>Yes, Reset</button>
-              <button style={{ background: '#888', color: '#fff', fontWeight: 'bold', padding: '10px 22px', borderRadius: 8, border: 'none', fontSize: 17, cursor: 'pointer' }} onClick={() => { setShowReset(false); setShowResetConfirm(false); setTyped(''); }}>Cancel (Esc)</button>
-            </div>
-          </div>
-        )}
-
         <div className="dashboard-banner">
           <span>Welcome{fullName ? `, ${fullName}` : ''}!</span>
         </div>
