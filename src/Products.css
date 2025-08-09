@@ -1,3 +1,17 @@
+/* Make description field 3cm longer in length */
+.form-grid input[name="description"],
+.product-form input[name="description"] {
+  width: 9cm !important;
+  min-width: 9cm !important;
+  max-width: 9cm !important;
+}
+/* Make SKU entry field same height and length as Auto SKU dropdown */
+.form-grid input[name="sku"] {
+  height: 1.2cm !important;
+  width: 6cm !important;
+  min-width: 6cm !important;
+  max-width: 6cm !important;
+}
 /* Search row below all fields, spans full width */
 .form-grid-search-row {
   display: grid;
@@ -28,7 +42,7 @@
 }
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, 220px);
   gap: 0.7rem 1.2rem;
   width: 100%;
   margin-bottom: 1.2rem;
@@ -39,16 +53,26 @@
 .form-grid input[type="text"],
 .form-grid input[type="number"],
 .form-grid input[type="date"] {
-  height: 2.1rem;
-  font-size: 0.98rem;
-  border-radius: 0.4rem;
-  border: 1px solid #00bfff;
-  background: #181c22;
-  color: #e0e6ed;
-  padding: 0 0.7rem;
+  height: calc(1.5cm - 1mm) !important;
+  font-size: 1.08rem;
+  border-radius: 8px;
+  border: 1.5px solid #00bfff;
+  background: #181c20;
+  color: #fff;
+  padding: 0 16px;
   box-sizing: border-box;
-  width: 100%;
+  width: 6cm;
+  min-width: 6cm;
+  max-width: 6cm;
   margin: 0;
+  overflow: visible;
+}
+
+/* Make the first four dropdowns tall enough to show their names fully */
+.form-grid select:nth-child(-n+4) {
+  height: 1.2cm !important;
+  font-size: 1.18rem !important;
+  line-height: 1.2cm !important;
 }
 
 /* Make the search bar span two columns for better layout */

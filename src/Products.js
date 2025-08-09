@@ -378,11 +378,12 @@ function Products() {
       <h1 className="products-title" style={{marginTop: '1rem'}}>Products</h1>
       <form className="product-form" onSubmit={handleSubmit}>
         <div className="form-grid">
-          {/* Currency, Category, Unit */}
-          <select name="currency" value={form.currency} onChange={handleChange} required>
-            <option value="">Select Currency</option>
-            <option value="K">K</option>
-            <option value="$">$</option>
+          {/* First row: Location, Category, Unit, Auto SKU, SKU */}
+          <select name="location_id" value={form.location_id || ''} onChange={handleChange} required>
+            <option value="">Select Location</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>{loc.name}</option>
+            ))}
           </select>
           <select name="category_id" value={form.category_id} onChange={handleChange} required>
             <option value="">Select Category</option>
@@ -396,19 +397,22 @@ function Products() {
               <option key={unit.id} value={unit.id}>{unit.name}{unit.abbreviation ? ` (${unit.abbreviation})` : ''}</option>
             ))}
           </select>
-          {/* Auto SKU, SKU, Product Name, Cost Price */}
           <select name="sku_type" value={form.sku_type} onChange={handleChange}>
             <option value="auto">Auto SKU</option>
             <option value="manual">Manual SKU</option>
           </select>
           <input name="sku" type="text" placeholder="SKU (leave blank for auto)" value={form.sku} onChange={handleChange} />
-          <input name="name" type="text" placeholder="Product Name" value={form.name} onChange={handleChange} required />
+        </div>
+        <div className="form-grid">
+          {/* Second row: Cost Price, Standard Price, Promotional Price, Promo Start, Promo End */}
           <input name="cost_price" type="number" step="0.01" placeholder="Cost Price (optional)" value={form.cost_price} onChange={handleChange} />
-          {/* Standard Price, Promotional Price, Promo Start, Promo End */}
           <input name="price" type="number" step="0.01" placeholder="Standard Price (optional)" value={form.price} onChange={handleChange} />
           <input name="promotional_price" type="number" step="0.01" placeholder="Promotional Price" value={form.promotional_price} onChange={handleChange} />
           <input name="promo_start_date" type="date" value={form.promo_start_date} onChange={handleChange} className="from-date" />
           <input name="promo_end_date" type="date" value={form.promo_end_date} onChange={handleChange} className="to-date" />
+        </div>
+        <div className="form-grid">
+          <input name="name" type="text" placeholder="Product Name" value={form.name} onChange={handleChange} required />
         </div>
         {/* Locations, Image, Actions */}
         <div className="form-row" style={{display: 'flex', alignItems: 'flex-start', minHeight: '120px', width: '100%'}}>

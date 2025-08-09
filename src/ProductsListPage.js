@@ -1,6 +1,21 @@
 import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import "./Products.css";
+// Handler for location dropdown change should be inside the component
+
+// Delete product by id using Supabase
+const handleDeleteProduct = async (id, setProducts) => {
+  try {
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      alert('Failed to delete product: ' + error.message);
+    } else {
+      setProducts(products => products.filter(p => p.id !== id));
+    }
+  } catch (err) {
+    alert('Error deleting product: ' + err.message);
+  }
+}
 
 function ProductsListPage() {
   const [products, setProducts] = useState([]);
@@ -14,6 +29,11 @@ function ProductsListPage() {
   const [combos, setCombos] = useState([]);
   const [comboLocations, setComboLocations] = useState([]);
   const [comboItems, setComboItems] = useState([]);
+
+  // Handler for location dropdown change
+  const handleLocationChange = (e) => {
+    setSelectedLocation(e.target.value);
+  };
 
   useEffect(() => {
     fetchAll();
@@ -130,11 +150,7 @@ function ProductsListPage() {
           onChange={e => setSearch(e.target.value)}
           style={{padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '300px'}}
         />
-        <select
-          value={selectedLocation}
-          onChange={e => setSelectedLocation(e.target.value)}
-          style={{padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}
-        >
+  <select name="location" value={selectedLocation} onChange={handleLocationChange} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
           <option value="">All Locations</option>
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>{loc.name}</option>
@@ -148,18 +164,19 @@ function ProductsListPage() {
           <div>No products found.</div>
         ) : (
           <div style={{maxHeight: 500, overflowY: 'auto', width: '100%'}}>
-            <table style={{width: '100%', minWidth: 900, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
+            <table style={{width: '100%', minWidth: '0', background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse', tableLayout: 'fixed'}}>
               <thead>
                 <tr style={{background: '#23272f'}}>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Image</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'left'}}>Name</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>SKU</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Category</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Unit</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Stock Qty</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Price</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Promo</th>
-                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', textAlign: 'center'}}>Duration</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '5%'}}>Image</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'left', width: '10%'}}>Name</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '7%'}}>SKU</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '8%'}}>Category</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '5%'}}>Unit</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '6%'}}>Stock Qty</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '6%'}}>Price</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '6%'}}>Promo</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '8%'}}>Duration</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '9%'}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,17 +254,27 @@ function ProductsListPage() {
                           ? (item.promo_start_date && item.promo_end_date ? `${item.promo_start_date} to ${item.promo_end_date}` : '-')
                           : ((item.promo_start_date && item.promo_end_date) ? `${item.promo_start_date} to ${item.promo_end_date}` : '-')}
                       </td>
-                      <td style={{textAlign: 'center'}}>
-                        <button
-                          style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
-                          onClick={() => {
-                            if (isCombo) {
-                              window.location.href = `/sets?edit=${item.id}`;
-                            } else {
-                              window.location.href = `/products?edit=${item.id}`;
-                            }
-                          }}
-                        >Edit</button>
+                      <td style={{textAlign: 'center', padding: '0.15rem'}}>
+                        <div style={{display: 'flex', justifyContent: 'center', gap: '4px'}}>
+                          <button
+                            style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                            onClick={() => {
+                              if (isCombo) {
+                                window.location.href = `/sets?edit=${item.id}`;
+                              } else {
+                                window.location.href = `/products?edit=${item.id}`;
+                              }
+                            }}
+                          >Edit</button>
+                          <button
+                            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to delete this product?')) {
+                                handleDeleteProduct(item.id, setProducts);
+                              }
+                            }}
+                          >Delete</button>
+                        </div>
                       </td>
                     </tr>
                   );

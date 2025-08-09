@@ -32,9 +32,7 @@ const StockReport = () => {
       setCombos(combosData || []);
       const { data: comboItemsData } = await supabase.from('combo_items').select('*');
       setComboItems(comboItemsData || []);
-      // Use combo_inventory table if you have it. Otherwise, fallback to combo_items for structure.
-      const { data: comboInvData } = await supabase.from('combo_inventory').select('*');
-      setComboInventory(comboInvData || []);
+  // ...existing code...
     };
     fetchData();
   }, []);

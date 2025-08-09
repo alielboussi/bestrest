@@ -1066,7 +1066,7 @@ export default function POS() {
             appearance: 'none',
             WebkitAppearance: 'none',
             MozAppearance: 'none',
-            margin: 0,
+            marginTop: '-4mm',
           }}
         />
         <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 80, height: 38, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
@@ -1084,27 +1084,27 @@ export default function POS() {
           }}>Edit</button>
         )}
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
+          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '-4mm' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
         )}
       </div>
       {/* ...rest of the component remains unchanged... */}
       <div className="pos-row" style={{ gap: 6, marginBottom: 6, alignItems: 'center', display: 'flex', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative', marginLeft: '3mm', width: 170 }}>
+          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '1.1rem', color: '#aaa', pointerEvents: 'none', zIndex: 2 }}>#</span>
           <input
             type="text"
             placeholder="Receipt Number"
             value={receiptNumber}
             onChange={e => setReceiptNumber(e.target.value)}
-            style={{ fontSize: '0.95rem', height: 38, width: 170, paddingLeft: 22, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', position: 'relative' }}
+            style={{ fontSize: '0.95rem', height: 38, width: '100%', paddingLeft: 22, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', position: 'relative' }}
           />
-          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '1.1rem', color: '#aaa', pointerEvents: 'none' }}>#</span>
         </div>
       </div>
 
       {/* Search row: Add Custom Product/Service button before search field */}
       <div className="pos-row" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 10, width: 1200 }}>
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6 }}>
+          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: '3mm' }}>
             <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
           </button>
         )}
@@ -1113,7 +1113,22 @@ export default function POS() {
           placeholder="Search product by name or SKU..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ fontSize: '0.95rem', height: 38, minHeight: 38, maxHeight: 38, flex: 1, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', marginLeft: 0 }}
+          style={{
+            fontSize: '0.95rem',
+            height: 38,
+            minHeight: 38,
+            maxHeight: 38,
+            flex: 1,
+            borderRadius: 6,
+            boxSizing: 'border-box',
+            background: '#222',
+            color: '#fff',
+            border: '1.5px solid #ff5252',
+            marginLeft: 0,
+            boxShadow: '0 0 8px 2px #ff5252',
+            outline: '2px solid #ff5252',
+            transition: 'box-shadow 0.2s, border 0.2s',
+          }}
         />
       </div>
       {/* Product/set cards above the table */}

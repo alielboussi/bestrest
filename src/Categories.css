@@ -60,16 +60,17 @@ font-size: 2.2rem;
   border-radius: 6px;
   font-weight: 600;
   font-size: 1.08rem;
-  padding: 0 32px;
+  padding: 0 16px;
   height: 44px;                 /* Match input height */
-  min-width: 90px;
-  max-width: 120px;
+  min-width: 60px;
+  max-width: 100px;
+  width: 100px;
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin: 0;
+  margin: -1mm 0 0 0;
 }
 
 .category-form button:hover {
@@ -179,7 +180,6 @@ font-size: 2.2rem;
   transition: background 0.2s, color 0.2s;
   display: inline-block;
   margin: 0 0 0 12px;
-  float: right;
 }
 .edit-btn {
   background: #00bfff;

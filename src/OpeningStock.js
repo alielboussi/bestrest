@@ -202,13 +202,7 @@ const OpeningStock = () => {
             await supabase.from('inventory').insert({ product_id: combo.product_id, location: selectedLocation, quantity: setQty, updated_at: new Date() });
           }
         }
-        // Optionally update combo_inventory for reporting
-        const { data: comboInv } = await supabase.from('combo_inventory').select('id').eq('combo_id', combo.id).eq('location_id', selectedLocation).single();
-        if (comboInv) {
-          await supabase.from('combo_inventory').update({ quantity: setQty, updated_at: new Date() }).eq('id', comboInv.id);
-        } else {
-          await supabase.from('combo_inventory').insert({ combo_id: combo.id, location_id: selectedLocation, quantity: setQty, updated_at: new Date() });
-        }
+  // ...existing code...
       }
     } catch (err) {
       setError('Failed to save opening stock.');

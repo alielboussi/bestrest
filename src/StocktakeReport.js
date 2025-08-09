@@ -328,6 +328,57 @@ const StocktakeReport = () => {
         theme: 'grid',
         margin: { left: 10, right: 10 },
       });
+
+      // Add disclaimer page after the table
+      doc.addPage('a4', 'landscape');
+      let dy = 20;
+      // Logo at top center
+      doc.addImage(logoImg, 'PNG', pageWidth/2 - 20, dy, 40, 18);
+      dy += 26;
+      // Company details
+      doc.setFontSize(14);
+      if (companyDetails) {
+        const detailsArr = companyDetails.split('\n');
+        detailsArr.forEach(line => {
+          doc.text(line, 14, dy);
+          dy += 8;
+        });
+        dy += 4;
+      }
+      // Disclaimer header
+      doc.setFontSize(18);
+      doc.text('Disclaimer', pageWidth / 2, dy, { align: 'center' });
+      dy += 12;
+      doc.setFontSize(12);
+      const disclaimerText = `We, the undersigned, confirm that the stocktake report above has been completed in accordance with company procedures. To the best of our knowledge and belief, the quantities, descriptions, and valuations recorded are true, correct, and represent the physical stock on hand as at the date/time stated. Any variances or adjustments have been reviewed, justified, and recorded.\n\nWe acknowledge that this confirmation may be relied upon for financial reporting, audit, and internal control purposes and that any material misstatement or omission is subject to company policy and applicable law.\n\nNotes / Exceptions (if any):`;
+      doc.text(disclaimerText, 14, dy, { maxWidth: pageWidth - 28 });
+      dy += 54;
+  // Signatures side by side
+  doc.setFontSize(14);
+  doc.text('Signatures', 14, dy);
+  dy += 10;
+  doc.setFontSize(12);
+  // Manager box
+  const boxWidth = (pageWidth - 40) / 2;
+  doc.text('Manager', 14, dy);
+  doc.rect(14, dy + 6, boxWidth, 16); // Empty box for signature
+  doc.text('Name (print): ____________________________________', 14, dy + 26);
+  doc.text('Title: ____________________', 14, dy + 34);
+  doc.text('Date: ____ / ____ / ______   Time: ________', 14, dy + 42);
+  // Director box
+  const directorX = 14 + boxWidth + 12;
+  doc.text('Director', directorX, dy);
+  doc.rect(directorX, dy + 6, boxWidth, 16); // Empty box for signature
+  doc.text('Name (print): ____________________________________', directorX, dy + 26);
+  doc.text('Title: ____________________', directorX, dy + 34);
+  doc.text('Date: ____ / ____ / ______   Time: ________', directorX, dy + 42);
+  dy += 54;
+      // Company stamp box
+      doc.text('Company Stamp (optional):', 14, dy);
+      dy += 6;
+      doc.rect(14, dy, 60, 28);
+      doc.text('STAMP AREA', 44, dy + 16, { align: 'center' });
+
       doc.save(`stocktake_report_${location || 'all'}.pdf`);
     };
     // Fetch company settings from supabase and set to window.companySettings if not already
@@ -371,7 +422,7 @@ const StocktakeReport = () => {
             ))}
           </select>
         </label>
-        <button className="export-btn" onClick={handleExportPDF}>Export as PDF</button>
+  <button className="export-btn" onClick={handleExportPDF} style={{marginTop: '-10mm'}}>Export as PDF</button>
       </div>
       {cycle && (
         <table className="stocktake-table" style={{marginBottom: 18, width: 'auto', minWidth: 420}}>

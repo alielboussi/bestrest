@@ -22,8 +22,10 @@ const StockReportMobile = () => {
     const fetchData = async () => {
       const { data: prods } = await supabase.from('products').select('*');
       setProducts(prods || []);
+  console.log('Fetched products:', prods);
       const { data: prodLocs } = await supabase.from('product_locations').select('*');
       setProductLocations(prodLocs || []);
+  console.log('Fetched productLocations:', prodLocs);
       const { data: locs } = await supabase.from('locations').select('*');
       setLocations(locs || []);
       const { data: cats } = await supabase.from('categories').select('*');
@@ -38,8 +40,7 @@ const StockReportMobile = () => {
       setCombos(combosData || []);
       const { data: comboItemsData } = await supabase.from('combo_items').select('*');
       setComboItems(comboItemsData || []);
-      const { data: comboInvData } = await supabase.from('combo_inventory').select('*');
-      setComboInventory(comboInvData || []);
+  // ...existing code...
     };
     fetchData();
   }, []);
@@ -82,13 +83,7 @@ const StockReportMobile = () => {
 
   // Filter products: only show if stock remains after sets
   const filteredProducts = products.filter(p => {
-    // Sum global or location stock
-    const productLocs = location
-      ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
-      : productLocations.filter(pl => pl.product_id === p.id);
-    const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
-    const remainingStock = totalStock - (usedStock[p.id] || 0);
-    if (remainingStock <= 0) return false;
+    // Show all products regardless of stock or combos for debugging
     const matchesCategory = !category || p.category_id === Number(category);
     const searchValue = search.trim().toLowerCase();
     const matchesSearch =
@@ -131,40 +126,45 @@ const StockReportMobile = () => {
       </div>
       <div className="stock-report-mobile-list">
         {filteredProducts.map(p => {
-          // Find the correct unit name/abbreviation
           let unit = '';
           if (p.unit_of_measure_id) {
             const unitObj = units.find(u => u.id === p.unit_of_measure_id);
             unit = unitObj ? (unitObj.abbreviation || unitObj.name || '') : '';
           }
-          // Use *remaining* stock (after sets) for display
           const productLocs = location
             ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
             : productLocations.filter(pl => pl.product_id === p.id);
           const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
           const remainingStock = totalStock - (usedStock[p.id] || 0);
-          // Find image from product_images table
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
           return (
             <div className="stock-report-mobile-card" key={p.id}>
-              <div className="stock-report-mobile-card-img-wrap">
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt={p.name}
-                    className="stock-report-mobile-card-img"
-                  />
-                ) : (
-                  <div className="stock-report-mobile-card-img-placeholder">No Image</div>
-                )}
+              <div className="stock-report-mobile-card-row">
+                <div className="stock-report-mobile-card-img-wrap" style={{width: 60, height: 60, minWidth: 60, minHeight: 60, marginRight: 10}}>
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={p.name}
+                      className="stock-report-mobile-card-img"
+                      style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8}}
+                    />
+                  ) : (
+                    <div className="stock-report-mobile-card-img-placeholder">No Image</div>
+                  )}
+                </div>
+                <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
+                  <div style={{fontWeight: 'bold', fontSize: '1.1em', color: '#fff'}}>{p.name}</div>
+                  <div style={{fontSize: '0.97em', color: '#00bfff'}}>SKU: {p.sku || '-'}</div>
+                  <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2}}>
+                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {remainingStock}</span>
+                    <span style={{color: '#fff'}}>{unit}</span>
+                  </div>
+                </div>
               </div>
-              <div className="stock-report-mobile-card-info">
-                <div className="stock-report-mobile-card-title">{p.name}</div>
-                <div className="stock-report-mobile-card-sku">SKU: {p.sku || '-'}</div>
-                <div>Stock: <b>{remainingStock}</b> {unit}</div>
-                <div>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
-                <div>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
+              <div style={{display: 'flex', flexDirection: 'row', gap: 16, marginTop: 8, justifyContent: 'space-between'}}>
+                <div style={{fontSize: '0.98em', color: '#fff'}}>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
+                <div style={{fontSize: '0.98em', color: '#fff'}}>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
               </div>
             </div>
           );
