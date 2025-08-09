@@ -72,9 +72,9 @@
 
 .stock-report-mobile-card {
   background: #181d23;
-  border: 1.5px solid #00e676;
+  border: 2px solid #00e676;
   border-radius: 14px;
-  box-shadow: 0 2px 8px #0007;
+  box-shadow: 0 0 12px 2px #00e676, 0 2px 8px #0007;
   padding: 5vw 3vw 6vw 3vw;
   display: flex;
   flex-direction: column;
@@ -83,6 +83,7 @@
   align-items: center;
   width: 100%;
   max-width: 420px;
+  font-size: 1.08em;
 }
 
 .stock-report-mobile-card-img-wrap {

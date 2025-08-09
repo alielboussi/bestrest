@@ -16,6 +16,7 @@ const StockReportMobile = () => {
   const [search, setSearch] = useState('');
   const [combos, setCombos] = useState([]);
   const [comboItems, setComboItems] = useState([]);
+  const [expandedImage, setExpandedImage] = useState(null);
   const [comboInventory, setComboInventory] = useState([]);
 
   useEffect(() => {
@@ -83,13 +84,20 @@ const StockReportMobile = () => {
 
   // Filter products: only show if stock remains after sets
   const filteredProducts = products.filter(p => {
-    // Show all products regardless of stock or combos for debugging
+    // Only show products with excess stock after sets are made
+    const productLocs = location
+      ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
+      : productLocations.filter(pl => pl.product_id === p.id);
+    const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+    const remainingStock = totalStock - (usedStock[p.id] || 0);
+    // Only show if product is not a set component, or has excess stock
+    const isSetComponent = comboItems.some(ci => ci.product_id === p.id);
+    if (isSetComponent && remainingStock <= 0) return false;
     const matchesCategory = !category || p.category_id === Number(category);
     const searchValue = search.trim().toLowerCase();
     const matchesSearch =
       !searchValue ||
-      (p.name && p.name.toLowerCase().includes(searchValue)) ||
-      (p.sku && p.sku.toLowerCase().includes(searchValue));
+      (p.name && p.name.toLowerCase().includes(searchValue));
     return matchesCategory && matchesSearch;
   });
 
@@ -139,7 +147,7 @@ const StockReportMobile = () => {
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
           return (
-            <div className="stock-report-mobile-card" key={p.id}>
+            <div className="stock-report-mobile-card glowing-green" key={p.id}>
               <div className="stock-report-mobile-card-row">
                 <div className="stock-report-mobile-card-img-wrap" style={{width: 60, height: 60, minWidth: 60, minHeight: 60, marginRight: 10}}>
                   {imageUrl ? (
@@ -147,28 +155,75 @@ const StockReportMobile = () => {
                       src={imageUrl}
                       alt={p.name}
                       className="stock-report-mobile-card-img"
-                      style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8}}
+                      style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, cursor: 'pointer'}}
+                      onClick={() => setExpandedImage(imageUrl)}
                     />
                   ) : (
                     <div className="stock-report-mobile-card-img-placeholder">No Image</div>
                   )}
                 </div>
                 <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
-                  <div style={{fontWeight: 'bold', fontSize: '1.1em', color: '#fff'}}>{p.name}</div>
-                  <div style={{fontSize: '0.97em', color: '#00bfff'}}>SKU: {p.sku || '-'}</div>
-                  <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2}}>
+                  <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{p.name}</div>
+                  <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: '1.1em'}}>
                     <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {remainingStock}</span>
                     <span style={{color: '#fff'}}>{unit}</span>
                   </div>
                 </div>
               </div>
               <div style={{display: 'flex', flexDirection: 'row', gap: 16, marginTop: 8, justifyContent: 'space-between'}}>
-                <div style={{fontSize: '0.98em', color: '#fff'}}>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
-                <div style={{fontSize: '0.98em', color: '#fff'}}>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
+                <div style={{fontSize: '1.1em', color: '#fff'}}>Standard Price: <b>{p.price !== undefined && p.price !== null && p.price !== '' ? (p.currency ? `${p.currency} ` : '') + p.price : '-'}</b></div>
+                <div style={{fontSize: '1.1em', color: '#fff'}}>Promotional Price: <b>{p.promotional_price !== undefined && p.promotional_price !== null && p.promotional_price !== '' ? (p.currency ? `${p.currency} ` : '') + p.promotional_price : '-'}</b></div>
               </div>
             </div>
           );
         })}
+        {expandedImage && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0,0,0,0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => setExpandedImage(null)}
+          >
+            <img
+              src={expandedImage}
+              alt="Expanded Product"
+              style={{
+                maxWidth: '90vw',
+                maxHeight: '90vh',
+                borderRadius: '10px',
+                boxShadow: '0 0 20px #00e676',
+                background: '#fff',
+              }}
+              onClick={e => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setExpandedImage(null)}
+              style={{
+                position: 'fixed',
+                top: 30,
+                right: 40,
+                fontSize: 32,
+                background: 'transparent',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+                zIndex: 1001,
+              }}
+              aria-label="Close"
+            >
+              &times;
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
