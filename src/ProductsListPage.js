@@ -353,7 +353,7 @@ function ProductsListPage() {
                 const file = imageEditFile;
                 const fileExt = file.name.split('.').pop();
                 const safeName = (imageEditProduct.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
-                const fileName = `${safeName}.${fileExt}`;
+                const fileName = `${imageEditProduct.name}.${fileExt}`;
                 const filePath = `${fileName}`;
                 // Upload to bucket 'productimages'
                 const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
