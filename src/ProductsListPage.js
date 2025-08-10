@@ -18,6 +18,57 @@ const handleDeleteProduct = async (id, setProducts) => {
 }
 
 function ProductsListPage() {
+  const [adjustModalOpen, setAdjustModalOpen] = useState(false);
+  const [adjustProduct, setAdjustProduct] = useState(null);
+  const [adjustQty, setAdjustQty] = useState(0);
+  const [adjustLoading, setAdjustLoading] = useState(false);
+
+  const handleOpenAdjustModal = (product) => {
+    setAdjustProduct(product);
+    setAdjustQty("");
+    setAdjustModalOpen(true);
+  };
+
+  const handleAdjustInventory = async () => {
+    if (!adjustProduct) return;
+    setAdjustLoading(true);
+    try {
+      const locationId = selectedLocation || locations[0]?.id;
+      if (!locationId) {
+        alert("Select a location first.");
+        setAdjustLoading(false);
+        return;
+      }
+      // Check previous adjustments for this product/location
+      const { data: logs } = await supabase
+        .from('inventory_adjustments')
+        .select('id')
+        .eq('product_id', adjustProduct.id)
+        .eq('location_id', locationId);
+      const adjustmentType = logs && logs.length === 0 ? 'opening' : 'transfer';
+      // Upsert inventory
+      const { data: inv } = await supabase.from('inventory').select('id').eq('product_id', adjustProduct.id).eq('location', locationId).single();
+      if (inv) {
+        await supabase.from('inventory').update({ quantity: Number(adjustQty) }).eq('id', inv.id);
+      } else {
+        await supabase.from('inventory').insert({ product_id: adjustProduct.id, location: locationId, quantity: Number(adjustQty) });
+      }
+      // Log the adjustment
+      await supabase.from('inventory_adjustments').insert({
+        product_id: adjustProduct.id,
+        location_id: locationId,
+        quantity: Number(adjustQty),
+        adjustment_type: adjustmentType,
+        adjusted_at: new Date().toISOString()
+      });
+      setAdjustModalOpen(false);
+      fetchInventory();
+    } catch (err) {
+      alert('Failed to adjust inventory: ' + err.message);
+    } finally {
+      setAdjustLoading(false);
+    }
+  };
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [units, setUnits] = useState([]);
@@ -86,7 +137,6 @@ function ProductsListPage() {
 
   // Filter products by location and search
   const filteredProducts = [
-    // Normal products (not sets)
     ...products.filter(product => {
       // Exclude sets (combos)
       const unit = units.find(u => u.id === product.unit_of_measure_id);
@@ -107,30 +157,6 @@ function ProductsListPage() {
           (product.name && product.name.toLowerCase().includes(searchLower)) ||
           (product.sku && product.sku.toLowerCase().includes(searchLower)) ||
           (categories.find((c) => c.id === product.category_id)?.name?.toLowerCase().includes(searchLower))
-        )) {
-          return false;
-        }
-      }
-      return true;
-    }),
-    // Sets (combos)
-    ...combos.filter(combo => {
-      // Location filter
-      if (selectedLocation) {
-        // Only show combos that have a comboLocations entry for this location
-        const linked = comboLocations.some(cl => String(cl.combo_id) === String(combo.id) && String(cl.location_id) === String(selectedLocation));
-        if (!linked) return false;
-      } else {
-        // For 'All Locations', show combos that have at least one comboLocations entry
-        const hasAnyLocation = comboLocations.some(cl => String(cl.combo_id) === String(combo.id));
-        if (!hasAnyLocation) return false;
-      }
-      // Search filter
-      if (search.trim() !== "") {
-        const searchLower = search.toLowerCase();
-        if (!(
-          (combo.combo_name && combo.combo_name.toLowerCase().includes(searchLower)) ||
-          (combo.sku_combo && combo.sku_combo.toLowerCase().includes(searchLower))
         )) {
           return false;
         }
@@ -177,6 +203,7 @@ function ProductsListPage() {
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '6%'}}>Promo</th>
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '8%'}}>Duration</th>
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '9%'}}>Actions</th>
+                <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '7%'}}>Adjust</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,7 +301,38 @@ function ProductsListPage() {
                               }
                             }}
                           >Delete</button>
+                          <button
+                            style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                            onClick={() => handleOpenAdjustModal(item)}
+                          >Adjust</button>
                         </div>
+      {/* Manual Inventory Adjust Modal */}
+      {adjustModalOpen && adjustProduct && (
+        <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
+            <h3>Adjust Inventory</h3>
+            <div style={{marginBottom:12}}>Product: <b>{adjustProduct.name}</b> (SKU: {adjustProduct.sku})</div>
+            <div style={{marginBottom:12}}>
+              <label>Location:</label>
+              <select value={selectedLocation} onChange={handleLocationChange} style={{marginLeft:8}}>
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label>Quantity:</label>
+              <input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{marginLeft:8,width:80}} />
+            </div>
+            <div style={{display:'flex',gap:12,marginTop:18}}>
+              <button onClick={handleAdjustInventory} disabled={adjustLoading || !adjustQty} style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>
+                {adjustLoading ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={()=>setAdjustModalOpen(false)} style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
                       </td>
                     </tr>
                   );

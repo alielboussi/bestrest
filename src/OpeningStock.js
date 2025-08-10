@@ -104,6 +104,36 @@ const OpeningStock = () => {
         return [...rows, { product_id, qty, name: prod?.name, sku: prod?.sku }];
       }
     });
+    // After updating product qtys, auto-calculate set qtys
+    setTimeout(async () => {
+      // Fetch combos and combo_items
+      const { data: combos } = await supabase.from('combos').select('id, product_id');
+      const { data: comboItems } = await supabase.from('combo_items').select('combo_id, product_id, quantity');
+      // Build product qty map
+      const qtyMap = {};
+      stockRows.forEach(r => { qtyMap[r.product_id] = Number(r.qty); });
+      // For each combo, calculate max possible sets
+      for (const combo of combos || []) {
+        const items = (comboItems || []).filter(ci => ci.combo_id === combo.id);
+        if (items.length === 0) continue;
+        // Calculate max sets
+        let maxSets = Infinity;
+        for (const item of items) {
+          const available = qtyMap[item.product_id] || 0;
+          const possible = Math.floor(available / (item.quantity || 1));
+          if (possible < maxSets) maxSets = possible;
+        }
+        // Update or add set qty row
+        setStockRows(rows => {
+          const exists = rows.find(r => r.product_id === combo.product_id);
+          if (exists) {
+            return rows.map(r => r.product_id === combo.product_id ? { ...r, qty: maxSets } : r);
+          } else {
+            return [...rows, { product_id: combo.product_id, qty: maxSets, name: 'Set', sku: '' }];
+          }
+        });
+      }
+    }, 100);
   };
 
   const handleSave = async () => {

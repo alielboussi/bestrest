@@ -124,24 +124,35 @@ export default function Sets() {
       alert("Please fill all required fields, select a location, currency, and add at least one product.");
       return;
     }
-    // 1. Create a product row for the set
-    const { data: setProduct, error: prodError } = await supabase
+    // 1. Check for existing set product by name or SKU
+    const { data: existingSet, error: existingError } = await supabase
       .from("products")
-      .insert([{
-        name: kitName,
-        sku,
-        price: standardPrice,
-        standard_price: standardPrice,
-        promotional_price: promotionalPrice === "" ? null : promotionalPrice,
-        promo_start_date: promoStart || null,
-        promo_end_date: promoEnd || null,
-        image_url: imageUrl || null,
-        category_id: null, // Optionally set a category for sets
-        unit_of_measure_id: selectedUnit || null // Set selected unit
-      }])
-      .select()
+      .select("id")
+      .or(`name.eq.${kitName},sku.eq.${sku}`)
       .single();
-    if (prodError) return alert("Error creating set product: " + prodError.message);
+    let setProduct;
+    if (existingSet) {
+      setProduct = existingSet;
+    } else {
+      const { data: newSet, error: prodError } = await supabase
+        .from("products")
+        .insert([{
+          name: kitName,
+          sku,
+          price: standardPrice,
+          standard_price: standardPrice,
+          promotional_price: promotionalPrice === "" ? null : promotionalPrice,
+          promo_start_date: promoStart || null,
+          promo_end_date: promoEnd || null,
+          image_url: imageUrl || null,
+          category_id: null, // Optionally set a category for sets
+          unit_of_measure_id: selectedUnit || null // Set selected unit
+        }])
+        .select()
+        .single();
+      if (prodError) return alert("Error creating set product: " + prodError.message);
+      setProduct = newSet;
+    }
 
     // 2. Create the combo and link to set product_id
     const { data: combo, error: comboError } = await supabase

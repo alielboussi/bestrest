@@ -79,17 +79,35 @@ const StocktakeReport = () => {
           .in('combo_id', comboIds);
         comboItemsRaw = comboItemsData || [];
       }
-      // Get opening stock
-      const { data: openingEntries } = await supabase
-        .from('opening_stock_entries')
-        .select('product_id, qty')
-        .eq('session_id', cycle.openingSession.id);
+      // Get manual inventory adjustments
+      const { data: adjustments } = await supabase
+        .from('inventory_adjustments')
+        .select('product_id, location_id, quantity, adjustment_type, adjusted_at')
+        .eq('location_id', location);
+      // Get opening stock: first adjustment (type 'opening') or opening_stock_entries
+      let openingEntries = [];
+      if (adjustments && adjustments.length > 0) {
+        openingEntries = adjustments.filter(a => a.adjustment_type === 'opening').map(a => ({ product_id: a.product_id, qty: a.quantity }));
+      } else {
+        const { data: openingStock } = await supabase
+          .from('opening_stock_entries')
+          .select('product_id, qty')
+          .eq('session_id', cycle.openingSession.id);
+        openingEntries = openingStock || [];
+      }
       // Get closing stock
       const { data: closingEntries } = await supabase
         .from('closing_stock_entries')
         .select('product_id, qty')
         .eq('session_id', cycle.closingSession.id);
-      // Get transfers in
+      // Get transfers in: subsequent manual adjustments (type 'transfer') and stock_transfer_entries
+      let transferInMap = {};
+      if (adjustments && adjustments.length > 0) {
+        adjustments.filter(a => a.adjustment_type === 'transfer').forEach(e => {
+          transferInMap[e.product_id] = (transferInMap[e.product_id] || 0) + Number(e.quantity || 0);
+        });
+      }
+      // Also include stock_transfer_entries as before
       const { data: transferSessions } = await supabase
         .from('stock_transfer_sessions')
         .select('id')
@@ -97,7 +115,6 @@ const StocktakeReport = () => {
         .gte('created_at', cycle.openingSession.started_at)
         .lte('created_at', cycle.closingSession.ended_at);
       const transferSessionIds = (transferSessions || []).map(s => s.id);
-      let transferInMap = {};
       if (transferSessionIds.length > 0) {
         const { data: transferEntries } = await supabase
           .from('stock_transfer_entries')

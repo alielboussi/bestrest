@@ -4,6 +4,41 @@ import "./Products.css";
 import supabase from "./supabase";
 import * as XLSX from "xlsx";
 
+// Levenshtein distance for fuzzy matching
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+// Dictionary for auto-correction
+const productDictionary = {
+  'Night Stands': 'Nightstands',
+  'Mattresses': 'Mattresses',
+  'Mattrressess': 'Mattresses',
+  // Add more corrections as needed
+};
+
+// Helper to normalize names
+const normalize = str => str.toLowerCase().replace(/\s+/g, '');
+
 // Fields available for import mapping
 const productFields = [
   // Products table
@@ -58,6 +93,29 @@ const initialForm = {
 };
 
 function Products() {
+  // Ref for file input
+  const fileInputRef = React.useRef();
+
+  // Download template logic
+  const handleDownloadTemplate = () => {
+    const template = [{
+      name: '',
+      sku: '',
+      standard_price: '',
+      promotional_price: '',
+      category: '',
+      unit: '',
+      cost_price: '',
+      currency: '',
+      promo_start_date: '',
+      promo_end_date: '',
+      // Add more fields as needed
+    }];
+    const worksheet = XLSX.utils.json_to_sheet(template);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'ProductsTemplate');
+    XLSX.writeFile(workbook, 'products_template.xlsx');
+  };
   // State for direct inventory edit modal
   const [showInventoryModal, setShowInventoryModal] = useState(false);
   const [inventoryEditProduct, setInventoryEditProduct] = useState(null);
@@ -372,10 +430,180 @@ function Products() {
   const canEdit = true;
   const canDelete = true;
 
+  // Import logic
+  const handleImportExcel = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      let rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      // Skip header row (row 1)
+      if (rows.length > 1) {
+        const headers = rows[0];
+        rows = rows.slice(1).map(rowArr => {
+          const rowObj = {};
+          headers.forEach((header, idx) => {
+            rowObj[header] = rowArr[idx];
+          });
+          return rowObj;
+        });
+      } else {
+        rows = [];
+      }
+      // Fetch existing products, categories, locations, units
+      const [{ data: existingProducts }, { data: categories }, { data: locations }, { data: units }] = await Promise.all([
+        supabase.from('products').select('id, name'),
+        supabase.from('categories').select('id, name'),
+        supabase.from('locations').select('id, name'),
+        supabase.from('unit_of_measure').select('id, name')
+      ]);
+      // Define valid product columns from schema
+      const productSchema = [
+        'name', 'sku', 'sku_type', 'cost_price', 'price', 'standard_price', 'promotional_price', 'promo_start_date', 'promo_end_date', 'currency', 'category_id', 'unit_of_measure_id', 'created_at', 'updated_at', 'id'
+      ];
+      // Helper to check for similar names
+      const isSimilar = (name, arr) => {
+        const normName = normalize(name);
+        return arr.some(prod => levenshtein(normalize(prod.name), normName) <= 1);
+      };
+      const productsToInsert = [];
+      let importedCount = 0;
+      let skippedCount = 0;
+      for (const row of rows) {
+      // Only use columns that match the schema
+      const filteredRow = {};
+      for (const key of productSchema) {
+        if (row.hasOwnProperty(key)) filteredRow[key] = row[key];
+      }
+      const name = filteredRow.name || '';
+      if (!name) continue;
+      if (isSimilar(name, existingProducts)) {
+        skippedCount++;
+        continue;
+      }
+      // Match category (fuzzy)
+      let category_id = null;
+      if (row.category) {
+        // Try exact match first
+        let cat = categories.find(c => normalize(c.name) === normalize(row.category));
+        if (!cat) {
+          // Fuzzy match: find closest category by Levenshtein distance
+          let minDist = Infinity;
+          let bestCat = null;
+          for (const c of categories) {
+            const dist = levenshtein(normalize(c.name), normalize(row.category));
+            if (dist < minDist) {
+              minDist = dist;
+              bestCat = c;
+            }
+          }
+          // Only match if reasonably close (distance ≤ 2)
+          if (bestCat && minDist <= 2) cat = bestCat;
+        }
+        if (cat) category_id = cat.id;
+      }
+  // Assign all available locations to every product
+  let location_ids = locations.map(l => l.id);
+      // Match unit
+      let unit_id = null;
+      if (row.unit) {
+        const unit = units.find(u => normalize(u.name) === normalize(row.unit));
+        if (unit) unit_id = unit.id;
+      }
+      productsToInsert.push({
+        name,
+        sku: filteredRow.sku || '',
+        sku_type: filteredRow.sku_type === 'manual' ? false : true,
+        cost_price: filteredRow.hasOwnProperty('cost_price') && filteredRow.cost_price !== undefined && filteredRow.cost_price !== null && filteredRow.cost_price !== '' ? parseFloat(filteredRow.cost_price) : '',
+        price: filteredRow.standard_price ? parseFloat(filteredRow.standard_price) : 0,
+        promotional_price: filteredRow.hasOwnProperty('promotional_price') && filteredRow.promotional_price !== undefined && filteredRow.promotional_price !== null && filteredRow.promotional_price !== '' ? parseFloat(filteredRow.promotional_price) : '',
+        promo_start_date: filteredRow.hasOwnProperty('promo_start_date') && filteredRow.promo_start_date ? filteredRow.promo_start_date : '',
+        promo_end_date: filteredRow.hasOwnProperty('promo_end_date') && filteredRow.promo_end_date ? filteredRow.promo_end_date : '',
+        currency: filteredRow.hasOwnProperty('currency') && filteredRow.currency ? filteredRow.currency : '',
+        category_id,
+        unit_of_measure_id: unit_id,
+        locations: location_ids,
+      });
+      importedCount++;
+    }
+      // Insert products
+      // Group products by name+sku and merge locations
+      const productMap = {};
+      for (const prod of productsToInsert) {
+        const key = `${prod.name}||${prod.sku}`;
+        if (!productMap[key]) {
+          productMap[key] = { ...prod, locations: new Set(prod.locations) };
+        } else {
+          if (prod.locations) {
+            prod.locations.forEach(loc => productMap[key].locations.add(loc));
+          }
+        }
+      }
+      for (const key in productMap) {
+        const prod = productMap[key];
+        // Only send valid fields to Supabase
+        const validProduct = {
+          name: prod.name,
+          sku: prod.sku,
+          sku_type: typeof prod.sku_type === 'boolean' ? prod.sku_type : true,
+          cost_price: prod.cost_price !== '' && prod.cost_price !== undefined && prod.cost_price !== null ? Number(prod.cost_price) : null,
+          price: prod.price !== '' && prod.price !== undefined && prod.price !== null ? Number(prod.price) : 0,
+          promotional_price: prod.promotional_price !== '' && prod.promotional_price !== undefined && prod.promotional_price !== null ? Number(prod.promotional_price) : null,
+          promo_start_date: prod.promo_start_date || null,
+          promo_end_date: prod.promo_end_date || null,
+          currency: prod.currency || '',
+          category_id: prod.category_id || null,
+          unit_of_measure_id: prod.unit_of_measure_id || null
+        };
+        Object.keys(validProduct).forEach(key => {
+          if (validProduct[key] === undefined) delete validProduct[key];
+        });
+        const { data: inserted, error: insertError } = await supabase.from('products').insert([validProduct]).select('id').single();
+        if (insertError) continue;
+        // Insert all unique product_locations
+        const locationsArr = Array.from(prod.locations);
+        if (locationsArr.length > 0) {
+          const prodLocRows = locationsArr.map(locId => ({ product_id: inserted.id, location_id: locId }));
+          await supabase.from('product_locations').insert(prodLocRows);
+        }
+      }
+      alert(`Import finished! Imported: ${importedCount}, Skipped: ${skippedCount}`);
+      fetchAll();
+    } catch (err) {
+      setImportError('Import failed: ' + (err.message || err));
+      alert('Import failed: ' + (err.message || err));
+    }
+    setImporting(false);
+  };
 
   return (
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>Products</h1>
+      {/* Import and Template Buttons */}
+      <div style={{ marginBottom: 16, display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <button
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          style={{ minWidth: 170, background: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #27ae6055', cursor: 'pointer' }}
+        >
+          Import by Excel
+        </button>
+        <button onClick={handleDownloadTemplate} type="button" style={{ minWidth: 170, background: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '1rem 2rem', fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 2px 8px #27ae6055', cursor: 'pointer' }}>
+          Download Template
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{ display: 'none' }}
+          onChange={handleImportExcel}
+        />
+
+
+      </div>
       <form className="product-form" onSubmit={handleSubmit}>
         <div className="form-grid">
           {/* First row: Location, Category, Unit, Auto SKU, SKU */}
