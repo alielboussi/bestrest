@@ -191,17 +191,16 @@ function Products() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchAll();
-    fetchUnits();
-    fetchInventory();
+    const loadAllAndEdit = async () => {
+      await fetchAll();
+      await fetchUnits();
+      await fetchInventory();
 
-    // Check for ?edit=ID in URL and load product for editing
-    const params = new URLSearchParams(window.location.search);
-    const editId = params.get('edit');
-    if (editId) {
-      // Wait for products to load, then set editingId and form
-      const loadProduct = async () => {
-        // If products already loaded, use them
+      // Check for ?edit=ID in URL and load product for editing
+      const params = new URLSearchParams(window.location.search);
+      const editId = params.get('edit');
+      if (editId) {
+        // Wait for products to load, then set editingId and form
         let product = products.find(p => String(p.id) === String(editId));
         if (!product) {
           // Fetch single product if not loaded
@@ -223,17 +222,17 @@ function Products() {
             promo_start_date: product.promo_start_date || "",
             promo_end_date: product.promo_end_date || "",
             currency: product.currency || "",
-            category_id: product.category_id || "",
-            unit_of_measure_id: product.unit_of_measure_id || "",
+            category_id: product.category_id ? String(product.category_id) : "",
+            unit_of_measure_id: product.unit_of_measure_id !== undefined && product.unit_of_measure_id !== null ? String(product.unit_of_measure_id) : "",
             locations: product.product_locations ? product.product_locations.map((pl) => pl.location_id) : [],
             image: null,
           });
           setEditingId(product.id);
           setImageUrl(product.product_images && product.product_images[0] ? product.product_images[0].image_url : "");
         }
-      };
-      loadProduct();
-    }
+      }
+    };
+    loadAllAndEdit();
   }, []);
 
   const fetchInventory = async () => {
@@ -396,7 +395,9 @@ function Products() {
       if (form.image) {
         const file = form.image;
         const fileExt = file.name.split('.').pop();
-        const fileName = `${insertedProductId}_${Date.now()}.${fileExt}`;
+        // Sanitize product name for filename
+        const safeName = (form.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const fileName = `${safeName}_${insertedProductId}_${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
 
         // Upload to bucket 'productimages'
@@ -413,10 +414,21 @@ function Products() {
           { product_id: insertedProductId, image_url: publicUrl }
         ]);
         if (imageInsertError) throw imageInsertError;
+
+        // Update image_url in products table
+        const { error: prodImgUpdateError } = await supabase.from('products').update({ image_url: publicUrl }).eq('id', insertedProductId);
+        if (prodImgUpdateError) throw prodImgUpdateError;
       }
 
       fetchAll();
       handleCancelEdit();
+      // Remove ?edit=PRODUCT_ID from URL before reload
+      if (window.location.search.includes('edit=')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('edit');
+        window.history.replaceState({}, '', url.pathname + url.search);
+      }
+      window.location.reload();
     } catch (err) {
       setError("Failed to save product. " + (err.message || err));
       console.error('Product save error:', err);
@@ -606,13 +618,7 @@ function Products() {
       </div>
       <form className="product-form" onSubmit={handleSubmit}>
         <div className="form-grid">
-          {/* First row: Location, Category, Unit, Auto SKU, SKU */}
-          <select name="location_id" value={form.location_id || ''} onChange={handleChange} required>
-            <option value="">Select Location</option>
-            {locations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
+          {/* First row: Category, Unit, Auto SKU, SKU */}
           <select name="category_id" value={form.category_id} onChange={handleChange} required>
             <option value="">Select Category</option>
             {categories.map((cat) => (

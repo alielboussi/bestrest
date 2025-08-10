@@ -18,6 +18,9 @@ const handleDeleteProduct = async (id, setProducts) => {
 }
 
 function ProductsListPage() {
+  const [expandedImage, setExpandedImage] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editProduct, setEditProduct] = useState(null);
   const [adjustModalOpen, setAdjustModalOpen] = useState(false);
   const [adjustProduct, setAdjustProduct] = useState(null);
   const [adjustQty, setAdjustQty] = useState(0);
@@ -114,7 +117,12 @@ function ProductsListPage() {
         supabase.from("combo_locations").select("combo_id, location_id"),
         supabase.from("combo_items").select("combo_id, product_id, quantity"),
       ]);
-      setProducts(products || []);
+      // Map image_url from product_images array to direct property
+      const mappedProducts = (products || []).map(p => ({
+        ...p,
+        image_url: Array.isArray(p.product_images) && p.product_images.length > 0 ? p.product_images[0].image_url : ""
+      }));
+      setProducts(mappedProducts);
       setCategories(categories || []);
       setLocations(locations || []);
       setUnits(units || []);
@@ -219,32 +227,55 @@ function ProductsListPage() {
                               alt="Set"
                               className="product-image-thumb"
                               onError={e => { e.target.onerror = null; e.target.src = '/default-set-image.png'; }}
-                              style={{cursor: 'pointer'}}
+                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}}
                               onClick={e => {
                                 e.preventDefault();
-                                window.open(item.picture_url, '_blank', 'noopener,noreferrer');
+                                setExpandedImage(item.picture_url);
                               }}
                             />
                           ) : (
-                            <img src="/default-set-image.png" alt="Set" className="product-image-thumb" />
+                            <img src="/default-set-image.png" alt="Set" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}} />
                           )
                         ) : (
-                          item.product_images && item.product_images[0] && item.product_images[0].image_url && item.product_images[0].image_url.trim() !== '' ? (
+                          item.image_url && item.image_url.trim() !== '' ? (
                             <img
-                              src={item.product_images[0].image_url}
+                              src={item.image_url}
                               alt="Product"
                               className="product-image-thumb"
                               onError={e => { e.target.onerror = null; e.target.src = '/default-product-image.png'; }}
-                              style={{cursor: 'pointer'}}
+                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}}
                               onClick={e => {
                                 e.preventDefault();
-                                window.open(item.product_images[0].image_url, '_blank', 'noopener,noreferrer');
+                                setExpandedImage(item.image_url);
                               }}
                             />
                           ) : (
-                            <img src="/default-product-image.png" alt="Product" className="product-image-thumb" />
+                            <img src="/default-product-image.png" alt="Product" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}} />
                           )
                         )}
+  {/* Image Expansion Modal */}
+  {expandedImage && (
+    <div
+      style={{
+        position: 'absolute',
+        top: window.scrollY,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        background: 'rgba(0,0,0,0.7)',
+        zIndex: 2000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      onClick={e => {
+        // Only close if clicking outside the image
+        if (e.target === e.currentTarget) setExpandedImage(null);
+      }}
+    >
+      <img src={expandedImage} alt="Expanded" style={{maxWidth:'80vw',maxHeight:'80vh',borderRadius:'12px',boxShadow:'0 2px 24px #000'}} />
+    </div>
+  )}
                       </td>
                       <td style={{textAlign: 'left'}}>{isCombo ? item.combo_name : item.name}</td>
                       <td style={{textAlign: 'center'}}>{isCombo ? item.sku : (item.sku || '(auto)')}</td>
@@ -286,13 +317,33 @@ function ProductsListPage() {
                           <button
                             style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
                             onClick={() => {
-                              if (isCombo) {
-                                window.location.href = `/sets?edit=${item.id}`;
-                              } else {
-                                window.location.href = `/products?edit=${item.id}`;
-                              }
+                              // Navigate to Products.js and pass product id for editing
+                              window.location.href = `/products?edit=${item.id}`;
                             }}
                           >Edit</button>
+      {/* Product Edit Modal */}
+      {editModalOpen && editProduct && (
+        <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
+            <h3>Edit Product</h3>
+            <div style={{marginBottom:12}}>Name: <b>{editProduct.name}</b></div>
+            <div style={{marginBottom:12}}>SKU: {editProduct.sku}</div>
+            <div style={{marginBottom:12}}>
+              <label>Image URL:</label>
+              <input type="text" value={editProduct.image_url || ''} onChange={e => setEditProduct({...editProduct, image_url: e.target.value})} style={{marginLeft:8,width:'100%'}} />
+            </div>
+            <div style={{display:'flex',gap:12,marginTop:18}}>
+              <button onClick={async () => {
+                // Save image_url to Supabase
+                await supabase.from('products').update({ image_url: editProduct.image_url }).eq('id', editProduct.id);
+                setEditModalOpen(false);
+                fetchAll();
+              }} style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>Save</button>
+              <button onClick={()=>setEditModalOpen(false)} style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
                           <button
                             style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
                             onClick={() => {

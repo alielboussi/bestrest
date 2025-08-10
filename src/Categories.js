@@ -165,9 +165,21 @@ const Categories = () => {
           .eq('id', editingId);
         if (error) throw error;
       } else {
+        // Check for duplicate name (case-insensitive)
+        const { data: existing } = await supabase
+          .from('categories')
+          .select('id')
+          .ilike('name', form.name);
+        if (existing && existing.length > 0) {
+          setError('Category name already exists.');
+          setSaving(false);
+          return;
+        }
+        // Remove id field if present
+        const { id, ...formWithoutId } = form;
         const { error } = await supabase
           .from('categories')
-          .insert([form]);
+          .insert([formWithoutId]);
         if (error) throw error;
       }
       setForm(initialForm);
