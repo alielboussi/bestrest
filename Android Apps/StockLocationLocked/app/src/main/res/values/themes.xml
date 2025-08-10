@@ -1,0 +1,8 @@
+<!-- path: app/src/main/res/values/themes.xml -->
+<resources>
+    <style name="Theme.Stock" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#2196F3</item>
+        <item name="colorPrimaryDark">#1976D2</item>
+        <item name="colorAccent">#FFC107</item>
+    </style>
+</resources>

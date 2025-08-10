@@ -59,7 +59,7 @@ function SmartRedirect() {
 function App() {
   return (
     <div className="App">
-      <Routes>
+  <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/locations" element={<Locations />} />
@@ -70,7 +70,8 @@ function App() {
         <Route path="/pos" element={<POS />} />
         <Route path="/layby-management" element={<LaybyManagement />} />
         <Route path="/layby-management-mobile" element={<LaybyManagementMobile />} />
-        <Route path="/stock-report-mobile" element={React.createElement(require('./StockReportMobile').default)} />
+  <Route path="/stock-report-mobile" element={React.createElement(require('./StockReportMobile').default)} />
+  <Route path="/stock-report-mobile-locked" element={React.createElement(require('./StockReportMobileLocked').default)} />
         <Route path="/closing-stock-mobile" element={React.createElement(require('./ClosingStockMobile').default)} />
         {/* <Route path="/layby-management-view" element={<LaybyManagementView />} /> */}
         {/* <Route path="/layby-report" element={<LaybyManagementView />} /> */}
