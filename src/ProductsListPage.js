@@ -18,6 +18,10 @@ const handleDeleteProduct = async (id, setProducts) => {
 }
 
 function ProductsListPage() {
+  const [imageEditModalOpen, setImageEditModalOpen] = useState(false);
+  const [imageEditProduct, setImageEditProduct] = useState(null);
+  const [imageEditFile, setImageEditFile] = useState(null);
+  const [imageEditLoading, setImageEditLoading] = useState(false);
   const [expandedImage, setExpandedImage] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
@@ -321,6 +325,73 @@ function ProductsListPage() {
                               window.location.href = `/products?edit=${item.id}`;
                             }}
                           >Edit</button>
+                          <button
+                            style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                            onClick={() => {
+                              setImageEditProduct(item);
+                              setImageEditFile(null);
+                              setImageEditModalOpen(true);
+                            }}
+                          >Edit Image</button>
+  {/* Product Image Edit Modal */}
+  {imageEditModalOpen && imageEditProduct && (
+    <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
+        <h3>Edit Product Image</h3>
+        <div style={{marginBottom:12}}>Product: <b>{imageEditProduct.name}</b></div>
+        <input type="file" accept="image/*" onChange={e => setImageEditFile(e.target.files[0])} style={{marginBottom:12}} />
+        {imageEditProduct.image_url && (
+          <img src={imageEditProduct.image_url} alt="Current" style={{maxWidth:'80px',maxHeight:'80px',borderRadius:'8px',marginBottom:12}} />
+        )}
+        <div style={{display:'flex',gap:12,marginTop:18}}>
+          <button
+            disabled={!imageEditFile || imageEditLoading}
+            onClick={async () => {
+              if (!imageEditFile) return;
+              setImageEditLoading(true);
+              try {
+                const file = imageEditFile;
+                const fileExt = file.name.split('.').pop();
+                const safeName = (imageEditProduct.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+                const fileName = `${safeName}.${fileExt}`;
+                const filePath = `${fileName}`;
+                // Upload to bucket 'productimages'
+                const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
+                if (uploadError) throw uploadError;
+                // Get public URL
+                const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
+                const publicUrl = publicUrlData?.publicUrl;
+                if (!publicUrl) throw new Error('Failed to get public URL for image.');
+                // Insert into product_images table
+                await supabase.from('product_images').insert([
+                  { product_id: imageEditProduct.id, image_url: publicUrl }
+                ]);
+                // Update image_url in products table
+                await supabase.from('products').update({ image_url: publicUrl }).eq('id', imageEditProduct.id);
+                setImageEditModalOpen(false);
+                setImageEditProduct(null);
+                setImageEditFile(null);
+                window.location.reload();
+              } catch (err) {
+                alert('Failed to upload image: ' + (err.message || err));
+              } finally {
+                setImageEditLoading(false);
+              }
+            }}
+            style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
+          >Save</button>
+          <button
+            onClick={() => {
+              setImageEditModalOpen(false);
+              setImageEditProduct(null);
+              setImageEditFile(null);
+            }}
+            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
+          >Cancel</button>
+        </div>
+      </div>
+    </div>
+  )}
       {/* Product Edit Modal */}
       {editModalOpen && editProduct && (
         <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
