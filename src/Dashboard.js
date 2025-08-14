@@ -54,7 +54,8 @@ function Dashboard() {
     { name: 'salesreport', label: 'Sales Report', route: '/sales-report', icon: FaChartLine },
     { name: 'laybymanagement', label: 'Laybys', route: '/layby-management', icon: FaUsers },
     { name: 'stockreport', label: 'Stock Report', route: '/stock-report', icon: FaBox },
-    { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },
+  { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },
+  { name: 'pricelabels', label: 'Print Price Labels', route: '/price-labels', icon: FaTags },
   ];
 
 useEffect(() => {

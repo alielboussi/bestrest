@@ -1,3 +1,4 @@
+import PriceLabels from './PriceLabels';
 import React from 'react';
 import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import LoginPage from './LoginPage';
@@ -75,7 +76,8 @@ function App() {
         <Route path="/closing-stock-mobile" element={React.createElement(require('./ClosingStockMobile').default)} />
         {/* <Route path="/layby-management-view" element={<LaybyManagementView />} /> */}
         {/* <Route path="/layby-report" element={<LaybyManagementView />} /> */}
-        <Route path="/stocktake-report" element={<StocktakeReport />} />
+  <Route path="/stocktake-report" element={<StocktakeReport />} />
+  <Route path="/price-labels" element={<PriceLabels />} />
         <Route path="/stock-report" element={<StockReport />} />
         <Route path="/opening-stock" element={<OpeningStock />} />
         <Route path="/transfer" element={<Transfer />} />

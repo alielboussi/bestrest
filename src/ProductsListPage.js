@@ -1,21 +1,16 @@
 import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import "./Products.css";
-// Handler for location dropdown change should be inside the component
 
-// Delete product by id using Supabase
-const handleDeleteProduct = async (id, setProducts) => {
+// Delete product handler
+const handleDeleteProduct = async (productId, setProducts) => {
   try {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete product: ' + error.message);
-    } else {
-      setProducts(products => products.filter(p => p.id !== id));
-    }
+    await supabase.from('products').delete().eq('id', productId);
+    setProducts(prev => prev.filter(p => p.id !== productId));
   } catch (err) {
-    alert('Error deleting product: ' + err.message);
+    alert('Failed to delete product: ' + (err.message || err));
   }
-}
+};
 
 function ProductsListPage() {
   const [imageEditModalOpen, setImageEditModalOpen] = useState(false);
@@ -29,6 +24,9 @@ function ProductsListPage() {
   const [adjustProduct, setAdjustProduct] = useState(null);
   const [adjustQty, setAdjustQty] = useState(0);
   const [adjustLoading, setAdjustLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteProductId, setDeleteProductId] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const handleOpenAdjustModal = (product) => {
     setAdjustProduct(product);
@@ -46,13 +44,25 @@ function ProductsListPage() {
         setAdjustLoading(false);
         return;
       }
-      // Check previous adjustments for this product/location
-      const { data: logs } = await supabase
-        .from('inventory_adjustments')
+      // Check if opening stock exists for this product/location
+      let adjustmentType = 'opening';
+      const { data: openingSession } = await supabase
+        .from('opening_stock_sessions')
         .select('id')
-        .eq('product_id', adjustProduct.id)
-        .eq('location_id', locationId);
-      const adjustmentType = logs && logs.length === 0 ? 'opening' : 'transfer';
+        .eq('location_id', locationId)
+        .eq('status', 'submitted');
+      if (openingSession && openingSession.length > 0) {
+        // Check if this product is in opening_stock_entries for this session
+        const sessionIds = openingSession.map(s => s.id);
+        const { data: openingEntry } = await supabase
+          .from('opening_stock_entries')
+          .select('id')
+          .in('session_id', sessionIds)
+          .eq('product_id', adjustProduct.id);
+        if (openingEntry && openingEntry.length > 0) {
+          adjustmentType = 'Stock Transfer Qty Adjustment';
+        }
+      }
       // Upsert inventory
       const { data: inv } = await supabase.from('inventory').select('id').eq('product_id', adjustProduct.id).eq('location', locationId).single();
       if (inv) {
@@ -83,6 +93,10 @@ function ProductsListPage() {
   const [inventory, setInventory] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState("");
   const [search, setSearch] = useState("");
+  const [imageFilter, setImageFilter] = useState("all"); // all | with | without
+
+  // Count products without images
+  const withoutImageCount = products.filter(p => !p.image_url || p.image_url.trim() === "").length;
   const [loading, setLoading] = useState(true);
   const [combos, setCombos] = useState([]);
   const [comboLocations, setComboLocations] = useState([]);
@@ -112,7 +126,7 @@ function ProductsListPage() {
       ] = await Promise.all([
         supabase
           .from("products")
-          .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, product_images(image_url), product_locations(location_id)`)
+          .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, image_url, product_images(image_url), product_locations(location_id)`)
           .order("created_at", { ascending: false }),
         supabase.from("categories").select("id, name"),
         supabase.from("locations").select("id, name"),
@@ -121,11 +135,12 @@ function ProductsListPage() {
         supabase.from("combo_locations").select("combo_id, location_id"),
         supabase.from("combo_items").select("combo_id, product_id, quantity"),
       ]);
-      // Map image_url from product_images array to direct property
-      const mappedProducts = (products || []).map(p => ({
-        ...p,
-        image_url: Array.isArray(p.product_images) && p.product_images.length > 0 ? p.product_images[0].image_url : ""
-      }));
+      // Map image_url from product_images array to direct property (prefer products.image_url)
+      const mappedProducts = (products || []).map(p => {
+        const related = Array.isArray(p.product_images) && p.product_images.length > 0 ? p.product_images[0].image_url : "";
+        const finalUrl = (p.image_url && p.image_url.trim() !== "") ? p.image_url : (related || "");
+        return { ...p, image_url: finalUrl };
+      });
       setProducts(mappedProducts);
       setCategories(categories || []);
       setLocations(locations || []);
@@ -147,7 +162,7 @@ function ProductsListPage() {
     }
   };
 
-  // Filter products by location and search
+  // Filter products by location, search, and image presence
   const filteredProducts = [
     ...products.filter(product => {
       // Exclude sets (combos)
@@ -173,6 +188,12 @@ function ProductsListPage() {
           return false;
         }
       }
+      // Image filter
+      if (imageFilter === "with") {
+        if (!product.image_url || product.image_url.trim() === "") return false;
+      } else if (imageFilter === "without") {
+        if (product.image_url && product.image_url.trim() !== "") return false;
+      }
       return true;
     })
   ];
@@ -188,11 +209,23 @@ function ProductsListPage() {
           onChange={e => setSearch(e.target.value)}
           style={{padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '300px'}}
         />
-  <select name="location" value={selectedLocation} onChange={handleLocationChange} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
+        <select name="location" value={selectedLocation} onChange={handleLocationChange} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
           <option value="">All Locations</option>
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>{loc.name}</option>
           ))}
+        </select>
+        <select value={imageFilter} onChange={e => setImageFilter(e.target.value)} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
+          <option value="all">All Products</option>
+          <option value="with">With Image</option>
+          <option value="without">
+            Without Image
+            {imageFilter === 'without' && (
+              <span style={{marginLeft:6, color:'#f77f00', fontWeight:'bold', fontSize:'0.95em'}}>
+                ({withoutImageCount})
+              </span>
+            )}
+          </option>
         </select>
       </div>
       <div className="products-list" style={{width: '100%', overflowX: 'auto', maxHeight: 'none'}}>
@@ -215,7 +248,7 @@ function ProductsListPage() {
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '6%'}}>Promo</th>
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '8%'}}>Duration</th>
                   <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '9%'}}>Actions</th>
-                <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '7%'}}>Adjust</th>
+                  <th style={{padding: '0.15rem', borderBottom: '1px solid #00b4d8', textAlign: 'center', width: '7%'}}>Adjust</th>
                 </tr>
               </thead>
               <tbody>
@@ -230,15 +263,18 @@ function ProductsListPage() {
                               src={item.picture_url}
                               alt="Set"
                               className="product-image-thumb"
-                              onError={e => { e.target.onerror = null; e.target.src = '/default-set-image.png'; }}
-                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}}
+                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px', background:'#222'}}
                               onClick={e => {
                                 e.preventDefault();
                                 setExpandedImage(item.picture_url);
                               }}
+                              onError={e => {
+                                e.target.onerror = null;
+                                e.target.src = '/default-set-image.png';
+                              }}
                             />
                           ) : (
-                            <img src="/default-set-image.png" alt="Set" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}} />
+                            <img src="/default-set-image.png" alt="Set" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px', background:'#222'}} />
                           )
                         ) : (
                           item.image_url && item.image_url.trim() !== '' ? (
@@ -246,40 +282,20 @@ function ProductsListPage() {
                               src={item.image_url}
                               alt="Product"
                               className="product-image-thumb"
-                              onError={e => { e.target.onerror = null; e.target.src = '/default-product-image.png'; }}
-                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}}
+                              style={{cursor: 'pointer', maxWidth: '48px', maxHeight: '48px', borderRadius: '6px', background:'#222'}}
                               onClick={e => {
                                 e.preventDefault();
                                 setExpandedImage(item.image_url);
                               }}
+                              onError={e => {
+                                e.target.onerror = null;
+                                e.target.src = '/default-product-image.png';
+                              }}
                             />
                           ) : (
-                            <img src="/default-product-image.png" alt="Product" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px'}} />
+                            <img src="/default-product-image.png" alt="Product" className="product-image-thumb" style={{maxWidth: '48px', maxHeight: '48px', borderRadius: '6px', background:'#222'}} />
                           )
                         )}
-  {/* Image Expansion Modal */}
-  {expandedImage && (
-    <div
-      style={{
-        position: 'absolute',
-        top: window.scrollY,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        background: 'rgba(0,0,0,0.7)',
-        zIndex: 2000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-      onClick={e => {
-        // Only close if clicking outside the image
-        if (e.target === e.currentTarget) setExpandedImage(null);
-      }}
-    >
-      <img src={expandedImage} alt="Expanded" style={{maxWidth:'80vw',maxHeight:'80vh',borderRadius:'12px',boxShadow:'0 2px 24px #000'}} />
-    </div>
-  )}
                       </td>
                       <td style={{textAlign: 'left'}}>{isCombo ? item.combo_name : item.name}</td>
                       <td style={{textAlign: 'center'}}>{isCombo ? item.sku : (item.sku || '(auto)')}</td>
@@ -333,101 +349,173 @@ function ProductsListPage() {
                               setImageEditModalOpen(true);
                             }}
                           >Edit Image</button>
-  {/* Product Image Edit Modal */}
-  {imageEditModalOpen && imageEditProduct && (
-    <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
-        <h3>Edit Product Image</h3>
-        <div style={{marginBottom:12}}>Product: <b>{imageEditProduct.name}</b></div>
-        <input type="file" accept="image/*" onChange={e => setImageEditFile(e.target.files[0])} style={{marginBottom:12}} />
-        {imageEditProduct.image_url && (
-          <img src={imageEditProduct.image_url} alt="Current" style={{maxWidth:'80px',maxHeight:'80px',borderRadius:'8px',marginBottom:12}} />
-        )}
-        <div style={{display:'flex',gap:12,marginTop:18}}>
-          <button
-            disabled={!imageEditFile || imageEditLoading}
-            onClick={async () => {
-              if (!imageEditFile) return;
-              setImageEditLoading(true);
-              try {
-                const file = imageEditFile;
-                const fileExt = file.name.split('.').pop();
-                const safeName = (imageEditProduct.name || '').replace(/[^a-zA-Z0-9_-]/g, '_');
-                const fileName = `${imageEditProduct.name}.${fileExt}`;
-                const filePath = `${fileName}`;
-                // Upload to bucket 'productimages'
-                const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
-                if (uploadError) throw uploadError;
-                // Get public URL
-                const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
-                const publicUrl = publicUrlData?.publicUrl;
-                if (!publicUrl) throw new Error('Failed to get public URL for image.');
-                // Insert into product_images table
-                await supabase.from('product_images').insert([
-                  { product_id: imageEditProduct.id, image_url: publicUrl }
-                ]);
-                // Update image_url in products table
-                await supabase.from('products').update({ image_url: publicUrl }).eq('id', imageEditProduct.id);
-                setImageEditModalOpen(false);
-                setImageEditProduct(null);
-                setImageEditFile(null);
-                window.location.reload();
-              } catch (err) {
-                alert('Failed to upload image: ' + (err.message || err));
-              } finally {
-                setImageEditLoading(false);
-              }
-            }}
-            style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
-          >Save</button>
-          <button
-            onClick={() => {
-              setImageEditModalOpen(false);
-              setImageEditProduct(null);
-              setImageEditFile(null);
-            }}
-            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
-          >Cancel</button>
-        </div>
-      </div>
-    </div>
-  )}
-      {/* Product Edit Modal */}
-      {editModalOpen && editProduct && (
-        <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
-            <h3>Edit Product</h3>
-            <div style={{marginBottom:12}}>Name: <b>{editProduct.name}</b></div>
-            <div style={{marginBottom:12}}>SKU: {editProduct.sku}</div>
-            <div style={{marginBottom:12}}>
-              <label>Image URL:</label>
-              <input type="text" value={editProduct.image_url || ''} onChange={e => setEditProduct({...editProduct, image_url: e.target.value})} style={{marginLeft:8,width:'100%'}} />
-            </div>
-            <div style={{display:'flex',gap:12,marginTop:18}}>
-              <button onClick={async () => {
-                // Save image_url to Supabase
-                await supabase.from('products').update({ image_url: editProduct.image_url }).eq('id', editProduct.id);
-                setEditModalOpen(false);
-                fetchAll();
-              }} style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>Save</button>
-              <button onClick={()=>setEditModalOpen(false)} style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>Cancel</button>
+                          <button
+                            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                            onClick={() => {
+                              setDeleteProductId(item.id);
+                              setDeleteConfirmText("");
+                              setDeleteConfirmOpen(true);
+                            }}
+                          >Delete</button>
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOpen && (
+        <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:4000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400,display:'flex',flexDirection:'column',alignItems:'center'}}>
+            <h3>Confirm Product Deletion</h3>
+            <div style={{marginBottom:16}}>Type <b>yes</b> to confirm deletion of this product.</div>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              style={{marginBottom:18, padding:'8px', borderRadius:'6px', border:'1px solid #00b4d8', width:'80%'}}
+              autoFocus
+            />
+            <div style={{display:'flex',gap:12}}>
+              <button
+                disabled={deleteConfirmText.trim().toLowerCase() !== 'yes'}
+                onClick={async () => {
+                  await handleDeleteProduct(deleteProductId, setProducts);
+                  setDeleteConfirmOpen(false);
+                  setDeleteProductId(null);
+                  setDeleteConfirmText("");
+                }}
+                style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor: deleteConfirmText.trim().toLowerCase() === 'yes' ? 'pointer' : 'not-allowed'}}
+              >Confirm</button>
+              <button
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setDeleteProductId(null);
+                  setDeleteConfirmText("");
+                }}
+                style={{background:'#888',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
+              >Cancel</button>
             </div>
           </div>
         </div>
       )}
                           <button
-                            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
-                            onClick={() => {
-                              if (window.confirm('Are you sure you want to delete this product?')) {
-                                handleDeleteProduct(item.id, setProducts);
-                              }
-                            }}
-                          >Delete</button>
-                          <button
                             style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
                             onClick={() => handleOpenAdjustModal(item)}
                           >Adjust</button>
                         </div>
+                      </td>
+                      <td style={{textAlign: 'center'}}></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ======== FIX: Modals rendered once, outside the map, positioned fixed ======== */}
+
+      {/* Image Expansion Modal */}
+      {expandedImage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0, left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.7)',
+            zIndex: 2000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={e => {
+            if (e.target === e.currentTarget) setExpandedImage(null);
+          }}
+        >
+          <img src={expandedImage} alt="Expanded" style={{maxWidth:'80vw',maxHeight:'80vh',borderRadius:'12px',boxShadow:'0 2px 24px #000'}} />
+        </div>
+      )}
+
+      {/* Product Image Edit Modal */}
+      {imageEditModalOpen && imageEditProduct && (
+        <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
+            <h3>Edit Product Image</h3>
+            <div style={{marginBottom:12}}>Product: <b>{imageEditProduct.name}</b></div>
+            <input type="file" accept="image/*" onChange={e => setImageEditFile(e.target.files[0])} style={{marginBottom:12}} />
+            {imageEditProduct.image_url && (
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+                <img src={imageEditProduct.image_url} alt="Current" style={{maxWidth:'80px',maxHeight:'80px',borderRadius:'8px'}} />
+                <button
+                  onClick={async () => {
+                    setImageEditLoading(true);
+                    try {
+                      // Remove from product_images table
+                      await supabase.from('product_images').delete().eq('product_id', imageEditProduct.id);
+                      // Remove from products table
+                      await supabase.from('products').update({ image_url: '' }).eq('id', imageEditProduct.id);
+                      setImageEditModalOpen(false);
+                      setImageEditProduct(null);
+                      setImageEditFile(null);
+                      await fetchAll();
+                    } catch (err) {
+                      alert('Failed to remove image: ' + (err.message || err));
+                    } finally {
+                      setImageEditLoading(false);
+                    }
+                  }}
+                  style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                  disabled={imageEditLoading}
+                >Remove Image</button>
+              </div>
+            )}
+            <div style={{display:'flex',gap:12,marginTop:18}}>
+              <button
+                disabled={!imageEditFile || imageEditLoading}
+                onClick={async () => {
+                  if (!imageEditFile) return;
+                  setImageEditLoading(true);
+                  try {
+                    const file = imageEditFile;
+                    const fileExt = file.name.split('.').pop();
+                    // FIX: stable, unique path per product
+                    const filePath = `products/${imageEditProduct.id}/main.${fileExt}`;
+                    // Upload to bucket 'productimages'
+                    const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
+                    if (uploadError) throw uploadError;
+                    // Get public URL
+                    const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
+                    const publicUrl = publicUrlData?.publicUrl;
+                    if (!publicUrl) throw new Error('Failed to get public URL for image.');
+                    // Insert into product_images table
+                    await supabase.from('product_images').insert([
+                      { product_id: imageEditProduct.id, image_url: publicUrl }
+                    ]);
+                    // Update image_url in products table
+                    await supabase.from('products').update({ image_url: publicUrl }).eq('id', imageEditProduct.id);
+                    setImageEditModalOpen(false);
+                    setImageEditProduct(null);
+                    setImageEditFile(null);
+                    // Instead of window.location.reload(), just refetch products and keep filter
+                    await fetchAll();
+                  } catch (err) {
+                    alert('Failed to upload image: ' + (err.message || err));
+                  } finally {
+                    setImageEditLoading(false);
+                  }
+                }}
+                style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
+              >Save</button>
+              <button
+                onClick={() => {
+                  setImageEditModalOpen(false);
+                  setImageEditProduct(null);
+                  setImageEditFile(null);
+                }}
+                style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
+              >Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Manual Inventory Adjust Modal */}
       {adjustModalOpen && adjustProduct && (
         <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -455,15 +543,7 @@ function ProductsListPage() {
           </div>
         </div>
       )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* ======== End fixed modals ======== */}
     </div>
   );
 }

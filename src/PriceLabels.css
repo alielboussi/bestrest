@@ -1,0 +1,129 @@
+/* Clean A4 two-up labels stylesheet
+   - Exactly 2 labels per A4 page
+   - Labels are shown only in print (hidden on screen)
+   - App UI remains dark on screen
+   - Watermark centered and faint
+   - Logos square, company centered, QR bottom-left, price star bottom-right
+*/
+
+/* Force A4 and zero print margins */
+@page { size: A4; margin: 0; }
+
+/* App (screen) */
+.price-labels-page {
+  background: #111; /* dark app background */
+  color: #e6ffe6;
+  min-height: 100vh;
+  padding: 18px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+/* Hide labels on screen; show only in print */
+.labels-a4 { display: none; }
+
+/* Print-only layout */
+@media print {
+  html, body, .price-labels-page { background: #fff !important; color: #111 !important; }
+  /* hide UI chrome */
+  .label-search-bar, .label-selected-table, .label-actions { display: none !important; }
+  .labels-a4 { display: block !important; }
+}
+
+/* A4 page container (one physical sheet) */
+.a4-pair {
+  width: 210mm;
+  height: 297mm;
+  margin: 0 auto;
+  page-break-after: always;
+  box-sizing: border-box;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each label is exactly half the A4 height */
+.a4-label {
+  width: 100%;
+  height: 148.5mm; /* half A4 */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+/* The visual label card that fills the half page */
+.label-card {
+  width: calc(100% - 0mm);
+  height: calc(100% - 0mm);
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10mm 12mm; /* breathing room inside label */
+}
+
+/* Watermark centered and faint */
+.label-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.06;
+  pointer-events: none;
+  z-index: 0;
+}
+.label-watermark img { width: 80%; height: 80%; object-fit: contain; }
+
+/* Header: logos left/right, company centered */
+.label-header {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22mm 1fr 22mm;
+  align-items: center;
+  gap: 6mm;
+  z-index: 2;
+}
+.header-logo { width: 22mm; height: 22mm; object-fit: contain; }
+.header-company { text-align: center; font-weight: 800; font-size: 8mm; color: #111; }
+
+/* Main title, centered */
+.label-title { margin-top: 2mm; text-align: center; font-weight: 800; font-size: 7.5mm; color: #111; z-index: 2; }
+.label-components { margin-top: 2mm; font-size: 4.5mm; color: #0b7bd6; z-index: 2; padding-left: 6mm; }
+
+/* Bottom-left: QR + SKU */
+.label-bl { position: absolute; left: 8mm; bottom: 8mm; z-index: 3; display: flex; gap: 4mm; align-items: flex-start; }
+.label-qr { width: 26mm; height: 26mm; }
+.label-qr svg { width: 100% !important; height: 100% !important; display: block; }
+.label-sku { font-size: 4.5mm; font-weight: 700; color: #111; }
+
+/* Bottom-right: price stack and star */
+.label-br { position: absolute; right: 8mm; bottom: 8mm; z-index: 3; display:flex; flex-direction: column; align-items: flex-end; }
+.price-old { font-size: 5mm; color: #777; position: relative; }
+.price-old.diagonal::after { content: ''; position: absolute; left: -10%; top: 50%; width: 120%; height: 2px; background: #c33; transform: rotate(-18deg); }
+.discount-badge { font-weight: 900; font-size: 5.5mm; color: #fff; background:#ff3b3b; padding: 2mm 3mm; border-radius: 3mm; margin: 3px 0; }
+
+/* Star container (SVG used) */
+.price-star { width: 46mm; height: 46mm; position: relative; display: flex; align-items: center; justify-content: center; }
+.price-star svg { width: 100%; height: 100%; }
+.price-value { position: absolute; display:flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.price-value-inner { font-weight: 900; font-size: 9.2mm; color: #111; line-height: 1; }
+.price-value-sub { font-size: 3.2mm; color: #666; margin-top: 1mm; }
+
+/* component list items */
+.label-components li { margin-bottom: 2px; }
+
+/* Screen controls styling (kept dark) */
+.label-search-bar input { width: 100%; max-width: 800px; padding: 8px 10px; border-radius: 4px; border: 1px solid #0b7; background:#111; color:#0f0; }
+.labels-table-full { width: 100%; max-width: 900px; margin: 12px auto; border-collapse: collapse; }
+.labels-table-full th, .labels-table-full td { padding: 10px; color: #ddd; }
+.label-actions { display:flex; gap:12px; justify-content:center; margin-top:12px; }
+
+/* Ensure no default margins when printed by browsers */
+@media print { body { margin:0; } }
