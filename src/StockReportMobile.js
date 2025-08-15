@@ -69,41 +69,36 @@ const StockReportMobile = () => {
     return calcMaxSetQty(items, productStock);
   }
 
-  // Filter combos (sets) that can be made globally or per location, and match search/category
-  const filteredCombos = combos.filter(combo => {
-    const setQty = computeComboMaxQty(combo.id, location || '');
-    if (setQty <= 0) return false;
-    const matchesCategory = !category || combo.category_id === Number(category);
-    const searchValue = search.trim().toLowerCase();
-    const matchesSearch =
-      !searchValue ||
-      (combo.combo_name && combo.combo_name.toLowerCase().includes(searchValue)) ||
-      (combo.sku && combo.sku.toLowerCase().includes(searchValue));
-    return matchesCategory && matchesSearch;
-  });
+  // Note: mobile view shows actual on-hand stock only (no deduction for potential sets)
 
-  // Used stock per product (from only actually buildable combos)
-  const usedStock = {};
-  filteredCombos.forEach(combo => {
-    const setQty = computeComboMaxQty(combo.id, location || '');
-    comboItems.filter(ci => ci.combo_id === combo.id).forEach(item => {
-      usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
-    });
-  });
+  // Compute buildable set qty per combo at the selected location, then sum used component stock
+  const comboSetQty = new Map(); // combo_id -> set qty
+  for (const combo of combos) {
+    const qty = computeComboMaxQty(combo.id, location || '');
+    if (qty > 0) comboSetQty.set(combo.id, qty);
+  }
+  const usedStock = {}; // product_id -> qty used by sets
+  if (comboSetQty.size > 0) {
+    for (const [comboId, setQty] of comboSetQty.entries()) {
+      const items = comboItems.filter(ci => ci.combo_id === comboId);
+      for (const item of items) {
+        usedStock[item.product_id] = (usedStock[item.product_id] || 0) + (Number(item.quantity) || 0) * setQty;
+      }
+    }
+  }
 
   // Filter products: only show if stock remains after sets
   const filteredProducts = products.filter(p => {
-    // Only show products with excess stock after sets are made
-  const totalStock = getStockForProduct(p.id, location || '');
-    const remainingStock = totalStock - (usedStock[p.id] || 0);
-    // Only show if product is not a set component, or has excess stock
-    const isSetComponent = comboItems.some(ci => ci.product_id === p.id);
-    if (isSetComponent && remainingStock <= 0) return false;
+    const totalStock = getStockForProduct(p.id, location || '');
+    // Hide a component if all its stock would be consumed by buildable sets
+    const isSetComponent = comboItems.some(ci => ci.product_id === p.id && comboSetQty.has(ci.combo_id));
+    if (isSetComponent) {
+      const remaining = totalStock - (usedStock[p.id] || 0);
+      if (remaining <= 0) return false;
+    }
     const matchesCategory = !category || p.category_id === Number(category);
     const searchValue = search.trim().toLowerCase();
-    const matchesSearch =
-      !searchValue ||
-      (p.name && p.name.toLowerCase().includes(searchValue));
+    const matchesSearch = !searchValue || (p.name && p.name.toLowerCase().includes(searchValue));
     return matchesCategory && matchesSearch;
   });
 
@@ -146,7 +141,6 @@ const StockReportMobile = () => {
             unit = unitObj ? (unitObj.abbreviation || unitObj.name || '') : '';
           }
           const totalStock = getStockForProduct(p.id, location || '');
-          const remainingStock = totalStock - (usedStock[p.id] || 0);
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
           return (
@@ -168,7 +162,7 @@ const StockReportMobile = () => {
                 <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
                   <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{p.name}</div>
                   <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: '1.1em'}}>
-                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {remainingStock}</span>
+                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {totalStock}</span>
                     <span style={{color: '#fff'}}>{unit}</span>
                   </div>
                 </div>

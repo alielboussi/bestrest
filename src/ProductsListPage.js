@@ -199,7 +199,7 @@ function ProductsListPage() {
   ];
 
   return (
-    <div className="products-list-page" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
+    <div className="products-list-page" style={{maxWidth: '100vw', minHeight: '100vh', padding: 0, margin: 0}}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>All Products</h1>
       <div style={{display: 'flex', gap: '2rem', marginBottom: '1rem', alignItems: 'center'}}>
         <input
@@ -228,13 +228,13 @@ function ProductsListPage() {
           </option>
         </select>
       </div>
-      <div className="products-list" style={{width: '100%', overflowX: 'auto', maxHeight: 'none'}}>
+    <div className="products-list" style={{width: '100%', overflowX: 'auto'}}>
         {loading ? (
           <div>Loading...</div>
         ) : filteredProducts.length === 0 ? (
           <div>No products found.</div>
         ) : (
-          <div style={{maxHeight: 500, overflowY: 'auto', width: '100%'}}>
+      <div style={{width: '100%'}}>
             <table style={{width: '100%', minWidth: '0', background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse', tableLayout: 'fixed'}}>
               <thead>
                 <tr style={{background: '#23272f'}}>
