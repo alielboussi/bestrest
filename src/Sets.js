@@ -32,7 +32,7 @@ export default function Sets() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.from("products").select("id, name, sku").then(({ data, error }) => {
+    supabase.from("products").select("id, name, sku, unit_of_measure_id").then(({ data, error }) => {
       if (error) {
         console.error("Error fetching products:", error);
       } else {
@@ -62,7 +62,7 @@ export default function Sets() {
         .select("id, combo_name, sku, standard_price, combo_price, promotional_price, promo_start_date, promo_end_date, picture_url")
         .then(({ data }) => setSets(data || []));
     }
-  }, []);
+  }, [selectedLocation]);
 
   // Fetch inventory for selected location
   useEffect(() => {
@@ -97,6 +97,14 @@ export default function Sets() {
     productStock[i.product_id] = (productStock[i.product_id] || 0) + i.quantity;
   });
 
+  // Helper: get product unit label (abbr or name)
+  const getProductUnit = (productId) => {
+    const p = products.find(pr => pr.id === productId);
+    if (!p) return '-';
+    const u = units.find(u => u.id === p.unit_of_measure_id);
+    return (u && (u.abbreviation || u.name)) || '-';
+  };
+
   // Add product to kit (allow adding even if stock is zero, but default quantity to 0)
   const addProductToKit = (product) => {
     const stock = productStock[product.id] || 0;
@@ -124,37 +132,18 @@ export default function Sets() {
       alert("Please fill all required fields, select a location, currency, and add at least one product.");
       return;
     }
-    // 1. Check for existing set product by name or SKU
-    const { data: existingSet, error: existingError } = await supabase
-      .from("products")
+    // 1. Check for existing combo by name or SKU
+    const { data: existingCombo } = await supabase
+      .from("combos")
       .select("id")
-      .or(`name.eq.${kitName},sku.eq.${sku}`)
-      .single();
-    let setProduct;
-    if (existingSet) {
-      setProduct = existingSet;
-    } else {
-      const { data: newSet, error: prodError } = await supabase
-        .from("products")
-        .insert([{
-          name: kitName,
-          sku,
-          price: standardPrice,
-          standard_price: standardPrice,
-          promotional_price: promotionalPrice === "" ? null : promotionalPrice,
-          promo_start_date: promoStart || null,
-          promo_end_date: promoEnd || null,
-          image_url: imageUrl || null,
-          category_id: null, // Optionally set a category for sets
-          unit_of_measure_id: selectedUnit || null // Set selected unit
-        }])
-        .select()
-        .single();
-      if (prodError) return alert("Error creating set product: " + prodError.message);
-      setProduct = newSet;
+      .or(`combo_name.eq.${kitName},sku.eq.${sku}`)
+      .maybeSingle();
+    if (existingCombo) {
+      alert("A set/combo with this name or SKU already exists.");
+      return;
     }
 
-    // 2. Create the combo and link to set product_id
+    // 2. Create only the combo (no product row)
     const { data: combo, error: comboError } = await supabase
       .from("combos")
       .insert([{
@@ -166,7 +155,6 @@ export default function Sets() {
         promo_start_date: promoStart || null,
         promo_end_date: promoEnd || null,
         picture_url: imageUrl || null,
-        product_id: setProduct.id, // Link combo to set product
         currency: currency
       }])
       .select()
@@ -248,7 +236,7 @@ export default function Sets() {
               style={{marginBottom: 0, width: '100%', borderColor: '#00b4d8', background: '#23272f', color: '#e0e6ed', borderRadius: '6px', padding: '8px 12px', fontSize: '1rem'}}
             />
             {/* Dropdown for matching products */}
-            {search.trim().length >= 3 && filteredProducts.length > 0 && (
+      {search.trim().length >= 3 && filteredProducts.length > 0 && (
               <ul style={{position: 'absolute', top: '40px', left: 0, width: '100%', background: '#23272f', border: '1px solid #00b4d8', borderRadius: '6px', maxHeight: '180px', overflowY: 'auto', zIndex: 10, listStyle: 'none', margin: 0, padding: 0}}>
                 {filteredProducts.map(product => (
                   <li
@@ -261,7 +249,8 @@ export default function Sets() {
                       }
                     }}
                   >
-                    {product.name} <span style={{color:'#00b4d8', fontSize:'0.9em'}}>({product.sku})</span>
+        {product.name} <span style={{color:'#00b4d8', fontSize:'0.9em'}}>({product.sku})</span>
+        <span style={{color:'#9aa', fontSize:'0.9em'}}> • {getProductUnit(product.id)}</span>
                   </li>
                 ))}
               </ul>
@@ -332,10 +321,11 @@ export default function Sets() {
         {/* Show kit items table only when searching products or adding to kit */}
         {(search.trim() !== "" || kitItems.length > 0) && (
           <div className="products-list" style={{width: '100%', marginTop: '0.5rem', overflowY: 'auto', maxHeight: '350px'}}>
-            <table style={{width: '100%', minWidth: 600, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
+            <table style={{width: '100%', minWidth: 700, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
               <thead>
                 <tr style={{background: '#23272f'}}>
                   <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', textAlign: 'left'}}>Product Name</th>
+                  <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', width: 120}}>Unit</th>
                   <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', width: 120}}>Quantity</th>
                   <th style={{padding: '0.5rem', borderBottom: '1px solid #00b4d8', color: '#00b4d8', width: 60}}>Remove</th>
                 </tr>
@@ -344,6 +334,7 @@ export default function Sets() {
                 {kitItems.map(item => (
                   <tr key={item.product_id} style={{background: '#181818'}}>
                     <td style={{textAlign: 'left'}}>{item.name}</td>
+                    <td>{getProductUnit(item.product_id)}</td>
                     <td>
                       <input
                         type="number"

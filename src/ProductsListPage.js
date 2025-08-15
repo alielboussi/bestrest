@@ -119,14 +119,14 @@ function ProductsListPage() {
         { data: products },
         { data: categories },
         { data: locations },
-        { data: units },
+        { data: unitsData },
         { data: combos },
         { data: comboLocations },
         { data: comboItems }
       ] = await Promise.all([
         supabase
           .from("products")
-          .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, image_url, product_images(image_url), product_locations(location_id)`)
+          .select(`id, name, sku, sku_type, cost_price, price, promotional_price, promo_start_date, promo_end_date, currency, category_id, unit_of_measure_id, created_at, image_url, product_images(image_url), product_locations(location_id), unit:unit_of_measure(id, name, abbreviation)`)
           .order("created_at", { ascending: false }),
         supabase.from("categories").select("id, name"),
         supabase.from("locations").select("id, name"),
@@ -135,16 +135,23 @@ function ProductsListPage() {
         supabase.from("combo_locations").select("combo_id, location_id"),
         supabase.from("combo_items").select("combo_id, product_id, quantity"),
       ]);
-      // Map image_url from product_images array to direct property (prefer products.image_url)
+      // Build units map for quick lookup
+      const unitsMap = Object.fromEntries((unitsData || []).map(u => [String(u.id), u]));
+      // Map image_url and attach unitLabel from units
       const mappedProducts = (products || []).map(p => {
         const related = Array.isArray(p.product_images) && p.product_images.length > 0 ? p.product_images[0].image_url : "";
         const finalUrl = (p.image_url && p.image_url.trim() !== "") ? p.image_url : (related || "");
-        return { ...p, image_url: finalUrl };
+        const unitFromMap = unitsMap[String(p.unit_of_measure_id)];
+        const unitFromJoin = p.unit || null;
+        const unitLabel = unitFromJoin
+          ? (unitFromJoin.abbreviation || unitFromJoin.name)
+          : (unitFromMap ? (unitFromMap.abbreviation || unitFromMap.name) : undefined);
+        return { ...p, image_url: finalUrl, unitLabel };
       });
       setProducts(mappedProducts);
       setCategories(categories || []);
       setLocations(locations || []);
-      setUnits(units || []);
+      setUnits(unitsData || []);
       setCombos(combos || []);
       setComboLocations(comboLocations || []);
       setComboItems(comboItems || []);
@@ -162,12 +169,27 @@ function ProductsListPage() {
     }
   };
 
+  // Helper to resolve a product's unit label
+  const getUnitLabel = (product) => {
+    const pid = product?.unit_of_measure_id;
+    if (pid === null || pid === undefined || pid === '') return '-';
+    const u = units.find((x) => String(x.id) === String(pid));
+    if (!u) return '-';
+    return u.abbreviation || u.name || '-';
+  };
+
   // Filter products by location, search, and image presence
   const filteredProducts = [
     ...products.filter(product => {
-      // Exclude sets (combos)
-      const unit = units.find(u => u.id === product.unit_of_measure_id);
-      if (unit && unit.name && unit.name.toLowerCase() === 'set') return false;
+      // Exclude sets (combos) if unit name is literally 'set'
+      let unitName = undefined;
+      if (product.unit && product.unit.name) {
+        unitName = product.unit.name;
+      } else {
+        const unit = units.find(u => String(u.id) === String(product.unit_of_measure_id));
+        unitName = unit?.name;
+      }
+      if (unitName && unitName.toLowerCase() === 'set') return false;
       // Location filter
       if (selectedLocation) {
         if (product.product_locations && product.product_locations.length > 0) {
@@ -300,7 +322,7 @@ function ProductsListPage() {
                       <td style={{textAlign: 'left'}}>{isCombo ? item.combo_name : item.name}</td>
                       <td style={{textAlign: 'center'}}>{isCombo ? item.sku : (item.sku || '(auto)')}</td>
                       <td style={{textAlign: 'center'}}>{isCombo ? 'Set' : (categories.find((c) => c.id === item.category_id)?.name || '-')}</td>
-                      <td style={{textAlign: 'center'}}>{isCombo ? 'Set' : (units.find((u) => u.id === item.unit_of_measure_id)?.abbreviation || units.find((u) => u.id === item.unit_of_measure_id)?.name || '-')}</td>
+                      <td style={{textAlign: 'center'}}>{isCombo ? 'Set' : (item.unitLabel || getUnitLabel(item))}</td>
                       <td style={{textAlign: 'center'}}>
                         {
                           (() => {

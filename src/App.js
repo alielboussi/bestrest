@@ -26,6 +26,7 @@ import StocktakeReport from './StocktakeReport';
 import LaybyManagement from "./LaybyManagement";
 import LaybyManagementMobile from "./LaybyManagementMobile";
 import EditSet from './EditSet';
+import PriceLabelMobile from './PriceLabelMobile';
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 // SmartRedirect: redirects / based on user role
@@ -78,6 +79,7 @@ function App() {
         {/* <Route path="/layby-report" element={<LaybyManagementView />} /> */}
   <Route path="/stocktake-report" element={<StocktakeReport />} />
   <Route path="/price-labels" element={<PriceLabels />} />
+  <Route path="/price-labels-mobile" element={<PriceLabelMobile />} />
         <Route path="/stock-report" element={<StockReport />} />
         <Route path="/opening-stock" element={<OpeningStock />} />
         <Route path="/transfer" element={<Transfer />} />

@@ -79,34 +79,41 @@ const StocktakeReport = () => {
           .in('combo_id', comboIds);
         comboItemsRaw = comboItemsData || [];
       }
-      // Get manual inventory adjustments
+      // Get manual inventory adjustments (we will split by type in code)
       const { data: adjustments } = await supabase
         .from('inventory_adjustments')
         .select('product_id, location_id, quantity, adjustment_type, adjusted_at')
         .eq('location_id', location);
-      // Get opening stock: first adjustment (type 'opening') or opening_stock_entries
-      let openingEntries = [];
-      if (adjustments && adjustments.length > 0) {
-        openingEntries = adjustments.filter(a => a.adjustment_type === 'opening').map(a => ({ product_id: a.product_id, qty: a.quantity }));
-      } else {
-        const { data: openingStock } = await supabase
-          .from('opening_stock_entries')
-          .select('product_id, qty')
-          .eq('session_id', cycle.openingSession.id);
-        openingEntries = openingStock || [];
-      }
+      // Get opening stock entries for this opening session
+      const { data: openingStock } = await supabase
+        .from('opening_stock_entries')
+        .select('product_id, qty')
+        .eq('session_id', cycle.openingSession.id);
+      const openingEntries = openingStock || [];
+      // Build opening map from entries, then override with latest manual opening-type adjustments (absolute qty)
+      const openingMap = {};
+      (openingEntries || []).forEach(e => { openingMap[e.product_id] = Number(e.qty) || 0; });
+      // Consider both 'opening' and 'Stock Transfer Qty Adjustment' as opening-type adjustments based on current UI
+      const openingAdjLatest = {};
+      (adjustments || [])
+        .filter(a => a.adjustment_type === 'opening' || a.adjustment_type === 'Stock Transfer Qty Adjustment')
+        .forEach(a => {
+          const ts = new Date(a.adjusted_at).getTime() || 0;
+          const prev = openingAdjLatest[a.product_id];
+          if (!prev || ts > prev.ts) {
+            openingAdjLatest[a.product_id] = { qty: Number(a.quantity) || 0, ts };
+          }
+        });
+      Object.keys(openingAdjLatest).forEach(pid => {
+        openingMap[pid] = openingAdjLatest[pid].qty;
+      });
       // Get closing stock
       const { data: closingEntries } = await supabase
         .from('closing_stock_entries')
         .select('product_id, qty')
         .eq('session_id', cycle.closingSession.id);
-      // Get transfers in: subsequent manual adjustments (type 'transfer') and stock_transfer_entries
-      let transferInMap = {};
-      if (adjustments && adjustments.length > 0) {
-        adjustments.filter(a => a.adjustment_type === 'transfer').forEach(e => {
-          transferInMap[e.product_id] = (transferInMap[e.product_id] || 0) + Number(e.quantity || 0);
-        });
-      }
+  // Get transfers in only from Transfer module (stock_transfer_entries) within window
+  let transferInMap = {};
       // Also include stock_transfer_entries as before
       const { data: transferSessions } = await supabase
         .from('stock_transfer_sessions')
@@ -182,25 +189,23 @@ const StocktakeReport = () => {
       // Prepare rows: combos first, with their components below
       const rows = [];
       combosRaw.forEach(combo => {
-  // Centralized set inventory calculation
-  const items = comboItemsMap[combo.id] || [];
-  const productStock = {};
-  (openingEntries || []).forEach(e => { productStock[e.product_id] = e.qty; });
-  const opening = getMaxSetQty(items, productStock);
-  // Edge case: highlight if opening === 0
-        // Transfers are processed on products only, not the set
-        const transfer = '';
-        // Optionally, calculate possible sets transferred for transparency
+        // Centralized set inventory calculation using combined opening map
+        const items = comboItemsMap[combo.id] || [];
+        const productStock = { ...openingMap };
+        const opening = getMaxSetQty(items, productStock);
+        // Compute transfer into sets based on component transfers during window
+        let transferSets = 0;
         let possibleSetsTransferred = '';
         if (items.length > 0) {
           const transferStock = {};
-          Object.keys(productStock).forEach(pid => { transferStock[pid] = transferInMap[pid] || 0; });
-          possibleSetsTransferred = getMaxSetQty(items, transferStock);
+          items.forEach(it => { transferStock[it.product_id] = transferInMap[it.product_id] || 0; });
+          transferSets = getMaxSetQty(items, transferStock) || 0;
+          possibleSetsTransferred = transferSets;
         }
         // Sales for set: processed on the set itself
         const closingStock = closingEntries.find(e => e.product_id === combo.id)?.qty || 0;
         const sales = salesMap[combo.id] || 0;
-        const expectedClosing = opening - sales;
+        const expectedClosing = opening + transferSets - sales;
         const variance = closingStock - expectedClosing;
         const usePrice = selectPrice(combo.promotional_price, combo.standard_price);
         const amount = formatAmount(variance * usePrice);
@@ -209,7 +214,7 @@ const StocktakeReport = () => {
           sku: combo.sku,
           name: combo.combo_name,
           opening: opening !== null ? opening : '',
-          transfer,
+          transfer: transferSets,
           possibleSetsTransferred,
           sales,
           actual: closingStock,
@@ -241,10 +246,10 @@ const StocktakeReport = () => {
       });
       // Now show all products not part of any set
       const setComponentIds = Object.values(comboItemsMap).flat().map(ci => ci.product_id);
-      (productsRaw || []).forEach(prod => {
+    (productsRaw || []).forEach(prod => {
         if (!setComponentIds.includes(prod.id)) {
-          const opening = openingEntries.find(e => e.product_id === prod.id)?.qty || 0;
-          const transfer = transferInMap[prod.id] || 0;
+      const opening = openingMap[prod.id] || 0;
+      const transfer = transferInMap[prod.id] || 0;
           const sales = salesMap[prod.id] || 0;
           const actual = closingEntries.find(e => e.product_id === prod.id)?.qty || 0;
           const expectedClosing = opening + transfer - sales;

@@ -7,10 +7,11 @@ import {
   FaBox, FaChartLine, FaUsers, FaCogs, FaMapMarkerAlt, FaTags, FaFlask,
   FaRegEdit, FaExchangeAlt, FaCashRegister, FaUserShield
 } from 'react-icons/fa';
+import useStatistics from './hooks/useStatistics';
 // Removed user permissions and permissionUtils logic
 import './Dashboard.css';
 
-const totalSales = 0;
+// Removed static totalSales; will compute from sales table
 
 function getPermissionsFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -29,9 +30,11 @@ function Dashboard() {
   const [locationFilter, setLocationFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [productStats, setProductStats] = useState({ qty: 0, costK: 0, costUSD: 0 });
+  const [productStats, setProductStats] = useState({ qty: 0, costK: 0, costUSD: 0, unitsOnHand: 0 });
   const [dueTotals, setDueTotals] = useState({ K: 0, USD: 0 });
   const [lastStockDate, setLastStockDate] = useState(null);
+  const [totalSalesK, setTotalSalesK] = useState(0);
+  const { stats: sharedStats } = useStatistics({ dateFrom, dateTo, locationFilter });
   const [showReset, setShowReset] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [typed, setTyped] = useState('');
@@ -92,6 +95,81 @@ useEffect(() => {
     }
     fetchLocations();
   }, []);
+
+  // Fetch live stats for dashboard: inventory totals, layby dues, last stocktake date, total sales (K)
+  useEffect(() => {
+    async function fetchStats() {
+      // Helper to resolve a location filter ID (string id or name)
+      let locationId = locationFilter;
+      if (locationFilter && locations.length > 0 && isNaN(Number(locationFilter))) {
+        const match = locations.find(l => (l.name || '').toLowerCase() === (locationFilter || '').toLowerCase());
+        if (match) locationId = match.id;
+      }
+
+      // 1) Inventory totals -> product quantity + cost by currency
+      let invQuery = supabase.from('inventory').select('product_id, location, quantity');
+      if (locationId) invQuery = invQuery.eq('location', locationId);
+      const { data: invData } = await invQuery;
+      const qtyByProduct = {};
+      (invData || []).forEach(i => {
+        qtyByProduct[i.product_id] = (qtyByProduct[i.product_id] || 0) + (Number(i.quantity) || 0);
+      });
+    const prodIds = Object.keys(qtyByProduct);
+    let costK = 0, costUSD = 0;
+      if (prodIds.length > 0) {
+        const { data: prodCost } = await supabase
+          .from('products')
+          .select('id, cost_price, currency')
+          .in('id', prodIds);
+        (prodCost || []).forEach(p => {
+          const q = qtyByProduct[p.id] || 0;
+      const cost = (Number(p.cost_price) || 0) * q;
+          if ((p.currency || '').toUpperCase() === 'K') costK += cost;
+          else if ((p.currency || '').includes('$') || (p.currency || '').toUpperCase() === 'USD') costUSD += cost;
+        });
+      }
+    const unitsOnHand = Object.values(qtyByProduct).reduce((acc, v) => acc + (Number(v) || 0), 0);
+      // Products Quantity should reflect count of products in catalog, not units on hand
+      const { count: productCount } = await supabase
+        .from('products')
+        .select('id', { count: 'exact', head: true });
+    setProductStats({ qty: productCount || 0, costK, costUSD, unitsOnHand });
+
+  // 2) Layby dues by currency (use shared statistics for consistency)
+  const laybyByCurrency = sharedStats?.laybyByCurrency || {};
+  const dueK = Object.entries(laybyByCurrency).reduce((acc, [cur, amt]) => acc + ((cur.toUpperCase() === 'K') ? Number(amt) : 0), 0);
+  const dueUSD = Object.entries(laybyByCurrency).reduce((acc, [cur, amt]) => acc + (((cur === '$') || (cur.toUpperCase() === 'USD')) ? Number(amt) : 0), 0);
+  setDueTotals({ K: dueK, USD: dueUSD });
+
+      // 3) Last stocktake date (prefer latest closing; fallback to latest opening)
+      let closingQ = supabase
+        .from('closing_stock_sessions')
+        .select('ended_at, location_id')
+        .order('ended_at', { ascending: false })
+        .limit(1);
+      if (locationId) closingQ = closingQ.eq('location_id', locationId);
+      const { data: lastClose } = await closingQ;
+      if (lastClose && lastClose.length > 0) {
+        setLastStockDate(lastClose[0].ended_at);
+      } else {
+        let openingQ = supabase
+          .from('opening_stock_sessions')
+          .select('started_at, location_id')
+          .order('started_at', { ascending: false })
+          .limit(1);
+        if (locationId) openingQ = openingQ.eq('location_id', locationId);
+        const { data: lastOpen } = await openingQ;
+        setLastStockDate(lastOpen && lastOpen.length > 0 ? lastOpen[0].started_at : null);
+      }
+
+    // 4) Total Sales (K) using shared stats
+    const salesByCurrency = sharedStats?.salesByCurrency || {};
+    const sumK = Object.entries(salesByCurrency).reduce((acc, [cur, amt]) => acc + ((cur.toUpperCase() === 'K') ? Number(amt) : 0), 0);
+    setTotalSalesK(sumK);
+    }
+    fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locations, locationFilter, dateFrom, dateTo, sharedStats]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -166,6 +244,32 @@ useEffect(() => {
           </button>
         </div>
 
+        {/* Filters for stats */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', margin: '8px 0 16px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label htmlFor="dash-location" style={{ fontSize: 13 }}>Location:</label>
+            <select
+              id="dash-location"
+              value={locationFilter}
+              onChange={e => setLocationFilter(e.target.value)}
+              style={{ padding: '4px 6px' }}
+            >
+              <option value="">All</option>
+              {locations.map(l => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label htmlFor="dash-from" style={{ fontSize: 13 }}>From:</label>
+            <input id="dash-from" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label htmlFor="dash-to" style={{ fontSize: 13 }}>To:</label>
+            <input id="dash-to" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </div>
+        </div>
+
         {/* Statistics section */}
         <div style={{ width: '100%', marginTop: 18, marginBottom: 8 }}>
           {(() => {
@@ -182,11 +286,12 @@ useEffect(() => {
                 title: 'Products Total Cost (K)',
                 value: productStats.costK + ' K'
               },
+              // Removed Products Total Cost ($) card as requested
               {
-                key: 'Products Total Cost ($) Stat',
-                icon: <FaBox size={28} color="#ff4d4d" />,
-                title: 'Products Total Cost ($)',
-                value: productStats.costUSD + ' $'
+                key: 'Units On Hand Stat',
+                icon: <FaBox size={28} color="#9c27b0" />,
+                title: 'Units On Hand',
+                value: productStats.unitsOnHand
               },
               {
                 key: 'Last Stocktake Stat',
@@ -210,7 +315,7 @@ useEffect(() => {
                 key: 'Total Sales Stat',
                 icon: <FaChartLine size={28} color="#FFD700" />,
                 title: 'Total Sales',
-                value: totalSales.toLocaleString() + ' K'
+                value: totalSalesK.toLocaleString() + ' K'
               }
             ];
             return (
