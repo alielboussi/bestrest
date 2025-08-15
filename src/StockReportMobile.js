@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
+import { getMaxSetQty as calcMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
 import supabase from './supabase';
 import './StockReportMobile.css';
 
@@ -17,16 +17,13 @@ const StockReportMobile = () => {
   const [combos, setCombos] = useState([]);
   const [comboItems, setComboItems] = useState([]);
   const [expandedImage, setExpandedImage] = useState(null);
-  const [comboInventory, setComboInventory] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       const { data: prods } = await supabase.from('products').select('*');
-      setProducts(prods || []);
-  console.log('Fetched products:', prods);
+  setProducts(prods || []);
       const { data: prodLocs } = await supabase.from('product_locations').select('*');
-      setProductLocations(prodLocs || []);
-  console.log('Fetched productLocations:', prodLocs);
+  setProductLocations(prodLocs || []);
       const { data: locs } = await supabase.from('locations').select('*');
       setLocations(locs || []);
       const { data: cats } = await supabase.from('categories').select('*');
@@ -46,23 +43,35 @@ const StockReportMobile = () => {
     fetchData();
   }, []);
 
+  // Aggregate stock per product from product_locations OR inventory (prefer product_locations if present)
+  function getStockForProduct(productId, locId = '') {
+    const loc = locId === undefined || locId === null ? '' : locId;
+    // Sum from product_locations
+    const fromPL = productLocations
+      .filter(pl => pl.product_id === productId && (!loc || pl.location_id == loc))
+      .reduce((sum, pl) => sum + (Number(pl.quantity) || 0), 0);
+    if (fromPL > 0) return fromPL;
+    // Fallback to inventory table (supports fields: location or location_id)
+    const fromInv = inventory
+      .filter(inv => inv.product_id === productId && (!loc || inv.location == loc || inv.location_id == loc))
+      .reduce((sum, inv) => sum + (Number(inv.quantity) || 0), 0);
+    return fromInv;
+  }
+
   // Calculate max sets for a combo (global or by location)
-  function getMaxSetQty(comboId, loc) {
+  function computeComboMaxQty(comboId, locId) {
     const items = comboItems.filter(ci => ci.combo_id === comboId);
     if (!items.length) return 0;
     const productStock = {};
-    items.forEach(item => {
-      const stock = loc
-        ? productLocations.filter(pl => pl.product_id === item.product_id && pl.location_id === loc).reduce((sum, pl) => sum + (pl.quantity || 0), 0)
-        : productLocations.filter(pl => pl.product_id === item.product_id).reduce((sum, pl) => sum + (pl.quantity || 0), 0);
-      productStock[item.product_id] = stock;
-    });
-    return getMaxSetQty(items, productStock);
+    for (const item of items) {
+      productStock[item.product_id] = getStockForProduct(item.product_id, locId);
+    }
+    return calcMaxSetQty(items, productStock);
   }
 
   // Filter combos (sets) that can be made globally or per location, and match search/category
   const filteredCombos = combos.filter(combo => {
-    const setQty = getMaxSetQty(combo.id, location || '');
+    const setQty = computeComboMaxQty(combo.id, location || '');
     if (setQty <= 0) return false;
     const matchesCategory = !category || combo.category_id === Number(category);
     const searchValue = search.trim().toLowerCase();
@@ -76,7 +85,7 @@ const StockReportMobile = () => {
   // Used stock per product (from only actually buildable combos)
   const usedStock = {};
   filteredCombos.forEach(combo => {
-    const setQty = getMaxSetQty(combo.id, location || '');
+    const setQty = computeComboMaxQty(combo.id, location || '');
     comboItems.filter(ci => ci.combo_id === combo.id).forEach(item => {
       usedStock[item.product_id] = (usedStock[item.product_id] || 0) + item.quantity * setQty;
     });
@@ -85,10 +94,7 @@ const StockReportMobile = () => {
   // Filter products: only show if stock remains after sets
   const filteredProducts = products.filter(p => {
     // Only show products with excess stock after sets are made
-    const productLocs = location
-      ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
-      : productLocations.filter(pl => pl.product_id === p.id);
-    const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+  const totalStock = getStockForProduct(p.id, location || '');
     const remainingStock = totalStock - (usedStock[p.id] || 0);
     // Only show if product is not a set component, or has excess stock
     const isSetComponent = comboItems.some(ci => ci.product_id === p.id);
@@ -139,10 +145,7 @@ const StockReportMobile = () => {
             const unitObj = units.find(u => u.id === p.unit_of_measure_id);
             unit = unitObj ? (unitObj.abbreviation || unitObj.name || '') : '';
           }
-          const productLocs = location
-            ? productLocations.filter(pl => pl.product_id === p.id && pl.location_id === location)
-            : productLocations.filter(pl => pl.product_id === p.id);
-          const totalStock = productLocs.reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+          const totalStock = getStockForProduct(p.id, location || '');
           const remainingStock = totalStock - (usedStock[p.id] || 0);
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
