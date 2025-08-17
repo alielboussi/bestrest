@@ -34,6 +34,7 @@ function Dashboard() {
   const [dueTotals, setDueTotals] = useState({ K: 0, USD: 0 });
   const [lastStockDate, setLastStockDate] = useState(null);
   const [totalSalesK, setTotalSalesK] = useState(0);
+  const [incompleteCount, setIncompleteCount] = useState(0);
   const { stats: sharedStats } = useStatistics({ dateFrom, dateTo, locationFilter });
   const [showReset, setShowReset] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -59,6 +60,7 @@ function Dashboard() {
     { name: 'stockreport', label: 'Stock Report', route: '/stock-report', icon: FaBox },
   { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },
   { name: 'pricelabels', label: 'Print Price Labels', route: '/price-labels', icon: FaTags },
+  { name: 'incompletepackages', label: 'Incomplete Packages', route: '/incomplete-packages', icon: FaBox },
   ];
 
 useEffect(() => {
@@ -166,6 +168,12 @@ useEffect(() => {
     const salesByCurrency = sharedStats?.salesByCurrency || {};
     const sumK = Object.entries(salesByCurrency).reduce((acc, [cur, amt]) => acc + ((cur.toUpperCase() === 'K') ? Number(amt) : 0), 0);
     setTotalSalesK(sumK);
+
+  // 5) Incomplete Packages count (filtered by location when selected)
+  let ipQuery = supabase.from('incomplete_packages').select('id', { count: 'exact', head: true });
+  if (locationId) ipQuery = ipQuery.eq('location_id', locationId);
+  const { count: ipCount } = await ipQuery;
+  setIncompleteCount(ipCount || 0);
     }
     fetchStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,46 +235,42 @@ useEffect(() => {
     <>
 
 
-      <div className="dashboard-container">
-        <div className="dashboard-banner">
-          <span>Welcome{fullName ? `, ${fullName}` : ''}!</span>
-        </div>
+  <div className="dashboard-container">
         <div className="dashboard-header">
           <h1>Dashboard</h1>
           <button className="logout-btn" onClick={handleLogout}>Logout</button>
         </div>
 
 
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
           <button className="dashboard-page-btn gray" onClick={handleCompanySettings} style={{ marginRight: 8 }}>
             <FaCogs size={24} style={{ marginRight: 6 }} />
             Company Settings
           </button>
-        </div>
-
-        {/* Filters for stats */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', margin: '8px 0 16px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label htmlFor="dash-location" style={{ fontSize: 13 }}>Location:</label>
-            <select
-              id="dash-location"
-              value={locationFilter}
-              onChange={e => setLocationFilter(e.target.value)}
-              style={{ padding: '4px 6px' }}
-            >
-              <option value="">All</option>
-              {locations.map(l => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label htmlFor="dash-from" style={{ fontSize: 13 }}>From:</label>
-            <input id="dash-from" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <label htmlFor="dash-to" style={{ fontSize: 13 }}>To:</label>
-            <input id="dash-to" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          {/* Inline filters next to Company Settings */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label htmlFor="dash-location" style={{ fontSize: 13 }}>Location:</label>
+              <select
+                id="dash-location"
+                value={locationFilter}
+                onChange={e => setLocationFilter(e.target.value)}
+                style={{ padding: '4px 6px' }}
+              >
+                <option value="">All</option>
+                {locations.map(l => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label htmlFor="dash-from" style={{ fontSize: 13 }}>From:</label>
+              <input id="dash-from" type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <label htmlFor="dash-to" style={{ fontSize: 13 }}>To:</label>
+              <input id="dash-to" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            </div>
           </div>
         </div>
 
@@ -316,6 +320,12 @@ useEffect(() => {
                 icon: <FaChartLine size={28} color="#FFD700" />,
                 title: 'Total Sales',
                 value: totalSalesK.toLocaleString() + ' K'
+              },
+              {
+                key: 'Incomplete Packages Stat',
+                icon: <FaBox size={28} color="#ff9800" />,
+                title: 'Incomplete Packages',
+                value: incompleteCount
               }
             ];
             return (
@@ -342,7 +352,7 @@ useEffect(() => {
               <button
                 key={module.name}
                 className="dashboard-page-btn gray"
-                style={{ minWidth: 120, margin: 4, fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 70 }}
+                style={{ margin: 4, fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => navigate(module.route)}
               >
                 <Icon size={22} style={{ marginBottom: 4 }} />

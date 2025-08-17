@@ -19,6 +19,121 @@
   color: #4caf50;
   font-weight: bold;
 }
+.sets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px 10px; /* even spacing horizontally/vertically */
+  align-items: stretch; /* ensure full vertical alignment per row */
+}
+
+.sets-grid input,
+.sets-grid select,
+.sets-control {
+  height: 30px;
+  line-height: 30px;
+  font-size: 0.88rem;
+  padding: 0 8px;
+  margin: 0; /* normalize vertical alignment */
+  box-sizing: border-box;
+}
+
+.sets-grid input,
+.sets-grid select {
+  width: 100%;
+}
+
+.sets-compact-row {
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+/* Explicit row templates to keep fields aligned in rows */
+.sets-row-5 {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
+  gap: 6px 10px;
+  align-items: stretch;
+}
+.sets-row-4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 6px 10px;
+  align-items: stretch;
+}
+.sets-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 6px 10px;
+  align-items: stretch;
+}
+.sets-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 6px 10px;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .sets-row-5 { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  .sets-row-4 { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  .sets-row-3 { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+  .sets-row-2 { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+}
+
+/* Smaller checkbox style for locations */
+.sets-locations label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sets-locations input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #00b4d8;
+}
+.sets-locations span {
+  font-size: 0.9rem;
+}
+
+/* Locations row with button aligned to the right */
+.sets-locations-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* Search row with two fields side by side */
+.sets-search-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.sets-search-row .search-box {
+  position: relative;
+  width: 360px;
+  max-width: 100%;
+}
+.sets-search-row .sets-search-box {
+  width: 280px;
+  max-width: 100%;
+  position: relative;
+  top: 2px; /* ~0.5mm visual nudge for fine alignment */
+}
+
+/* Make product search and set search exactly the same height and look */
+.sets-search-row .products-search-bar,
+.sets-search-row .sets-search-box {
+  height: 30px !important;
+  line-height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 0.88rem !important;
+  border: 1.5px solid #00b4d8 !important;
+  background: #23272f !important;
+  color: #e0e6ed !important;
+  border-radius: 6px !important;
+}
+
 
 
 

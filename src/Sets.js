@@ -19,7 +19,7 @@ export default function Sets() {
   const [imageUrl, setImageUrl] = useState("");
   const [kitItems, setKitItems] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [selectedLocation, setSelectedLocation] = useState("");
+  const [selectedLocations, setSelectedLocations] = useState([]); // array of location ids
   const [inventory, setInventory] = useState([]);
   const [units, setUnits] = useState([]);
   const [selectedUnit, setSelectedUnit] = useState("");
@@ -43,16 +43,17 @@ export default function Sets() {
     supabase.from("locations").select("id, name").then(({ data }) => setLocations(data || []));
     supabase.from("unit_of_measure").select("id, name").then(({ data }) => setUnits(data || []));
     supabase.from("categories").select("id, name").then(({ data }) => setCategories(data || []));
-    // Fetch sets (combos) for selected location using combo_locations join
-    if (selectedLocation) {
+    // Fetch sets (combos) for selected location(s) using combo_locations join
+    if (selectedLocations && selectedLocations.length > 0) {
       supabase
         .from("combos")
         .select("id, combo_name, sku, standard_price, combo_price, promotional_price, promo_start_date, promo_end_date, picture_url, combo_locations(location_id)")
         .then(({ data }) => {
-          // Only show combos linked to selected location
+          // Only show combos linked to any selected location
+          const selectedSet = new Set((selectedLocations || []).map(x => String(x)));
           const filtered = (data || []).filter(combo => {
             const locs = combo.combo_locations ? combo.combo_locations.map(cl => String(cl.location_id)) : [];
-            return locs.includes(String(selectedLocation));
+            return locs.some(l => selectedSet.has(String(l)));
           });
           setSets(filtered);
         });
@@ -62,16 +63,20 @@ export default function Sets() {
         .select("id, combo_name, sku, standard_price, combo_price, promotional_price, promo_start_date, promo_end_date, picture_url")
         .then(({ data }) => setSets(data || []));
     }
-  }, [selectedLocation]);
+  }, [selectedLocations]);
 
   // Fetch inventory for selected location
   useEffect(() => {
-    if (selectedLocation) {
-      supabase.from("inventory").select("product_id, quantity, location").eq("location", selectedLocation).then(({ data }) => setInventory(data || []));
+    if (selectedLocations && selectedLocations.length > 0) {
+      supabase
+        .from("inventory")
+        .select("product_id, quantity, location")
+        .in("location", selectedLocations)
+        .then(({ data }) => setInventory(data || []));
     } else {
       setInventory([]);
     }
-  }, [selectedLocation]);
+  }, [selectedLocations]);
 
   // Removed permissions fetching logic
 
@@ -128,8 +133,8 @@ export default function Sets() {
   // After creation, the set will be available for inventory aggregation in OpeningStock.js
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!kitName || !standardPrice || kitItems.length === 0 || !selectedLocation || !currency) {
-      alert("Please fill all required fields, select a location, currency, and add at least one product.");
+    if (!kitName || !standardPrice || kitItems.length === 0 || !currency || !selectedLocations || selectedLocations.length === 0) {
+      alert("Please fill all required fields, select at least one location, currency, and add at least one product.");
       return;
     }
     // 1. Check for existing combo by name or SKU
@@ -161,11 +166,11 @@ export default function Sets() {
       .single();
     if (comboError) return alert("Error creating combo: " + comboError.message);
 
-    // 3. Link combo to location in combo_locations
-    await supabase.from("combo_locations").insert({
-      combo_id: combo.id,
-      location_id: selectedLocation
-    });
+    // 3. Link combo to selected locations in combo_locations
+    const locRows = (selectedLocations || []).map(lid => ({ combo_id: combo.id, location_id: lid }));
+    if (locRows.length > 0) {
+      await supabase.from("combo_locations").insert(locRows);
+    }
 
     // 4. Insert combo_items for each component product
     for (const item of kitItems) {
@@ -179,61 +184,97 @@ export default function Sets() {
     // Note: Inventory for the set will be calculated and updated in OpeningStock.js after stocktake
     alert("Kit/Set created!");
     setKitName(""); setSku(""); setStandardPrice(""); setPromotionalPrice(""); setPromoStart(""); setPromoEnd(""); setKitItems([]); setImageUrl("");
-    setCurrency("K");
+  setCurrency("K");
+  setSelectedLocations([]);
   };
 
   // Removed permission access check
 
+  const shouldEnableScroll = (search.trim() !== "") || (kitItems.length > 0) || (setsSearch.trim() !== "");
+
   return (
-    <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: 'auto', overflow: 'visible', padding: '0', margin: 0}}>
+    <div
+      className="products-container"
+      style={{
+        maxWidth: '100vw',
+        height: '100vh',
+        overflowY: shouldEnableScroll ? 'auto' : 'hidden',
+        overflowX: 'hidden',
+        padding: 0,
+        margin: 0
+      }}
+    >
       <h1 className="products-title" style={{marginTop: '1rem'}}>Create Kit / Set</h1>
       <form className="product-form" onSubmit={handleSubmit}>
-        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(6, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center'}}>
-          <select required name="location" value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
-            <option value="">Select Location</option>
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
-          </select>
-          <select required name="currency" value={currency} onChange={e => setCurrency(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
+  {/* Row 1: currency, unit, category, SKU, kit name */}
+  <div className="sets-row-5 sets-grid" style={{width: '100%', maxWidth: 1200, margin: '0 auto'}}>
+          <select required name="currency" value={currency} onChange={e => setCurrency(e.target.value)}>
             <option value="K">K</option>
             <option value="$">$</option>
             <option value="">Select Currency</option>
           </select>
-          <select required name="unit" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
+          <select required name="unit" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)}>
             <option value="">Select Unit</option>
             {units.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
-          <select required name="category" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
+          <select required name="category" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}>
             <option value="">Select Category</option>
             {categories.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
-          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
+          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} />
+          <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} />
         </div>
-        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(2, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center', marginTop: '8px'}}>
-          <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
-          <input type="number" step="0.01" name="promotionalPrice" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+        {/* Row 2: prices, dates, image URL */}
+        <div className="sets-row-5 sets-grid" style={{width: '100%', maxWidth: 1200, margin: '0 auto', marginTop: '6px'}}>
+          <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} />
+          <input type="number" step="0.01" name="promotionalPrice" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} />
+          <input type="date" name="promoStart" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} />
+          <input type="date" name="promoEnd" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} />
+          <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} className="sets-control" />
         </div>
-        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(2, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center', marginTop: '8px'}}>
-          <input type="date" name="promoStart" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
-          <input type="date" name="promoEnd" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+        {/* Locations row with right-aligned Create button */}
+        <div className="sets-locations-row" style={{marginTop: '8px', width: '100%'}}>
+          <div className="sets-locations">
+            <div style={{fontSize: '0.9rem', color: '#00b4d8', marginBottom: 4}}>Locations</div>
+            <div style={{display:'flex', flexWrap:'wrap', gap:'6px 12px'}}>
+              {locations.map(loc => {
+                const idStr = String(loc.id);
+                const checked = (selectedLocations || []).some(x => String(x) === idStr);
+                return (
+                  <label key={loc.id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setSelectedLocations(prev => Array.from(new Set([...(prev || []).map(String), idStr])));
+                        } else {
+                          setSelectedLocations(prev => (prev || []).filter(x => String(x) !== idStr));
+                        }
+                      }}
+                    />
+                    <span>{loc.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <button type="submit" className="sets-save-btn" style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.5rem 1.2rem', fontWeight: 'bold', fontSize: '0.98rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer', width: 'auto', alignSelf: 'flex-start'}}>Create Kit/Set</button>
         </div>
 
-        <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} style={{marginBottom: '10px', borderColor: '#00b4d8'}} />
         <div className="sets-section-title" style={{color: '#00b4d8'}}>Kit Components</div>
-        <div className="form-grid-search-row" style={{marginTop: '18px', marginBottom: '8px', width: '100%', display: 'flex', justifyContent: 'flex-start'}}>
-          <div style={{position: 'relative', width: '350px'}}>
+        <div className="form-grid-search-row sets-search-row" style={{marginTop: '12px', marginBottom: '8px', width: '100%'}}>
+          <div className="search-box">
             <input
               className="products-search-bar"
               placeholder="Search product to add..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{marginBottom: 0, width: '100%', borderColor: '#00b4d8', background: '#23272f', color: '#e0e6ed', borderRadius: '6px', padding: '8px 12px', fontSize: '1rem'}}
+              style={{marginBottom: 0, width: '100%'}}
             />
             {/* Dropdown for matching products */}
       {search.trim().length >= 3 && filteredProducts.length > 0 && (
@@ -256,27 +297,23 @@ export default function Sets() {
               </ul>
             )}
           </div>
+          <input
+            type="text"
+            className="sets-search-box"
+            placeholder="Search sets..."
+            value={setsSearch}
+            onChange={e => setSetsSearch(e.target.value)}
+          />
         </div>
 
-        {/* Save button above products table, aligned right, smaller and higher */}
-        <div style={{display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '2px', marginTop: '-18px', width: '100%'}}>
-          <button type="submit" className="sets-save-btn" style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.5rem 1.2rem', fontWeight: 'bold', fontSize: '0.98rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer', width: 'auto'}}>Create Kit/Set</button>
-        </div>
+  {/* Save button is now on the locations row */}
 
         {/* Removed available products table. Products are now added via dropdown above. */}
 
         {/* Show sets table with its own search when not searching products */}
         {search.trim() === "" && (
           <div className="sets-list" style={{width: '100%', marginTop: '0.5rem', overflowY: 'auto', maxHeight: '350px'}}>
-            <div style={{marginBottom: '8px', display: 'flex', alignItems: 'center'}}>
-              <input
-                type="text"
-                placeholder="Search sets..."
-                value={setsSearch}
-                onChange={e => setSetsSearch(e.target.value)}
-                style={{borderColor: '#00b4d8', borderRadius: '6px', padding: '6px 12px', width: '250px', background: '#23272f', color: '#e0e6ed', fontSize: '1rem'}}
-              />
-            </div>
+            {/* Search input provided above in the search row */}
             <table style={{width: '100%', minWidth: 600, background: 'transparent', color: '#e0e6ed', borderCollapse: 'collapse'}}>
               <thead>
                 <tr style={{background: '#23272f'}}>
@@ -289,7 +326,7 @@ export default function Sets() {
               <tbody>
                 {sets.filter(set => {
                   const s = setsSearch.trim().toLowerCase();
-                  if (!s) return true;
+                  if (!s) return false; // hide all sets until a search term is entered
                   return (
                     (set.combo_name && set.combo_name.toLowerCase().includes(s)) ||
                     (set.sku && set.sku.toLowerCase().includes(s))

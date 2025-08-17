@@ -18,6 +18,8 @@ const StockReportMobile = () => {
   const [comboItems, setComboItems] = useState([]);
   const [comboLocations, setComboLocations] = useState([]);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [incompletePackages, setIncompletePackages] = useState([]);
+  const [expandedCombos, setExpandedCombos] = useState(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +43,8 @@ const StockReportMobile = () => {
       setComboItems(comboItemsData || []);
   const { data: comboLocs } = await supabase.from('combo_locations').select('*');
   setComboLocations(comboLocs || []);
+  const { data: ip } = await supabase.from('incomplete_packages').select('*');
+  setIncompletePackages(ip || []);
   // ...existing code...
     };
     fetchData();
@@ -119,6 +123,15 @@ const StockReportMobile = () => {
     return true;
   });
 
+  const toggleComboExpanded = (id) => {
+    setExpandedCombos(prev => {
+      const next = new Set(prev);
+      const key = String(id);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <div className="stock-report-mobile-container">
       <div className="stock-report-mobile-filters">
@@ -151,12 +164,32 @@ const StockReportMobile = () => {
         />
       </div>
       <div className="stock-report-mobile-list">
+        {(incompletePackages || []).filter(r => !location || String(r.location_id) === String(location)).length > 0 && (
+          <div className="stock-report-mobile-card" style={{ border: '2px dashed #ff9800', background: '#2b2416' }}>
+            <div style={{ fontWeight: 'bold', color: '#ffcc80', marginBottom: 6 }}>Incomplete Packages</div>
+            <div style={{ color: '#fff' }}>
+        {(incompletePackages || [])
+                .filter(r => !location || String(r.location_id) === String(location))
+                .map(r => {
+                  const combo = combos.find(c => String(c.id) === String(r.combo_id));
+                  const loc = locations.find(l => String(l.id) === String(r.location_id));
+                  return (
+                    <div key={`ip-${r.id}`} style={{ marginBottom: 4 }}>
+          {(loc ? loc.name : r.location_id)}: <b>{(r.item_name && r.item_name.trim()) ? r.item_name : (combo ? combo.combo_name : r.combo_id)}</b> – Qty {r.quantity}{r.notes ? ` (${r.notes})` : ''}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
         {/* Render sets (combos) first */}
         {filteredCombos.map(c => {
           const qty = computeComboMaxQty(c.id, location || '');
           const pic = c.picture_url || '';
           const stdPrice = c.combo_price || c.standard_price || '';
           const promo = c.promotional_price || '';
+          const isExpanded = expandedCombos.has(String(c.id));
+          const items = comboItems.filter(ci => ci.combo_id === c.id);
           return (
             <div className="stock-report-mobile-card glowing-green" key={`combo-${c.id}`}>
               <div className="stock-report-mobile-card-row">
@@ -174,11 +207,51 @@ const StockReportMobile = () => {
                   )}
                 </div>
                 <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
-                  <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{c.combo_name}</div>
+                  <div style={{display:'flex', alignItems:'center', gap:8}}>
+                    <button
+                      onClick={() => toggleComboExpanded(c.id)}
+                      aria-label={isExpanded ? 'Hide components' : 'Show components'}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        border: '1px solid #00e676',
+                        background: 'transparent',
+                        color: '#00e676',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 14,
+                        lineHeight: 1,
+                        padding: 0
+                      }}
+                    >
+                      {isExpanded ? '▼' : '▶'}
+                    </button>
+                    <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{c.combo_name}</div>
+                  </div>
                   <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: '1.1em'}}>
                     <span style={{fontWeight: 'bold', color: '#00e676'}}>Buildable Sets: {qty}</span>
                     <span style={{color: '#fff'}}>Set</span>
                   </div>
+                  {isExpanded && (
+                    <div style={{marginTop: 8, padding: 8, background: '#1e1e1e', borderRadius: 8, color: '#fff'}}>
+                      {items && items.length > 0 ? (
+                        items.map((item) => {
+                          const prod = products.find(p => String(p.id) === String(item.product_id));
+                          return (
+                            <div key={`combo-${c.id}-item-${item.product_id}`} style={{display:'flex', justifyContent:'space-between', marginBottom: 4}}>
+                              <span>{prod ? prod.name : item.product_id}</span>
+                              <span>x {Number(item.quantity) || 0}</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div style={{opacity: 0.8}}>No components</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{display: 'flex', flexDirection: 'row', gap: 16, marginTop: 8, justifyContent: 'space-between'}}>
@@ -196,6 +269,7 @@ const StockReportMobile = () => {
             unit = unitObj ? (unitObj.abbreviation || unitObj.name || '') : '';
           }
           const totalStock = getStockForProduct(p.id, location || '');
+          const remainingStock = Math.max(0, totalStock - (usedStock[p.id] || 0));
           const imageObj = productImages.find(img => img.product_id === p.id);
           const imageUrl = imageObj ? imageObj.image_url : p.image_url;
           return (
@@ -217,7 +291,7 @@ const StockReportMobile = () => {
                 <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
                   <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{p.name}</div>
                   <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: '1.1em'}}>
-                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {totalStock}</span>
+                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Stock: {remainingStock}</span>
                     <span style={{color: '#fff'}}>{unit}</span>
                   </div>
                 </div>

@@ -125,20 +125,20 @@ export default function EditSet() {
       <h1 className="products-title" style={{marginTop: '1rem'}}>Edit Kit / Set</h1>
       <form className="product-form" onSubmit={handleSave}>
         <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(5, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center'}}>
-          <select name="currency" value={currency} onChange={e => setCurrency(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
+          <select name="currency" value={currency} onChange={e => setCurrency(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px'}}>
             <option value="">Select Currency</option>
             <option value="K">K</option>
             <option value="$">$</option>
           </select>
           <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
-          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
-          <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
-          <input type="number" step="0.01" name="promotionalPrice" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px', boxSizing: 'border-box', display: 'block', margin: 0}} />
+          <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px'}} />
+          <input type="number" step="0.01" name="promotionalPrice" placeholder="Promotional Price" value={promotionalPrice} onChange={e => setPromotionalPrice(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px'}} />
           <input placeholder="Image URL" value={imageUrl} onChange={e => setImageUrl(e.target.value)} style={{borderColor: '#00b4d8'}} />
         </div>
         <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(2, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center', marginTop: '8px'}}>
-          <input type="date" name="promoStart" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
-          <input type="date" name="promoEnd" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}} />
+          <input type="date" name="promoStart" placeholder="Promo Start" value={promoStart} onChange={e => setPromoStart(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px'}} />
+          <input type="date" name="promoEnd" placeholder="Promo End" value={promoEnd} onChange={e => setPromoEnd(e.target.value)} style={{borderColor: '#00b4d8', width: '100%', minWidth: 220, height: '40px', verticalAlign: 'middle', padding: '0 10px'}} />
         </div>
         <div className="sets-section-title" style={{color: '#00b4d8'}}>Kit Components</div>
         <div className="form-grid-search-row" style={{marginTop: '18px', marginBottom: '8px', width: '100%', display: 'flex', justifyContent: 'flex-start'}}>

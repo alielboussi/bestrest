@@ -16,6 +16,7 @@ const StockReport = () => {
   const [combos, setCombos] = useState([]);
   const [comboItems, setComboItems] = useState([]);
   const [comboInventory, setComboInventory] = useState([]);
+  const [incompletePackages, setIncompletePackages] = useState([]);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -32,6 +33,8 @@ const StockReport = () => {
       setCombos(combosData || []);
       const { data: comboItemsData } = await supabase.from('combo_items').select('*');
       setComboItems(comboItemsData || []);
+  const { data: ip } = await supabase.from('incomplete_packages').select('*');
+  setIncompletePackages(ip || []);
   // ...existing code...
     };
     fetchData();
@@ -116,6 +119,25 @@ const StockReport = () => {
         {/* Search field removed */}
       </div>
       <div className="stock-report-list">
+        {/* Incomplete packages summary */}
+        {(incompletePackages || []).filter(r => !location || String(r.location_id) === String(location)).length > 0 && (
+          <div className="stock-report-card" style={{ border: '2px dashed #ff9800', background: '#fffaf0' }}>
+            <div className="stock-report-card-info">
+              <div><b>Incomplete Packages</b></div>
+      <div style={{marginTop:6}}>
+                {(incompletePackages || [])
+                  .filter(r => !location || String(r.location_id) === String(location))
+                  .map(r => {
+        const combo = combos.find(c => c.id === r.combo_id);
+                    const loc = locations.find(l => l.id === r.location_id);
+        const label = (r.item_name && r.item_name.trim()) ? r.item_name : (combo ? combo.combo_name : r.combo_id);
+        return `${loc ? loc.name : r.location_id}: ${label} – Qty ${r.quantity}${r.notes ? ' ('+r.notes+')' : ''}`;
+                  })
+                  .join(' | ')}
+              </div>
+            </div>
+          </div>
+        )}
         {(location || category) ? (
           <>
             {/* Show sets (combos) as rows with available quantity */}

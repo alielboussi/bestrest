@@ -29,6 +29,7 @@ import LaybyManagement from "./LaybyManagement";
 import LaybyManagementMobile from "./LaybyManagementMobile";
 import EditSet from './EditSet';
 import PriceLabelMobile from './PriceLabelMobile';
+import IncompletePackages from './IncompletePackages';
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 // SmartRedirect: redirects / based on user role
@@ -85,6 +86,7 @@ function App() {
   <Route path="/price-labels" element={<PriceLabels />} />
   <Route path="/price-labels-mobile" element={<PriceLabelMobile />} />
         <Route path="/stock-report" element={<StockReport />} />
+  <Route path="/incomplete-packages" element={<IncompletePackages />} />
         <Route path="/opening-stock" element={<OpeningStock />} />
         <Route path="/transfer" element={<Transfer />} />
         <Route path="/sales-report" element={<SalesReport />} />

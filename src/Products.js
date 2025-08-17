@@ -595,7 +595,7 @@ function Products() {
   };
 
   return (
-    <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: '100vh', overflow: 'hidden', padding: '0', margin: 0}}>
+    <div className="products-container" style={{ maxWidth: '100vw', minHeight: '100vh', overflowX: 'hidden', padding: 0, margin: 0 }}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>Products</h1>
       {/* Import and Template Buttons */}
       <div style={{ marginBottom: 16, display: 'flex', gap: '8px', justifyContent: 'center' }}>
@@ -682,7 +682,7 @@ function Products() {
               </label>
             ))}
           </div>
-          <input name="image" type="file" accept="image/*" onChange={handleChange} style={{marginLeft: '2rem', alignSelf: 'flex-start'}} />
+          <input name="image" type="file" accept="image/*" onChange={handleChange} style={{ marginLeft: '2rem', marginTop: '-6px' }} />
           {imageUrl && <img src={imageUrl} alt="Product" className="product-image-preview" style={{marginLeft: '2rem', maxHeight: '60px', borderRadius: '6px', border: '1px solid #00b4d8'}} />}
           <div style={{flex: 1}} />
           <div className="form-actions" style={{display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', width: 'auto'}}>
