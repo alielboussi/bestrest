@@ -12,13 +12,16 @@ const SalesReport = () => {
   const [customers, setCustomers] = useState([]);
   const [sales, setSales] = useState([]);
   const [search, setSearch] = useState('');
+  const [locationId, setLocationId] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [laybys, setLaybys] = useState([]);
   const [paymentType, setPaymentType] = useState('all'); // all, completed, layby
+  const [locations, setLocations] = useState([]);
   // Removed user permissions state
 
   useEffect(() => {
-    supabase.from('customers').select('id,name').then(({ data, error }) => {
+  supabase.from('customers').select('id,name').then(({ data, error }) => {
       if (error) {
         console.error('Error fetching customers:', error);
       } else {
@@ -26,6 +29,7 @@ const SalesReport = () => {
       }
       setCustomers(data || []);
     });
+  // Fetch sales including down_payment and currency
     supabase.from('sales').select('*, customer:customer_id(id,name)').then(({ data, error }) => {
       if (error) {
         console.error('Error fetching sales:', error);
@@ -34,14 +38,43 @@ const SalesReport = () => {
       }
       setSales(data || []);
     });
-    supabase.from('laybys').select('id, sale_id, total_amount, paid_amount').then(({ data, error }) => {
+  // Fetch all laybys, plus payments per sale
+    supabase.from('laybys').select('id, sale_id, total_amount, paid_amount').then(async ({ data, error }) => {
       if (error) {
         console.error('Error fetching laybys:', error);
-      } else {
-        console.log('Fetched laybys:', data);
+        setLaybys([]);
+        return;
       }
-      setLaybys(data || []);
+      const laybyRows = data || [];
+      const saleIds = Array.from(new Set(laybyRows.map(l => Number(l.sale_id)).filter(id => !isNaN(id))));
+      let paymentsMap = {};
+      let downMap = {};
+      if (saleIds.length) {
+        const { data: pays } = await supabase
+          .from('sales_payments')
+          .select('sale_id, amount')
+          .in('sale_id', saleIds);
+        (pays || []).forEach(p => {
+          const sid = Number(p.sale_id);
+          paymentsMap[sid] = (paymentsMap[sid] || 0) + Number(p.amount || 0);
+        });
+        const { data: salesRows } = await supabase
+          .from('sales')
+          .select('id, down_payment')
+          .in('id', saleIds);
+        (salesRows || []).forEach(s => {
+          downMap[s.id] = Number(s.down_payment || 0);
+        });
+      }
+      // Decorate layby rows with computed paid_sum
+      const merged = laybyRows.map(l => ({
+        ...l,
+        computed_paid_sum: (downMap[Number(l.sale_id)] || 0) + (paymentsMap[Number(l.sale_id)] || 0)
+      }));
+      setLaybys(merged);
     });
+  // Fetch locations for filter dropdown
+  supabase.from('locations').select('id, location_name').then(({ data }) => setLocations(data || []));
   }, []);
 
   // Removed permissions fetching logic
@@ -54,6 +87,13 @@ const SalesReport = () => {
     // Date filter
     if (dateFrom && sale.sale_date < dateFrom) return false;
     if (dateTo && sale.sale_date > dateTo) return false;
+    // Location filter (if sale has a location_id column; if not, skip)
+    if (locationId && String(sale.location_id || '') !== String(locationId)) return false;
+    // Receipt number filter (matches sale.id or sale.receipt_number if exists)
+    if (receiptNumber) {
+      const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
+      if (!rec.includes(receiptNumber.toLowerCase())) return false;
+    }
     // Customer filter
     if (customer && String(sale.customer_id) !== String(customer)) return false;
     // Payment type filter
@@ -81,13 +121,16 @@ const SalesReport = () => {
     if (sale.status !== 'layby') return 0;
     const layby = laybys.find(l => String(l.sale_id) === String(sale.id));
     if (!layby) return 0;
+    // Prefer computed_paid_sum (down_payment + payments)
+    if (typeof layby.computed_paid_sum === 'number') return layby.computed_paid_sum;
     return parseFloat(layby.paid_amount) || 0;
   }
   function getPendingAmount(sale) {
     if (sale.status !== 'layby') return 0;
     const layby = laybys.find(l => String(l.sale_id) === String(sale.id));
     if (!layby) return sale.total_amount;
-    return (parseFloat(layby.total_amount) || 0) - (parseFloat(layby.paid_amount) || 0);
+    const paid = typeof layby.computed_paid_sum === 'number' ? layby.computed_paid_sum : (parseFloat(layby.paid_amount) || 0);
+    return (parseFloat(layby.total_amount) || 0) - paid;
   }
 
   // Export as PDF
@@ -242,6 +285,15 @@ const SalesReport = () => {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 18 }}>
         <label>From: <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></label>
         <label>To: <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} /></label>
+        <label>Location:
+          <select value={locationId} onChange={e => setLocationId(e.target.value)}>
+            <option value="">All</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.location_name || l.name || `#${l.id}`}</option>)}
+          </select>
+        </label>
+        <label>Receipt #:
+          <input type="text" value={receiptNumber} onChange={e => setReceiptNumber(e.target.value)} placeholder="Search receipt" />
+        </label>
         <label>Customer:
           <select value={customer} onChange={e => setCustomer(e.target.value)}>
             <option value="">All</option>
@@ -355,6 +407,45 @@ const SalesReport = () => {
           )}
         </tbody>
       </table>
+      {/* Currency totals summary */}
+      {filteredSales.length > 0 && (
+        (() => {
+          const currencyTotals = {};
+          const paidTotals = {};
+          const pendingTotals = {};
+          filteredSales.forEach(sale => {
+            const curr = sale.currency || 'N/A';
+            currencyTotals[curr] = (currencyTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+            if (sale.status === 'completed') {
+              paidTotals[curr] = (paidTotals[curr] || 0) + (parseFloat(sale.total_amount) || 0);
+            } else if (sale.status === 'layby') {
+              paidTotals[curr] = (paidTotals[curr] || 0) + getPaidAmount(sale);
+              pendingTotals[curr] = (pendingTotals[curr] || 0) + getPendingAmount(sale);
+            }
+          });
+          const entries = Object.keys(currencyTotals).map(curr => ({
+            curr,
+            total: currencyTotals[curr] || 0,
+            paid: paidTotals[curr] || 0,
+            pending: pendingTotals[curr] || 0,
+          }));
+          return (
+            <div style={{ marginTop: 12, background: '#23272f', color: '#fff', padding: 12, borderRadius: 8 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Totals by Currency</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                {entries.map(e => (
+                  <div key={e.curr} style={{ background: '#1a1f29', borderRadius: 6, padding: 8, border: '1px solid #334' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>{e.curr}</div>
+                    <div>Total: {e.curr} {e.total.toLocaleString()}</div>
+                    <div>Paid: {e.curr} {e.paid.toLocaleString()}</div>
+                    <div>Pending: {e.pending ? `${e.curr} ${e.pending.toLocaleString()}` : '-'}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()
+      )}
       <div style={{ display: 'flex', alignItems: 'center', margin: '18px 0 0 0', width: '100%' }}>
         {canExport && (
           <>

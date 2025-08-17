@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
+import { getMaxSetQty as calcMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
 import supabase from './supabase';
 import './StockReports.css';
 
@@ -38,7 +38,7 @@ const StockReport = () => {
   }, []);
 
   // Calculate the max number of sets that can be built for a combo, globally or for a location
-  function getMaxSetQty(comboId, loc) {
+  function computeMaxSetQty(comboId, loc) {
     const items = comboItems.filter(ci => ci.combo_id === comboId);
     if (!items.length) return 0;
     const productStock = {};
@@ -48,12 +48,12 @@ const StockReport = () => {
         : inventory.filter(inv => inv.product_id === item.product_id);
       productStock[item.product_id] = invs.reduce((sum, inv) => sum + (inv.quantity || 0), 0);
     });
-    return getMaxSetQty(items, productStock);
+    return calcMaxSetQty(items, productStock);
   }
 
   // Filter combos: If location is empty ("All"), use global logic.
   const filteredCombos = combos.filter(combo => {
-    const setQty = getMaxSetQty(combo.id, location || "");
+    const setQty = computeMaxSetQty(combo.id, location || "");
     if (setQty <= 0) return false;
     const matchesCategory = !category || category === "" || combo.category_id === Number(category);
     return matchesCategory;
@@ -62,7 +62,7 @@ const StockReport = () => {
   // Build a usedStock map based ONLY on combos that are actually possible (filteredCombos)
   const usedStock = {};
   filteredCombos.forEach(combo => {
-    const setQty = getMaxSetQty(combo.id, location || "");
+    const setQty = computeMaxSetQty(combo.id, location || "");
     comboItems
       .filter(item => item.combo_id === combo.id)
       .forEach(item => {
@@ -120,7 +120,7 @@ const StockReport = () => {
           <>
             {/* Show sets (combos) as rows with available quantity */}
             {filteredCombos.map(combo => {
-              const setQty = getMaxSetQty(combo.id, location || "");
+              const setQty = computeMaxSetQty(combo.id, location || "");
               return (
                 <div className="stock-report-card" key={combo.id} style={{ border: '2px solid #00bfff', background: '#f7fbff' }}>
                   <div className="stock-report-card-info">
@@ -133,7 +133,7 @@ const StockReport = () => {
                         return prod ? `${prod.name} (${ci.quantity})` : `ID ${ci.product_id} (${ci.quantity})`;
                       }).join(', ')
                     }</div>
-                    <div>Standard Price: <b>{combo.price !== undefined && combo.price !== null && combo.price !== '' ? combo.price : '-'}</b></div>
+                    <div>Standard Price: <b>{(combo.standard_price !== undefined && combo.standard_price !== null && combo.standard_price !== '') ? combo.standard_price : (combo.combo_price !== undefined && combo.combo_price !== null && combo.combo_price !== '' ? combo.combo_price : '-')}</b></div>
                     <div>Promotional Price: <b>{combo.promotional_price !== undefined && combo.promotional_price !== null && combo.promotional_price !== '' ? combo.promotional_price : '-'}</b></div>
                   </div>
                 </div>

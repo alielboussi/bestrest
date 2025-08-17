@@ -10,7 +10,8 @@ export function exportLaybyPDF({
   layby,
   products,
   payments,
-  currency = 'K'
+  currency = 'K',
+  discount = 0
 }) {
   // Format as 'K x,xxx' (currency symbol, space, thousands separator, no decimals for whole numbers)
   function formatCurrency(amount) {
@@ -205,11 +206,14 @@ export function exportLaybyPDF({
     formatCurrency(p.qty * p.price)
   ]);
   const net = products.reduce((sum, p) => sum + (p.qty * p.price), 0);
+  const safeDiscount = Number(discount) || 0;
+  const totalAfterDiscount = Math.max(0, net - safeDiscount);
   const emptyRow = ['', '', '', ''];
   const summaryRows = [
     ['', '', { content: 'Net', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(net), styles: { halign: 'right', fontStyle: 'bold' } }],
+    ['', '', { content: 'Discount', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(safeDiscount), styles: { halign: 'right', fontStyle: 'bold' } }],
     ['', '', { content: 'VAT @ 16 %', styles: { halign: 'right', fontStyle: 'bold' } }, { content: 'Inclusive', styles: { halign: 'right', fontStyle: 'bold' } }],
-    ['', '', { content: 'Total', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(net), styles: { halign: 'right', fontStyle: 'bold' } }]
+    ['', '', { content: 'Total', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(totalAfterDiscount), styles: { halign: 'right', fontStyle: 'bold' } }]
   ];
   const tableData = [...productRows, emptyRow, ...summaryRows];
   doc.autoTable({
@@ -277,7 +281,7 @@ export function exportLaybyPDF({
     }
   }
 
-  doc.save(`layby_statement_${customer.name}.pdf`);
+  // Do not auto-save here; callers will decide to save or upload/cache and then trigger download.
 
   // Products table with Net, VAT, Total inside
   function addProducts() {
@@ -292,14 +296,17 @@ export function exportLaybyPDF({
       formatCurrency(p.qty * p.price)
     ]);
     // Calculate Net, VAT (exclusive), Total (Total = Net only)
-    const net = products.reduce((sum, p) => sum + (p.qty * p.price), 0);
+  const net = products.reduce((sum, p) => sum + (p.qty * p.price), 0);
+  const safeDiscount = Number(discount) || 0;
+  const totalAfterDiscount = Math.max(0, net - safeDiscount);
     // Add an empty row after the last product
     const emptyRow = ['', '', '', ''];
     // Add summary rows as part of the table
     const summaryRows = [
       ['', '', { content: 'Net', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(net), styles: { halign: 'right', fontStyle: 'bold' } }],
+      ['', '', { content: 'Discount', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(safeDiscount), styles: { halign: 'right', fontStyle: 'bold' } }],
       ['', '', { content: 'VAT @ 16 %', styles: { halign: 'right', fontStyle: 'bold' } }, { content: 'Inclusive', styles: { halign: 'right', fontStyle: 'bold' } }],
-      ['', '', { content: 'Total', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(net), styles: { halign: 'right', fontStyle: 'bold' } }]
+      ['', '', { content: 'Total', styles: { halign: 'right', fontStyle: 'bold' } }, { content: formatCurrency(totalAfterDiscount), styles: { halign: 'right', fontStyle: 'bold' } }]
     ];
     const tableData = [...productRows, emptyRow, ...summaryRows];
     doc.autoTable({
@@ -422,24 +429,32 @@ export function exportLaybyPDF({
   return doc;
 }
 
-export function exportLaybyCSV({ customer, layby, products, payments }) {
+export function exportLaybyCSV({ customer, layby, products, payments, currency = 'K', discount = 0 }) {
+  const fmt = (n) => (n === null || n === undefined || n === '' ? '' : `${currency} ${Number(n).toLocaleString()}`);
   let csv = '';
   csv += `Customer,${customer.name}\n`;
   csv += `Phone,${customer.phone || ''}\n`;
   csv += `Address,${customer.address || ''}\n`;
   csv += `Layby Status,${layby.status}\n`;
-  csv += `Total,${layby.total_amount}\n`;
-  csv += `Total Paid,${layby.paid}\n`;
-  csv += `Outstanding,${layby.outstanding}\n\n`;
+  csv += `Total,${fmt(layby.total_amount)}\n`;
+  csv += `Total Paid,${fmt(layby.paid)}\n`;
+  csv += `Outstanding,${fmt(layby.outstanding)}\n\n`;
   csv += 'Products\n';
   csv += 'Product,SKU,Qty,Unit Price,Total\n';
   products.forEach(p => {
-    csv += `${p.name},${p.sku},${p.qty},${p.price},${(p.qty * p.price).toFixed(2)}\n`;
+    csv += `${p.name},${p.sku},${p.qty},${fmt(p.price)},${fmt(p.qty * p.price)}\n`;
   });
+  // Add discount info under the products totals
+  const net = products.reduce((sum, p) => sum + (p.qty * p.price), 0);
+  const safeDiscount = Number(discount) || 0;
+  const totalAfterDiscount = Math.max(0, net - safeDiscount);
+  csv += `\nNet,${fmt(net)}\n`;
+  csv += `Discount,${fmt(safeDiscount)}\n`;
+  csv += `Total,${fmt(totalAfterDiscount)}\n`;
   csv += '\nPayments\n';
   csv += 'Date,Amount\n';
   payments.forEach(p => {
-    csv += `${new Date(p.payment_date).toLocaleDateString()},${p.amount}\n`;
+    csv += `${new Date(p.payment_date).toLocaleDateString()},${fmt(p.amount)}\n`;
   });
   return csv;
 }

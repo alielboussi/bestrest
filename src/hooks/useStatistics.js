@@ -93,15 +93,26 @@ export default function useStatistics({ dateFrom = '', dateTo = '', locationFilt
         }
 
         // 3) Lay-By dues by currency
-        let laybyQuery = supabase.from('laybys').select('total_amount, paid_amount, currency, location_id');
+        let laybyQuery = supabase.from('laybys').select('id, sale_id, total_amount, paid_amount, currency, location_id');
         if (locId) laybyQuery = laybyQuery.eq('location_id', locId);
         const { data: laybyData, error: laybyError } = await laybyQuery;
         if (laybyError) throw laybyError;
         const laybyByCurrency = {};
+        // Recompute paid per layby using down_payment + sales_payments
+        const saleIdsForLayby = Array.from(new Set((laybyData || []).map(l => Number(l.sale_id)).filter(id => !isNaN(id))));
+        let downMap = {}, payMap = {};
+        if (saleIdsForLayby.length) {
+          const { data: dpRows } = await supabase.from('sales').select('id, down_payment').in('id', saleIdsForLayby);
+          (dpRows || []).forEach(r => { downMap[r.id] = Number(r.down_payment || 0); });
+          const { data: payRows } = await supabase.from('sales_payments').select('sale_id, amount').in('sale_id', saleIdsForLayby);
+          (payRows || []).forEach(p => { const sid = Number(p.sale_id); payMap[sid] = (payMap[sid] || 0) + Number(p.amount || 0); });
+        }
         let dueK = 0, due$ = 0;
         (laybyData || []).forEach(l => {
           const cur = l.currency || '';
-          const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
+          const sid = Number(l.sale_id);
+          const paid = (downMap[sid] || 0) + (payMap[sid] || 0);
+          const due = Math.max(0, (Number(l.total_amount) || 0) - paid);
           laybyByCurrency[cur] = (laybyByCurrency[cur] || 0) + due;
           if (cur === 'K') dueK += due;
           else if (cur === '$' || cur.toUpperCase() === 'USD') due$ += due;

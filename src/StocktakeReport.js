@@ -177,7 +177,7 @@ const StocktakeReport = () => {
       // Build product map for lookup
       const productMap = {};
       (productsRaw || []).forEach(p => { productMap[p.id] = p; });
-      // Build combo map for lookup
+  // Build combo map for lookup
       const comboMap = {};
       (combosRaw || []).forEach(c => { comboMap[c.id] = c; });
       // Build combo items map
@@ -189,24 +189,36 @@ const StocktakeReport = () => {
       // Prepare rows: combos first, with their components below
       const rows = [];
       combosRaw.forEach(combo => {
-        // Centralized set inventory calculation using combined opening map
+        // Derive set metrics from component stocks; combos aren’t stored as inventory rows.
         const items = comboItemsMap[combo.id] || [];
         const productStock = { ...openingMap };
         const opening = getMaxSetQty(items, productStock);
-        // Compute transfer into sets based on component transfers during window
         let transferSets = 0;
-        let possibleSetsTransferred = '';
         if (items.length > 0) {
           const transferStock = {};
           items.forEach(it => { transferStock[it.product_id] = transferInMap[it.product_id] || 0; });
           transferSets = getMaxSetQty(items, transferStock) || 0;
-          possibleSetsTransferred = transferSets;
         }
-        // Sales for set: processed on the set itself
-        const closingStock = closingEntries.find(e => e.product_id === combo.id)?.qty || 0;
-        const sales = salesMap[combo.id] || 0;
-        const expectedClosing = opening + transferSets - sales;
-        const variance = closingStock - expectedClosing;
+        // Sales in sets: sum component-based sales converted to set-equivalents (min across components)
+        let salesInSets = 0;
+        if (items.length > 0) {
+          const perCompSets = items.map(it => {
+            const compSold = salesMap[it.product_id] || 0;
+            return it.quantity ? Math.floor(compSold / it.quantity) : 0;
+          });
+          salesInSets = perCompSets.length ? Math.min(...perCompSets) : 0;
+        }
+        const expectedClosing = opening + transferSets - salesInSets;
+        // Actual closing in sets: derive from component closings converted to set-equivalents
+        let actualClosingSets = 0;
+        if (items.length > 0) {
+          const perCompCloseSets = items.map(it => {
+            const actualComp = closingEntries.find(e => e.product_id === it.product_id)?.qty || 0;
+            return it.quantity ? Math.floor(actualComp / it.quantity) : 0;
+          });
+          actualClosingSets = perCompCloseSets.length ? Math.min(...perCompCloseSets) : 0;
+        }
+        const variance = actualClosingSets - expectedClosing;
         const usePrice = selectPrice(combo.promotional_price, combo.standard_price);
         const amount = formatAmount(variance * usePrice);
         rows.push({
@@ -215,9 +227,8 @@ const StocktakeReport = () => {
           name: combo.combo_name,
           opening: opening !== null ? opening : '',
           transfer: transferSets,
-          possibleSetsTransferred,
-          sales,
-          actual: closingStock,
+          sales: salesInSets,
+          actual: actualClosingSets,
           expectedClosing,
           variance,
           amount,
@@ -245,7 +256,7 @@ const StocktakeReport = () => {
         });
       });
       // Now show all products not part of any set
-      const setComponentIds = Object.values(comboItemsMap).flat().map(ci => ci.product_id);
+  const setComponentIds = Array.from(new Set(Object.values(comboItemsMap).flat().map(ci => ci.product_id)));
     (productsRaw || []).forEach(prod => {
         if (!setComponentIds.includes(prod.id)) {
       const opening = openingMap[prod.id] || 0;

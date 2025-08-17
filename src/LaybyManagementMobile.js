@@ -21,26 +21,28 @@ function LaybyManagementMobile() {
       setLoading(true);
       const { data: laybys, error } = await supabase
         .from('laybys')
-        .select('id, customer_id, sale_id, total_amount, paid_amount, status, notes, updated_at')
+        .select('id, customer_id, sale_id, total_amount, paid_amount, status, notes, created_at, updated_at')
         .not('status', 'eq', 'completed');
       if (error) {
         setLaybys([]);
         setLoading(false);
         return;
       }
-      // Fetch customer names for display
+      // Fetch customer details for display and badges
       const customerIds = Array.from(new Set((laybys || []).map(l => l.customer_id).filter(Boolean)));
       if (customerIds.length) {
         const { data: customers } = await supabase
           .from('customers')
-          .select('id, name, phone')
+          .select('id, name, phone, currency, opening_balance')
           .in('id', customerIds);
-        customersMap = (customers || []).reduce((acc, c) => {
+        const map = (customers || []).reduce((acc, c) => {
           acc[c.id] = c;
           return acc;
         }, {});
+        setCustomersMap(map);
+      } else {
+        setCustomersMap({});
       }
-      setCustomersMap(customersMap);
       setLaybys(laybys || []);
       setLoading(false);
     }
@@ -78,7 +80,7 @@ function LaybyManagementMobile() {
       .eq('id', layby.id)
       .maybeSingle();
     let pdfUrl = laybyViewRows?.Layby_URL;
-    if (pdfUrl) {
+  if (pdfUrl) {
       // Scroll to top to ensure modal is centered in viewport
       window.scrollTo({ top: 0, behavior: 'auto' });
       // Show modal with customer-friendly label and filename
@@ -94,8 +96,8 @@ function LaybyManagementMobile() {
       modal.style.alignItems = 'flex-start';
       modal.style.justifyContent = 'center';
       modal.style.zIndex = '9999';
-      // Get customer name for label and filename
-      const customerName = (customersMap[layby.customer_id]?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+    // Get customer name for label and filename
+  const customerName = (customersMap[layby.customer_id]?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
       const downloadLabel = `Download PDF for ${customersMap[layby.customer_id]?.name || 'Customer'}`;
       const downloadFilename = `${customerName}.pdf`;
       modal.innerHTML = `
@@ -134,7 +136,41 @@ function LaybyManagementMobile() {
       return;
     }
     // ...existing code for generating and uploading PDF...
-    // ...existing code for generating and uploading PDF...
+    // Generate PDF now if no cached URL
+    const { data: saleItems } = await supabase
+      .from('sales_items')
+      .select('product_id, quantity, unit_price, display_name, product:products(name, sku)')
+      .eq('sale_id', layby.sale_id);
+    const products = (saleItems || []).map(i => ({ name: i.product?.name || i.display_name || '', sku: i.product?.sku || '', qty: i.quantity, price: i.unit_price }));
+    const { data: payments } = await supabase
+      .from('sales_payments')
+      .select('amount, payment_date')
+      .eq('sale_id', layby.sale_id);
+    const { data: saleRows } = await supabase
+      .from('sales')
+      .select('currency, discount')
+      .eq('id', layby.sale_id)
+      .single();
+    const currency = saleRows?.currency || customersMap[layby.customer_id]?.currency || 'K';
+    const discount = Number(saleRows?.discount || 0);
+    const customer = { ...(customersMap[layby.customer_id] || {}), opening_balance: customersMap[layby.customer_id]?.opening_balance || 0 };
+    const logoUrl = window.location.origin + '/bestrest-logo.png';
+    const companyName = 'BestRest';
+    const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
+    // Try to upload and save URL like desktop
+    try {
+      const blob = doc.output('blob');
+      const bucket = 'laybypdfs';
+      const filePath = `laybys/${layby.id}.pdf`;
+      const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, blob, { upsert: true, contentType: 'application/pdf' });
+      if (!uploadErr) {
+        const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+        const publicUrl = publicUrlData?.publicUrl;
+        if (publicUrl) {
+          try { await supabase.from('layby_view').update({ Layby_URL: publicUrl }).eq('id', layby.id); } catch {}
+        }
+      }
+    } catch {}
   }
 
   if (locked) {
@@ -197,7 +233,7 @@ function LaybyManagementMobile() {
           </thead>
           <tbody>
             {filteredLaybys.map(l => {
-              const currency = l._currency || 'K';
+              const currency = customersMap[l.customer_id]?.currency || 'K';
               const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
               const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
               const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
@@ -205,7 +241,9 @@ function LaybyManagementMobile() {
               return (
                 <tr key={l.id}>
                   <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
-                  <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>{customersMap[l.customer_id]?.name || l.customer_id}</td>
+                  <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>
+                    <div>{customersMap[l.customer_id]?.name || l.customer_id}</div>
+                  </td>
                   <td>{total}</td>
                   <td>{paid}</td>
                   <td>{dueStr}</td>

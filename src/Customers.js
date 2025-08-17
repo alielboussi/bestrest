@@ -4,7 +4,7 @@ import './Customers.css';
 import { useNavigate } from 'react-router-dom';
 // Removed user permissions logic
 
-const initialForm = { name: '', phone: '', address: '', city: '', tpin: '' };
+const initialForm = { name: '', phone: '', address: '', city: '', tpin: '', currency: 'K', opening_balance: '' };
 
 const Customers = () => {
   const [customers, setCustomers] = useState([]);
@@ -25,7 +25,7 @@ const Customers = () => {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('customers').select('*');
+  const { data, error } = await supabase.from('customers').select('*');
       if (error) throw error;
       setCustomers(data || []);
     } catch (err) {
@@ -40,7 +40,7 @@ const Customers = () => {
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   // Capitalize first letter of each word in a string, ensure single spaces
@@ -56,8 +56,19 @@ const Customers = () => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Capitalize name before saving
-      const formToSave = { ...form, name: capitalizeWords(form.name) };
+      // Capitalize name and normalize fields before saving
+      const buildPayload = (f) => {
+        const { opening_balance, currency, ...rest } = f;
+        const payload = { ...rest, name: capitalizeWords(f.name) };
+        if (currency && currency.trim() !== '') payload.currency = currency;
+        // Only set opening_balance if provided; otherwise let DB default (0) apply
+        if (opening_balance !== '' && opening_balance !== null && opening_balance !== undefined) {
+          const num = Number(opening_balance);
+          if (!Number.isNaN(num)) payload.opening_balance = num;
+        }
+        return payload;
+      };
+      const formToSave = buildPayload(form);
       // Phone, address, city, tpin are optional
       if (editingId) {
         // Update
@@ -89,7 +100,9 @@ const Customers = () => {
       phone: customer.phone || '',
       address: customer.address || '',
       city: customer.city || '',
-      tpin: customer.tpin || ''
+  tpin: customer.tpin || '',
+  currency: customer.currency || 'K',
+  opening_balance: customer.opening_balance ?? ''
     });
     setEditingId(customer.id);
   };
@@ -163,6 +176,27 @@ const Customers = () => {
             value={form.tpin}
             onChange={handleChange}
           />
+          <select
+            name="currency"
+            value={form.currency}
+            onChange={handleChange}
+            title="Customer currency"
+          >
+            <option value="K">K (Kwacha)</option>
+            <option value="$">$ (USD)</option>
+            <option value="R">R (Rand)</option>
+            <option value="€">€ (EUR)</option>
+            <option value="£">£ (GBP)</option>
+          </select>
+          <input
+            name="opening_balance"
+            type="number"
+            step="0.01"
+            placeholder="Starting Due Balance (optional)"
+            value={form.opening_balance}
+            onChange={handleChange}
+            title="Initial layby due balance for this customer"
+          />
           <button type="submit" disabled={saving} className="save-btn">
             {editingId ? 'Update' : 'Add'}
           </button>
@@ -181,14 +215,16 @@ const Customers = () => {
               <th>Address</th>
               <th>City</th>
               <th>TPIN</th>
+        <th>Currency</th>
+        <th>Starting Due</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6">Loading...</td></tr>
+        <tr><td colSpan="8">Loading...</td></tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan="6">No customers found.</td></tr>
+        <tr><td colSpan="8">No customers found.</td></tr>
             ) : (
               customers.map((customer) => (
                 <tr key={customer.id} className={editingId === customer.id ? 'editing-row' : ''}>
@@ -197,6 +233,8 @@ const Customers = () => {
                   <td>{customer.address}</td>
                   <td>{customer.city}</td>
                   <td>{customer.tpin}</td>
+          <td>{customer.currency || 'K'}</td>
+          <td>{customer.opening_balance ? `${customer.currency || 'K'} ${Number(customer.opening_balance).toLocaleString()}` : ''}</td>
                   <td>
                     {canEdit && <button className="edit-btn" onClick={() => handleEdit(customer)} disabled={saving}>Edit</button>}
                     {canDelete && <button className="delete-btn" onClick={() => handleDelete(customer.id)} disabled={saving}>Delete</button>}

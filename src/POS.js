@@ -45,11 +45,12 @@ export default function POS() {
   const [customProductError, setCustomProductError] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [inventoryDeductedMsg, setInventoryDeductedMsg] = useState(""); // New state for inventory deducted message
+  const [remainingDue, setRemainingDue] = useState(0); // Total remaining (opening + outstanding laybys)
 
   // Fetch locations and customers (only once)
   useEffect(() => {
     supabase.from("locations").select("id, name").then(({ data }) => setLocations(data || []));
-    supabase.from("customers").select("id, name, phone").then(({ data }) => setCustomers(data || []));
+    supabase.from("customers").select("id, name, phone, currency, opening_balance").then(({ data }) => setCustomers(data || []));
   }, []);
 
 
@@ -172,6 +173,9 @@ export default function POS() {
   // When customer changes, fetch laybys
   useEffect(() => {
     fetchCustomerLaybys(selectedCustomer);
+  // Set POS currency from selected customer's preferred currency when customer changes
+  const cust = customers.find(c => String(c.id) === String(selectedCustomer));
+  if (cust?.currency) setCurrency(cust.currency);
   }, [selectedCustomer]);
 
   // Fetch permissions and actions
@@ -325,107 +329,70 @@ export default function POS() {
 
   // Handle checkout (Supabase integration, supports partial payments/layby)
   // --- Restore inventory logic ---
-  // Restore inventory for all products in a layby
+  // Restore inventory for all products in a layby using only recorded sales_items
   const restoreInventoryForLayby = async (laybyId) => {
-    // Get sale_id and location_id from layby and sale
+    // 1) Find sale and its location
     const { data: laybyData, error: laybyError } = await supabase
       .from('laybys')
       .select('sale_id')
       .eq('id', laybyId)
       .single();
-    if (laybyError || !laybyData || !laybyData.sale_id) return;
+    if (laybyError || !laybyData?.sale_id) return;
     const saleId = laybyData.sale_id;
-    // Get location_id from sale
     const { data: saleRow, error: saleRowError } = await supabase
       .from('sales')
       .select('location_id')
       .eq('id', saleId)
       .single();
-    if (saleRowError || !saleRow || !saleRow.location_id) return;
+    if (saleRowError || !saleRow?.location_id) return;
     const restoreLocation = saleRow.location_id;
-    // Get sale_items for this sale
+    // 2) Get sale items and add their quantities back to inventory
     const { data: saleItems } = await supabase
       .from('sales_items')
-      .select('product_id, quantity, custom_name')
+      .select('product_id, quantity')
       .eq('sale_id', saleId);
-    // Get combos for this location
-    const { data: combosData } = await supabase
-      .from('combos')
-      .select('id, combo_name, sku, standard_price, promotional_price, combo_price, currency, combo_locations:combo_locations(location_id)');
-    // Get combo_items
-    const { data: comboItemsData } = await supabase
-      .from('combo_items')
-      .select('combo_id, product_id, quantity');
-    // For each sale item, restore inventory
-    const promises = [];
+    const ops = [];
     for (const item of saleItems || []) {
-      if (!item.product_id) continue; // skip custom products
-      // Check if this product is part of a set (combo)
-      // If the sale was for a set, restore all products in the set
-      const combo = combosData && combosData.find(c => c.product_id === item.product_id);
-      if (combo) {
-        // Restore all products in the set
-        const comboIdInt = typeof combo.id === 'string' ? parseInt(combo.id, 10) : combo.id;
-        const setItems = comboItemsData.filter(ci => ci.combo_id === comboIdInt);
-        for (const setItem of setItems) {
-          promises.push((async () => {
-            const { data: invRows } = await supabase
-              .from('inventory')
-              .select('id, quantity')
-              .eq('product_id', setItem.product_id)
-              .eq('location', restoreLocation);
-            if (invRows && invRows.length > 0) {
-              const invId = invRows[0].id;
-              const newQty = (Number(invRows[0].quantity) || 0) + Number(setItem.quantity) * Number(item.quantity);
-              await supabase
-                .from('inventory')
-                .update({ quantity: newQty, updated_at: new Date().toISOString() })
-                .eq('id', invId);
-            } else {
-              await supabase
-                .from('inventory')
-                .insert([
-                  {
-                    product_id: setItem.product_id,
-                    location: restoreLocation,
-                    quantity: Number(setItem.quantity) * Number(item.quantity),
-                    updated_at: new Date().toISOString()
-                  }
-                ]);
-            }
-          })());
-        }
-      } else {
-        // Restore single product
-        promises.push((async () => {
-          const { data: invRows } = await supabase
+      if (!item.product_id) continue; // skip custom lines
+      ops.push((async () => {
+        const { data: invRows } = await supabase
+          .from('inventory')
+          .select('id, quantity')
+          .eq('product_id', item.product_id)
+          .eq('location', restoreLocation);
+        if (invRows && invRows.length > 0) {
+          const invId = invRows[0].id;
+          const newQty = (Number(invRows[0].quantity) || 0) + Number(item.quantity);
+          await supabase
             .from('inventory')
-            .select('id, quantity')
-            .eq('product_id', item.product_id)
-            .eq('location', restoreLocation);
-          if (invRows && invRows.length > 0) {
-            const invId = invRows[0].id;
-            const newQty = (Number(invRows[0].quantity) || 0) + Number(item.quantity);
-            await supabase
-              .from('inventory')
-              .update({ quantity: newQty, updated_at: new Date().toISOString() })
-              .eq('id', invId);
-          } else {
-            await supabase
-              .from('inventory')
-              .insert([
-                {
-                  product_id: item.product_id,
-                  location: restoreLocation,
-                  quantity: Number(item.quantity),
-                  updated_at: new Date().toISOString()
-                }
-              ]);
-          }
-        })());
-      }
+            .update({ quantity: newQty, updated_at: new Date().toISOString() })
+            .eq('id', invId);
+        } else {
+          await supabase
+            .from('inventory')
+            .insert([
+              {
+                product_id: item.product_id,
+                location: restoreLocation,
+                quantity: Number(item.quantity),
+                updated_at: new Date().toISOString()
+              }
+            ]);
+        }
+        // Ensure product_locations exists
+        const { data: prodLocRows } = await supabase
+          .from('product_locations')
+          .select('id')
+          .eq('product_id', item.product_id)
+          .eq('location_id', restoreLocation);
+        if (!prodLocRows || prodLocRows.length === 0) {
+          await supabase
+            .from('product_locations')
+            .insert([{ product_id: item.product_id, location_id: restoreLocation }]);
+        }
+      })());
     }
-    await Promise.all(promises);
+    await Promise.all(ops);
   };
 
   // Restore inventory for all laybys of a customer
@@ -480,8 +447,8 @@ export default function POS() {
         return;
       }
     }
-    // If paymentAmount is not set or 0, treat as layby/partial
-    let payAmt = Number(paymentAmount);
+  // If paymentAmount is not set or 0, treat as layby/partial
+  let payAmt = Number(paymentAmount);
     if (payAmt < 0 || payAmt > total) {
       setCheckoutError("Enter a valid payment amount (<= total).");
       return;
@@ -490,17 +457,32 @@ export default function POS() {
     setCheckoutLoading(true);
 
     try {
+      // 0. Apply opening balance first; compute remainder to use for sale
+      let remainingPay = Number(payAmt) || 0;
+      if (selectedCustomer && remainingPay > 0) {
+        const cust = customers.find(c => String(c.id) === String(selectedCustomer));
+        const opening = Number(cust?.opening_balance || 0);
+        if (opening > 0) {
+          if (remainingPay >= opening) {
+            await supabase.from('customers').update({ opening_balance: 0 }).eq('id', selectedCustomer);
+            remainingPay = remainingPay - opening;
+          } else {
+            await supabase.from('customers').update({ opening_balance: opening - remainingPay }).eq('id', selectedCustomer);
+            remainingPay = 0;
+          }
+        }
+      }
       let laybyId = null;
       let saleId = null;
       // 1. If partial payment, create layby record first to get layby_id (UUID)
-      if (payAmt < total) {
+  if (remainingPay < total) {
         const { data: laybyData, error: laybyError } = await supabase
           .from("laybys")
           .insert([
             {
               customer_id: customerId,
-              total_amount: total,
-              paid_amount: payAmt,
+      total_amount: total,
+      paid_amount: remainingPay,
               status: 'active',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
@@ -519,13 +501,13 @@ export default function POS() {
             customer_id: customerId,
             sale_date: date,
             total_amount: total,
-            status: payAmt < total ? 'layby' : 'completed',
+            status: remainingPay < total ? 'layby' : 'completed',
             updated_at: new Date().toISOString(),
             location_id: selectedLocation,
             layby_id: laybyId || null,
             currency: currency,
             discount: discountAmount,
-            down_payment: payAmt,
+            down_payment: remainingPay,
             receipt_number: `#${receiptNumber.trim().replace(/^#*/, "")}`,
           },
         ])
@@ -539,43 +521,65 @@ export default function POS() {
       }
 
       // 4. Insert sale_items (use integer saleId)
-      const saleItems = cart.map((item) => (
-        item.isCustom
-          ? {
+      //    - Custom lines: product_id null, store qty and unit_price
+      //    - Set lines: expand into component product rows with aggregated qty and unit_price 0 (revenue tracked at sale level)
+      const saleItems = [];
+      for (const item of cart) {
+    if (item.isCustom) {
+          saleItems.push({
+            sale_id: saleId,
+            product_id: null,
+      display_name: item.name,
+            quantity: Number(item.qty),
+            unit_price: Number(item.price),
+            currency: item.currency || currency
+          });
+        } else if (item.isSet) {
+          const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : item.id;
+          const { data: comboItemsData } = await supabase
+            .from('combo_items')
+            .select('product_id, quantity')
+            .eq('combo_id', comboIdInt);
+          for (const ci of comboItemsData || []) {
+            saleItems.push({
               sale_id: saleId,
-              product_id: null,
-              custom_name: item.name,
-              quantity: item.qty,
-              unit_price: item.price,
+              product_id: ci.product_id,
+              quantity: Number(ci.quantity) * Number(item.qty),
+              unit_price: 0,
               currency: item.currency || currency
-            }
-          : {
-              sale_id: saleId,
-              product_id: item.id,
-              quantity: item.qty,
-              unit_price: item.price,
-              currency: item.currency || currency
-            }
-      ));
+            });
+          }
+        } else {
+          saleItems.push({
+            sale_id: saleId,
+            product_id: item.id,
+            quantity: Number(item.qty),
+            unit_price: Number(item.price),
+            currency: item.currency || currency
+          });
+        }
+      }
       const { error: itemsError } = await supabase.from("sales_items").insert(saleItems);
       if (itemsError) throw itemsError;
 
-      // 5. Insert payment (partial or full, use integer saleId)
-      const paymentType = payAmt < total ? 'layby' : 'cash';
-      const { error: payError } = await supabase.from("sales_payments").insert([
-        {
-          sale_id: saleId,
-          amount: payAmt,
-          payment_type: paymentType,
-          currency,
-          payment_date: new Date().toISOString(),
-        },
-      ]);
-      if (payError) throw payError;
+      // 5. Insert sale payment only for the remainder after opening balance
+      if (remainingPay > 0) {
+        const paymentType = remainingPay < total ? 'layby' : 'cash';
+        const { error: payError } = await supabase.from("sales_payments").insert([
+          {
+            sale_id: saleId,
+            amount: remainingPay,
+            payment_type: paymentType,
+            currency,
+            payment_date: new Date().toISOString(),
+          },
+        ]);
+        if (payError) throw payError;
+      }
 
       setCheckoutSuccess("Sale completed successfully!");
       // Deduct inventory ONLY for completed sales (not layby/partial)
-      if (payAmt >= total) {
+  if (remainingPay >= total) {
         for (const item of cart) {
           if (item.isCustom) continue; // Skip inventory for custom products/services
           if (!item.id || !selectedLocation) continue;
@@ -787,13 +791,52 @@ export default function POS() {
 
   // Fetch laybys for customer
   const fetchCustomerLaybys = async (customerId) => {
-    if (!customerId) return;
-    const { data } = await supabase
+    if (!customerId) {
+      setCustomerLaybys([]);
+      setRemainingDue(0);
+      return;
+    }
+    const { data: laybys } = await supabase
       .from('laybys')
       .select('id, sale_id, total_amount, paid_amount, status, created_at, updated_at')
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false });
-    setCustomerLaybys(data || []);
+    let list = laybys || [];
+    // Pre-compute paid per sale (down_payment + payments) and outstanding per layby
+    const saleIds = Array.from(new Set(list.map(l => Number(l.sale_id)).filter(id => !isNaN(id))));
+    let downPayments = {};
+    if (saleIds.length) {
+      const { data: salesRows } = await supabase
+        .from('sales')
+        .select('id, down_payment')
+        .in('id', saleIds);
+      (salesRows || []).forEach(s => { downPayments[s.id] = Number(s.down_payment || 0); });
+    }
+    let paymentsSum = {};
+    if (saleIds.length) {
+      const { data: pays } = await supabase
+        .from('sales_payments')
+        .select('sale_id, amount')
+        .in('sale_id', saleIds);
+      (pays || []).forEach(p => {
+        const sid = Number(p.sale_id);
+        paymentsSum[sid] = (paymentsSum[sid] || 0) + Number(p.amount || 0);
+      });
+    }
+    list = list.map(l => {
+      const sid = Number(l.sale_id);
+      const paid = (downPayments[sid] || 0) + (paymentsSum[sid] || 0);
+      const outstanding = Math.max(0, Number(l.total_amount || 0) - paid);
+      return { ...l, computed_paid: paid, computed_outstanding: outstanding };
+    });
+    setCustomerLaybys(list);
+    // Compute remaining: sum of outstanding across laybys + customer's opening balance
+    const totalOutstanding = list.reduce((sum, l) => {
+      return sum + Number(l.computed_outstanding || 0);
+    }, 0);
+    const cust = customers.find(c => String(c.id) === String(customerId));
+    const opening = Number(cust?.opening_balance || 0);
+    setRemainingDue(opening + totalOutstanding);
   };
 
   // Delete sale and restore inventory
@@ -1086,6 +1129,21 @@ export default function POS() {
         {canAdd && (
           <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '-4mm' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
         )}
+        {selectedCustomer && remainingDue > 0 && (
+          <span style={{
+            marginLeft: 8,
+            background: '#2e7d32',
+            color: '#fff',
+            padding: '4px 10px',
+            borderRadius: 8,
+            fontSize: '0.92rem',
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            boxShadow: '0 0 0 1px rgba(255,255,255,0.08) inset'
+          }}>
+            Remaining balance: {currency} {Number(remainingDue).toLocaleString()}
+          </span>
+        )}
       </div>
       {/* ...rest of the component remains unchanged... */}
       <div className="pos-row" style={{ gap: 6, marginBottom: 6, alignItems: 'center', display: 'flex', flexWrap: 'wrap' }}>
@@ -1336,8 +1394,8 @@ export default function POS() {
                     <td>{new Date(l.created_at).toLocaleDateString()}</td>
                     <td>{l.status}</td>
                     <td>{Number(l.total_amount).toFixed(2)}</td>
-                    <td>{Number(l.paid_amount).toFixed(2)}</td>
-                    <td>{(Number(l.total_amount) - Number(l.paid_amount)).toFixed(2)}</td>
+                    <td>{Number(l.computed_paid ?? l.paid_amount ?? 0).toFixed(2)}</td>
+                    <td>{Number(l.computed_outstanding ?? (Number(l.total_amount) - Number(l.paid_amount)) ?? 0).toFixed(2)}</td>
                     <td>{customers.find(c => String(c.id) === String(l.customer_id))?.name || '-'}</td>
                     <td></td>
                   </tr>

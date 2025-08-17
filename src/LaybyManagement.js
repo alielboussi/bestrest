@@ -33,7 +33,40 @@ export default function LaybyManagement() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showPdfPrompt, setShowPdfPrompt] = useState(false);
+  // Helper: upload generated PDF to Supabase storage and try to cache its public URL
+  const uploadLaybyPDF = async (layby, doc, customersMapLike) => {
+    try {
+      const blob = doc.output('blob');
+      const bucket = 'laybypdfs';
+      const filePath = `laybys/${layby.id}.pdf`;
+      const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, blob, { upsert: true, contentType: 'application/pdf' });
+      if (uploadErr) throw uploadErr;
+      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+      const publicUrl = publicUrlData?.publicUrl;
+      if (publicUrl) {
+        // Try to persist into layby_view (if updatable) for reuse; ignore failures
+        try {
+          await supabase.from('layby_view').update({ Layby_URL: publicUrl }).eq('id', layby.id);
+        } catch {}
+        // Immediate user download as well
+        const a = document.createElement('a');
+        const customerName = (customersMapLike?.name || layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+        a.href = publicUrl;
+        a.download = `${customerName}.pdf`;
+        a.click();
+      }
+    } catch (e) {
+      console.error('PDF upload/cache failed:', e?.message || e);
+    }
+  };
   const navigate = useNavigate();
+
+  const formatCurrency = (amount, currency = 'K') => {
+    if (amount === null || amount === undefined || amount === '') return '';
+    const n = Number(amount);
+    const formatted = n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${currency} ${formatted}`;
+  };
 
   // Fetch all layby sales with outstanding balances
   useEffect(() => {
@@ -85,7 +118,7 @@ export default function LaybyManagement() {
       if (customerIds.length) {
         const { data: customers } = await supabase
           .from("customers")
-          .select("id, name, phone")
+          .select("id, name, phone, currency, opening_balance")
           .in("id", customerIds);
         customersMap = (customers || []).reduce((acc, c) => {
           acc[c.id] = c;
@@ -143,21 +176,63 @@ export default function LaybyManagement() {
       setLoading(false);
       return;
     }
-    // Insert payment
-    const { error } = await supabase.from("sales_payments").insert([
-      {
-        sale_id: selectedLayby.sale_id, // Use sale_id (integer), not layby.id (UUID)
-        amount: paymentAmount,
-        payment_type: "layby",
-        currency: "K",
-        payment_date: paymentDate,
-        reference: receipt,
-      },
-    ]);
-    // Update layby updated_at
-    await supabase.from("laybys").update({ updated_at: new Date().toISOString() }).eq("id", selectedLayby.id);
-    if (error) setError(error.message);
-    else setSuccess("Payment added!");
+    // Apply to customer's opening balance first, then to layby if remainder
+    try {
+      const customerId = selectedLayby.customer_id;
+      const { data: custRow } = await supabase
+        .from('customers')
+        .select('opening_balance, currency')
+        .eq('id', customerId)
+        .maybeSingle();
+      const opening = Number(custRow?.opening_balance || 0);
+      const curr = custRow?.currency || 'K';
+      let amt = Number(paymentAmount);
+    if (opening > 0 && amt > 0) {
+        if (amt <= opening) {
+          // Fully consume within opening balance
+          const { error: upErr } = await supabase
+            .from('customers')
+            .update({ opening_balance: opening - amt })
+            .eq('id', customerId);
+          if (upErr) throw upErr;
+          // Mark success and finish
+          await supabase.from("laybys").update({ updated_at: new Date().toISOString() }).eq("id", selectedLayby.id);
+      setSuccess('Payment added!');
+          setLoading(false);
+          setPaymentAmount("");
+          setPaymentDate("");
+          setReceipt("");
+          setSelectedLayby(null);
+          return;
+        } else {
+          // Reduce opening to zero and use remainder for layby
+          const remainder = amt - opening;
+          const { error: upErr } = await supabase
+            .from('customers')
+            .update({ opening_balance: 0 })
+            .eq('id', customerId);
+          if (upErr) throw upErr;
+          amt = remainder;
+        }
+      }
+      // Apply remaining amount (or full amount if no opening) to layby payments
+      const { error: payErr } = await supabase.from("sales_payments").insert([
+        {
+          sale_id: selectedLayby.sale_id, // Use sale_id (integer), not layby.id (UUID)
+          amount: amt,
+          payment_type: "layby",
+          currency: curr,
+          payment_date: paymentDate,
+          reference: receipt,
+        },
+      ]);
+      // Update layby updated_at
+      await supabase.from("laybys").update({ updated_at: new Date().toISOString() }).eq("id", selectedLayby.id);
+      if (payErr) throw payErr;
+      setSuccess("Payment added!");
+    } catch (ex) {
+      setError(ex?.message || 'Failed to add payment');
+    }
     setLoading(false);
     setPaymentAmount("");
     setPaymentDate("");
@@ -165,11 +240,11 @@ export default function LaybyManagement() {
     setSelectedLayby(null);
   }
 
-  // Set reminder for next payment
-  async function handleSetReminder(laybyId) {
+  // Set reminder for next payment (use sale_id)
+  async function handleSetReminder(saleId) {
     if (!reminderDate) return;
     setLoading(true);
-    const { error } = await supabase.from("sales").update({ reminder_date: reminderDate, updated_at: new Date().toISOString() }).eq("id", laybyId);
+    const { error } = await supabase.from("sales").update({ reminder_date: reminderDate, updated_at: new Date().toISOString() }).eq("id", saleId);
     if (error) setError(error.message);
     else setSuccess("Reminder set!");
     setLoading(false);
@@ -191,10 +266,10 @@ export default function LaybyManagement() {
     // Fetch products for this layby (from sales_items)
     const { data: saleItems } = await supabase
       .from("sales_items")
-      .select("product_id, quantity, unit_price, product:products(name, sku)")
+      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
       .eq("sale_id", selectedLayby.sale_id);
     const products = (saleItems || []).map(i => ({
-      name: i.product?.name || '',
+      name: i.product?.name || i.display_name || '',
       sku: i.product?.sku || '',
       qty: i.quantity,
       price: i.unit_price
@@ -210,9 +285,25 @@ export default function LaybyManagement() {
     const logoUrl = window.location.origin + '/bestrest-logo.png';
     const companyName = 'BestRest';
     if (type === 'pdf') {
-      exportLaybyPDF({ companyName, logoUrl, customer, layby: selectedLayby, products, payments });
+      const { data: saleRows } = await supabase
+        .from('sales')
+        .select('currency, discount')
+        .eq('id', selectedLayby.sale_id)
+        .single();
+      const currency = saleRows?.currency || customer.currency || 'K';
+      const discount = Number(saleRows?.discount || 0);
+      const doc = exportLaybyPDF({ companyName, logoUrl, customer: { ...customer, opening_balance: customer.opening_balance || 0 }, layby: selectedLayby, products, payments, currency, discount });
+      // Attempt upload/cache for parity
+      await uploadLaybyPDF(selectedLayby, doc, customer);
     } else {
-      const csv = exportLaybyCSV({ customer, layby: selectedLayby, products, payments });
+      const { data: saleRows } = await supabase
+        .from('sales')
+        .select('currency, discount')
+        .eq('id', selectedLayby.sale_id)
+        .single();
+      const currency = saleRows?.currency || customer.currency || 'K';
+      const discount = Number(saleRows?.discount || 0);
+      const csv = exportLaybyCSV({ customer: { ...customer, opening_balance: customer.opening_balance || 0 }, layby: selectedLayby, products, payments, currency, discount });
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -274,36 +365,82 @@ export default function LaybyManagement() {
           <tbody>
             {filteredLaybys.map(layby => (
               <tr key={layby.id} style={{ background: layby.outstanding === 0 ? '#0f2e1d' : undefined }}>
-                <td className="text-col">{layby.customerInfo?.name}</td>
+                <td className="text-col">
+                  <div>{layby.customerInfo?.name}</div>
+                  {Number(layby.outstanding || 0) > 0 && (
+                    <div style={{
+                      marginTop: 4,
+                      display: 'inline-block',
+                      background: '#2e7d32',
+                      color: '#fff',
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.06) inset'
+                    }}>
+                      Remaining: {formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}
+                    </div>
+                  )}
+                </td>
                 <td className="text-col">{layby.customerInfo?.phone}</td>
-                <td className="num-col">{layby.total_amount}</td>
-                <td className="num-col">{layby.paid}</td>
-                <td className="num-col">{layby.outstanding}</td>
+                <td className="num-col">{formatCurrency(layby.total_amount, layby.customerInfo?.currency || 'K')}</td>
+                <td className="num-col">{formatCurrency(layby.paid, layby.customerInfo?.currency || 'K')}</td>
+                <td className="num-col">{formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input type="date" value={layby.reminder_date || ""} onChange={e => setReminderDate(e.target.value)} style={{ background: '#181f2f', color: '#fff', border: '1px solid #333', borderRadius: 4, padding: '1px 2px', minWidth: 70, maxWidth: 90, fontSize: '0.8rem' }} />
-                    <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => handleSetReminder(layby.id)} disabled={!reminderDate}>Set</button>
+                    <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => handleSetReminder(layby.sale_id)} disabled={!reminderDate}>Set</button>
                   </div>
                 </td>
                 <td className="text-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
-                <td className="action-col">
+                <td className="action-col" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {Number(layby.outstanding || 0) > 0 && (
+                    <span style={{
+                      background: '#2e7d32',
+                      color: '#fff',
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 0 0 1px rgba(255,255,255,0.06) inset'
+                    }}>
+                      Remaining: {formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}
+                    </span>
+                  )}
                   <button
                     style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }}
                     onClick={() => setSelectedLayby(layby)}
-                    disabled={layby.outstanding === 0 || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
+                    disabled={(layby.outstanding === 0 && !(Number(layby.customerInfo?.opening_balance || 0) > 0)) || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
                   >
                     Add Payment
                   </button>
                 </td>
                 <td className="action-col">
                   <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90, marginRight: 2 }} onClick={async () => {
+                    // Reuse cached PDF if it exists in layby_view
+                    const { data: laybyViewRows } = await supabase
+                      .from('layby_view')
+                      .select('Layby_URL')
+                      .eq('id', layby.id)
+                      .maybeSingle();
+                    if (laybyViewRows?.Layby_URL) {
+                      const a = document.createElement('a');
+                      a.href = laybyViewRows.Layby_URL;
+                      const customerName = (layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+                      a.download = `${customerName}.pdf`;
+                      a.click();
+                      return;
+                    }
                     // Fetch products for this layby (from sales_items)
                     const { data: saleItems } = await supabase
                       .from("sales_items")
-                      .select("product_id, quantity, unit_price, product:products(name, sku)")
+                      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
                       .eq("sale_id", layby.sale_id);
                     const products = (saleItems || []).map(i => ({
-                      name: i.product?.name || '',
+                      name: i.product?.name || i.display_name || '',
                       sku: i.product?.sku || '',
                       qty: i.quantity,
                       price: i.unit_price
@@ -316,22 +453,25 @@ export default function LaybyManagement() {
                     // Fetch sale to get currency
                     const { data: saleRows } = await supabase
                       .from("sales")
-                      .select("currency")
+                      .select("currency, discount")
                       .eq("id", layby.sale_id)
                       .single();
-                    const currency = saleRows?.currency || 'K';
-                    const customer = layby.customerInfo || {};
+                    const currency = saleRows?.currency || layby.customerInfo?.currency || 'K';
+                    const discount = Number(saleRows?.discount || 0);
+                    const customer = { ...(layby.customerInfo || {}), opening_balance: layby.customerInfo?.opening_balance || 0 };
                     const logoUrl = window.location.origin + '/bestrest-logo.png';
                     const companyName = 'BestRest';
-                    exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency });
+                    const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
+                    // Upload and cache URL, then trigger download
+                    await uploadLaybyPDF(layby, doc, customer);
                   }}>PDF</button>
                   <button style={{ background: '#4caf50', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={async () => {
                     const { data: saleItems } = await supabase
                       .from("sales_items")
-                      .select("product_id, quantity, unit_price, product:products(name, sku)")
+                      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
                       .eq("sale_id", layby.sale_id);
                     const products = (saleItems || []).map(i => ({
-                      name: i.product?.name || '',
+                      name: i.product?.name || i.display_name || '',
                       sku: i.product?.sku || '',
                       qty: i.quantity,
                       price: i.unit_price
@@ -341,7 +481,14 @@ export default function LaybyManagement() {
                       .select("amount, payment_date")
                       .eq("sale_id", layby.sale_id);
                     const customer = layby.customerInfo || {};
-                    const csv = exportLaybyCSV({ customer, layby, products, payments });
+                const { data: saleRows2 } = await supabase
+                  .from('sales')
+                  .select('currency, discount')
+                  .eq('id', layby.sale_id)
+                  .single();
+                const currency = saleRows2?.currency || layby.customerInfo?.currency || 'K';
+                const discount = Number(saleRows2?.discount || 0);
+                const csv = exportLaybyCSV({ customer: { ...customer, opening_balance: layby.customerInfo?.opening_balance || 0 }, layby, products, payments, currency, discount });
                     const blob = new Blob([csv], { type: 'text/csv' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
