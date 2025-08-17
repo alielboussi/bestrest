@@ -70,9 +70,19 @@ function ClosingStock() {
       const products = (prodLocs || []).map(row => row.products);
 
       // Fetch combos (sets) and their components
-      const { data: combos } = await supabase
-        .from('combos')
-        .select('id, sku, combo_name');
+      const { data: comboLinks } = await supabase
+        .from('combo_locations')
+        .select('combo_id')
+        .eq('location_id', selectedLocation);
+      const comboIdsForLoc = (comboLinks || []).map(c => c.combo_id);
+      let combos = [];
+      if (comboIdsForLoc.length > 0) {
+        const { data: combosData } = await supabase
+          .from('combos')
+          .select('id, sku, combo_name')
+          .in('id', comboIdsForLoc);
+        combos = combosData || [];
+      }
       const comboIds = (combos || []).map(c => c.id);
       let comboItems = [];
       if (comboIds.length > 0) {
@@ -111,25 +121,15 @@ function ClosingStock() {
           const scanned = products.find(p => String(p.sku) === barcode);
           if (scanned) {
             if (scanned.is_combo && scanned.components) {
-              // Check if enough product stock exists before incrementing
-              const productStock = { ...entries };
-              scanned.components.forEach(ci => {
-                productStock[ci.product_id] = (Number(productStock[ci.product_id]) || 0);
-              });
-              const possibleSets = getMaxSetQty(scanned.components, productStock);
-              if (possibleSets > 0) {
-                setEntries(prev => {
-                  const newEntries = { ...prev };
-                  scanned.components.forEach(ci => {
-                    newEntries[ci.product_id] = (Number(newEntries[ci.product_id]) || 0) + (ci.quantity || 1);
-                  });
-                  // Increment the set's own qty by 1
-                  newEntries[scanned.id] = (Number(newEntries[scanned.id]) || 0) + 1;
-                  return newEntries;
+              // Increment set and its component product counts by 1 set worth (closing stock is a physical count; no constraint check)
+              setEntries(prev => {
+                const newEntries = { ...prev };
+                scanned.components.forEach(ci => {
+                  newEntries[ci.product_id] = (Number(newEntries[ci.product_id]) || 0) + (ci.quantity || 1);
                 });
-              } else {
-                setError(`Cannot increment set '${scanned.name}' due to insufficient product stock.`);
-              }
+                newEntries[scanned.id] = (Number(newEntries[scanned.id]) || 0) + 1;
+                return newEntries;
+              });
             } else {
               // If it's a product, increment its qty
               setEntries(prev => ({
@@ -167,6 +167,7 @@ function ClosingStock() {
 
   // Build confirmation table rows: only products with qty input and that were searched
   const confirmRows = products
+    .filter(p => !p.is_combo) // only real products are saved
     .filter(p => entries[p.id] && Number(entries[p.id]) > 0)
     .map(p => ({
       name: p.name,
@@ -311,14 +312,19 @@ function ClosingStock() {
                     try {
                       // 1. Save closing stock session and entries (same as before)
                       let sessionId = null;
-                      const userId = 1; // Replace with actual user id if available
+                      let userId = null;
+                      try {
+                        const { data: u } = await supabase.auth.getUser();
+                        userId = u?.user?.id || null;
+                      } catch {}
                       const now = new Date().toISOString();
-                      const { data: openSession, error: sessionError } = await supabase
+                      let query = supabase
                         .from('closing_stock_sessions')
                         .select('*')
                         .eq('location_id', selectedLocation)
-                        .eq('user_id', userId)
-                        .eq('status', 'open')
+                        .eq('status', 'open');
+                      if (userId) query = query.eq('user_id', userId);
+                      const { data: openSession, error: sessionError } = await query
                         .order('started_at', { ascending: false })
                         .limit(1)
                         .maybeSingle();
@@ -342,13 +348,19 @@ function ClosingStock() {
                         sessionId = newSession.id;
                       }
                       await supabase.from('closing_stock_entries').delete().eq('session_id', sessionId);
-                      const rows = confirmRows.map(row => ({
-                        id: uuidv4(),
-                        session_id: sessionId,
-                        product_id: products.find(p => p.sku === row.sku).id,
-                        qty: Number(row.qty),
-                        stocktake_conductor: ''
-                      }));
+                      const skuToId = products.reduce((m, p) => {
+                        if (!p.is_combo && p.sku) m[p.sku] = p.id;
+                        return m;
+                      }, {});
+                      const rows = confirmRows
+                        .map(row => ({
+                          id: uuidv4(),
+                          session_id: sessionId,
+                          product_id: skuToId[row.sku],
+                          qty: Number(row.qty),
+                          stocktake_conductor: ''
+                        }))
+                        .filter(r => !!r.product_id);
                       if (rows.length > 0) {
                         const { error: insertError } = await supabase.from('closing_stock_entries').insert(rows);
                         if (insertError) throw insertError;
@@ -417,11 +429,13 @@ function ClosingStock() {
                         closingStocktakeId = existingClosingStocktake.id;
                       }
                       // Insert all product entries into stocktake_entries for closing
-                      const entriesToInsert = confirmRows.map(row => ({
-                        stocktake_id: closingStocktakeId,
-                        product_id: products.find(p => p.sku === row.sku).id,
-                        qty: Number(row.qty)
-                      }));
+                      const entriesToInsert = confirmRows
+                        .map(row => ({
+                          stocktake_id: closingStocktakeId,
+                          product_id: skuToId[row.sku],
+                          qty: Number(row.qty)
+                        }))
+                        .filter(e => !!e.product_id);
                       const { error: entriesError } = await supabase
                         .from('stocktake_entries')
                         .insert(entriesToInsert);

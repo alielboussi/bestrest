@@ -5,6 +5,7 @@ import BackToDashboard from './BackToDashboard';
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
+import POSMobile from './POSMobile';
 import CompanySettings from './CompanySettings';
 import Customers from './Customers';
 import Locations from './Locations';
@@ -71,7 +72,8 @@ function App() {
         <Route path="/products-list" element={<ProductsListPage />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/customers" element={<Customers />} />
-        <Route path="/pos" element={<POS />} />
+  <Route path="/pos" element={<POS />} />
+  <Route path="/pos-mobile" element={<POSMobile />} />
         <Route path="/layby-management" element={<LaybyManagement />} />
         <Route path="/layby-management-mobile" element={<LaybyManagementMobile />} />
   <Route path="/stock-report-mobile" element={React.createElement(require('./StockReportMobile').default)} />

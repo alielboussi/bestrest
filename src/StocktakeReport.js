@@ -186,7 +186,7 @@ const StocktakeReport = () => {
         if (!comboItemsMap[ci.combo_id]) comboItemsMap[ci.combo_id] = [];
         comboItemsMap[ci.combo_id].push(ci);
       });
-      // Prepare rows: combos first, with their components below
+  // Prepare rows: combos first, with their components below
       const rows = [];
       combosRaw.forEach(combo => {
         // Derive set metrics from component stocks; combos aren’t stored as inventory rows.
@@ -208,7 +208,8 @@ const StocktakeReport = () => {
           });
           salesInSets = perCompSets.length ? Math.min(...perCompSets) : 0;
         }
-        const expectedClosing = opening + transferSets - salesInSets;
+  // Expected closing in sets uses Opening + Transfer In (set-equivalent) - Sales (set-equivalent)
+  const expectedClosing = opening + transferSets - salesInSets;
         // Actual closing in sets: derive from component closings converted to set-equivalents
         let actualClosingSets = 0;
         if (items.length > 0) {
@@ -255,7 +256,7 @@ const StocktakeReport = () => {
           });
         });
       });
-      // Now show all products not part of any set
+  // Now show all products not part of any set
   const setComponentIds = Array.from(new Set(Object.values(comboItemsMap).flat().map(ci => ci.product_id)));
     (productsRaw || []).forEach(prod => {
         if (!setComponentIds.includes(prod.id)) {
@@ -487,7 +488,6 @@ const StocktakeReport = () => {
             <th>Product</th>
             <th>Opening</th>
             <th>Transfer In</th>
-            <th title="Possible sets transferred based on product transfers">Possible Sets Transferred</th>
             <th>Sales</th>
             <th>Expected Closing</th>
             <th>Actual</th>
@@ -504,7 +504,6 @@ const StocktakeReport = () => {
               <td>{row.name}</td>
               <td>{row.opening}</td>
               <td>{row.transfer}</td>
-              <td>{row.possibleSetsTransferred || ''}</td>
               <td>{row.sales}</td>
               <td>{row.expectedClosing}</td>
               <td>{row.actual}</td>
