@@ -16,6 +16,7 @@ const StockReportMobile = () => {
   const [search, setSearch] = useState('');
   const [combos, setCombos] = useState([]);
   const [comboItems, setComboItems] = useState([]);
+  const [comboLocations, setComboLocations] = useState([]);
   const [expandedImage, setExpandedImage] = useState(null);
 
   useEffect(() => {
@@ -34,10 +35,12 @@ const StockReportMobile = () => {
       setUnits(unitData || []);
       const { data: images } = await supabase.from('product_images').select('*');
       setProductImages(images || []);
-      const { data: combosData } = await supabase.from('combos').select('*');
+  const { data: combosData } = await supabase.from('combos').select('*');
       setCombos(combosData || []);
       const { data: comboItemsData } = await supabase.from('combo_items').select('*');
       setComboItems(comboItemsData || []);
+  const { data: comboLocs } = await supabase.from('combo_locations').select('*');
+  setComboLocations(comboLocs || []);
   // ...existing code...
     };
     fetchData();
@@ -102,6 +105,20 @@ const StockReportMobile = () => {
     return matchesCategory && matchesSearch;
   });
 
+  // Filter combos: show sets available at location (if selected) and matching search
+  const filteredCombos = combos.filter(c => {
+    if (location) {
+      const linked = (comboLocations || []).some(cl => String(cl.combo_id) === String(c.id) && String(cl.location_id) === String(location));
+      if (!linked) return false;
+    }
+    const searchValue = search.trim().toLowerCase();
+    if (searchValue) {
+      const matches = (c.combo_name && c.combo_name.toLowerCase().includes(searchValue)) || (c.sku && c.sku.toLowerCase().includes(searchValue));
+      if (!matches) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="stock-report-mobile-container">
       <div className="stock-report-mobile-filters">
@@ -134,6 +151,44 @@ const StockReportMobile = () => {
         />
       </div>
       <div className="stock-report-mobile-list">
+        {/* Render sets (combos) first */}
+        {filteredCombos.map(c => {
+          const qty = computeComboMaxQty(c.id, location || '');
+          const pic = c.picture_url || '';
+          const stdPrice = c.combo_price || c.standard_price || '';
+          const promo = c.promotional_price || '';
+          return (
+            <div className="stock-report-mobile-card glowing-green" key={`combo-${c.id}`}>
+              <div className="stock-report-mobile-card-row">
+                <div className="stock-report-mobile-card-img-wrap" style={{width: 60, height: 60, minWidth: 60, minHeight: 60, marginRight: 10}}>
+                  {pic ? (
+                    <img
+                      src={pic}
+                      alt={c.combo_name}
+                      className="stock-report-mobile-card-img"
+                      style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, cursor: 'pointer'}}
+                      onClick={() => setExpandedImage(pic)}
+                    />
+                  ) : (
+                    <div className="stock-report-mobile-card-img-placeholder">Set</div>
+                  )}
+                </div>
+                <div style={{display: 'flex', flexDirection: 'column', flex: 1}}>
+                  <div style={{fontWeight: 'bold', fontSize: '1.25em', color: '#fff'}}>{c.combo_name}</div>
+                  <div style={{display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, fontSize: '1.1em'}}>
+                    <span style={{fontWeight: 'bold', color: '#00e676'}}>Buildable Sets: {qty}</span>
+                    <span style={{color: '#fff'}}>Set</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{display: 'flex', flexDirection: 'row', gap: 16, marginTop: 8, justifyContent: 'space-between'}}>
+                <div style={{fontSize: '1.1em', color: '#fff'}}>Standard Price: <b>{stdPrice !== '' ? (c.currency ? `${c.currency} ` : '') + stdPrice : '-'}</b></div>
+                <div style={{fontSize: '1.1em', color: '#fff'}}>Promotional Price: <b>{promo !== '' ? (c.currency ? `${c.currency} ` : '') + promo : '-'}</b></div>
+              </div>
+            </div>
+          );
+        })}
+        {/* Then render individual products */}
         {filteredProducts.map(p => {
           let unit = '';
           if (p.unit_of_measure_id) {

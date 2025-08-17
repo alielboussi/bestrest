@@ -333,21 +333,23 @@ function Products() {
     setError("");
     try {
       let productId = editingId;
-      // Generate unique SKU if needed
+      // Generate smallest-missing-integer SKU in format #00001 if needed
       let skuToUse = form.sku;
       if ((form.sku_type === "auto" && !form.sku.trim()) || !form.sku.trim()) {
-        // Try to generate a unique SKU: e.g. PROD-YYYYMMDD-HHMMSS-XXXX
-        let unique = false;
-        let generatedSku = "";
-        while (!unique) {
-          const now = new Date();
-          const pad = (n) => n.toString().padStart(2, '0');
-          generatedSku = `PROD-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}-${Math.floor(1000 + Math.random() * 9000)}`;
-          // Check if SKU exists
-          const { data: existing } = await supabase.from('products').select('id').eq('sku', generatedSku).maybeSingle();
-          if (!existing) unique = true;
-        }
-        skuToUse = generatedSku;
+        const { data: allSkus } = await supabase.from('products').select('sku');
+        const used = new Set();
+        (allSkus || []).forEach(row => {
+          const raw = (row?.sku || '').toString().trim();
+          const m = raw.match(/^#?(\d+)$/); // supports '#00001' or '00001' or '1'
+          if (m) {
+            const num = parseInt(m[1], 10);
+            if (!isNaN(num)) used.add(num);
+          }
+        });
+        let i = 1;
+        while (used.has(i)) i++;
+        const padded = String(i).padStart(5, '0');
+        skuToUse = `#${padded}`;
       }
 
       // Prepare product data

@@ -26,33 +26,32 @@ export default function EditSet() {
   const [promoStart, setPromoStart] = useState("");
   const [promoEnd, setPromoEnd] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [currency, setCurrency] = useState("");
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      // Fetch combo
-      const { data: comboData } = await supabase.from("combos").select("*").eq("id", id).single();
+      // Fetch combo and populate fields directly from combos table
+      const { data: comboData } = await supabase
+        .from("combos")
+        .select("id, combo_name, sku, standard_price, combo_price, promotional_price, promo_start_date, promo_end_date, picture_url, currency, product_id")
+        .eq("id", id)
+        .single();
       setCombo(comboData);
-      // Fetch set product
-      if (comboData?.product_id) {
-        const { data: prodData } = await supabase.from("products").select("*").eq("id", comboData.product_id).single();
-        setSetProduct(prodData);
-        setKitName(prodData?.name || "");
-        setSku(prodData?.sku || "");
-        setStandardPrice(prodData?.standard_price || prodData?.price || "");
-        setPromotionalPrice(prodData?.promotional_price || "");
-        setPromoStart(prodData?.promo_start_date || "");
-        setPromoEnd(prodData?.promo_end_date || "");
-        setImageUrl(prodData?.image_url || "");
-        setSelectedUnit(prodData?.unit_of_measure_id || "");
-        setSelectedCategory(prodData?.category_id || "");
-      }
+      setKitName(comboData?.combo_name || "");
+      setSku(comboData?.sku || "");
+      setStandardPrice(comboData?.standard_price || comboData?.combo_price || "");
+      setPromotionalPrice(comboData?.promotional_price || "");
+      setPromoStart(comboData?.promo_start_date || "");
+      setPromoEnd(comboData?.promo_end_date || "");
+      setImageUrl(comboData?.picture_url || "");
+      setCurrency(comboData?.currency || "");
       // Fetch combo_items
       const { data: itemsData } = await supabase.from("combo_items").select("*").eq("combo_id", id);
       setComboItems(itemsData || []);
       setKitItems((itemsData || []).map(item => ({ product_id: item.product_id, quantity: item.quantity })));
       // Fetch products, locations, units, categories
-      const { data: prods } = await supabase.from("products").select("id, name, sku");
+  const { data: prods } = await supabase.from("products").select("id, name, sku");
       setProducts(prods || []);
       const { data: locs } = await supabase.from("locations").select("id, name");
       setLocations(locs || []);
@@ -86,28 +85,11 @@ export default function EditSet() {
   // Save changes
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!kitName || !standardPrice || kitItems.length === 0) {
+  if (!kitName || !standardPrice || kitItems.length === 0) {
       alert("Please fill all required fields and add at least one product.");
       return;
     }
-    // Update set product
-    const { error: prodError } = await supabase
-      .from("products")
-      .update({
-        name: kitName,
-        sku,
-        price: standardPrice,
-        standard_price: standardPrice,
-        promotional_price: promotionalPrice === "" ? null : promotionalPrice,
-        promo_start_date: promoStart || null,
-        promo_end_date: promoEnd || null,
-        image_url: imageUrl || null,
-        unit_of_measure_id: selectedUnit || null,
-        category_id: selectedCategory || null
-      })
-      .eq("id", combo.product_id);
-    if (prodError) return alert("Error updating set product: " + prodError.message);
-    // Update combo
+  // Update combo only (sets are stored in combos; product row may not exist)
     const { error: comboError } = await supabase
       .from("combos")
       .update({
@@ -118,8 +100,8 @@ export default function EditSet() {
         promotional_price: promotionalPrice === "" ? null : promotionalPrice,
         promo_start_date: promoStart || null,
         promo_end_date: promoEnd || null,
-        picture_url: imageUrl || null,
-        product_id: combo.product_id
+    picture_url: imageUrl || null,
+    currency: currency || combo?.currency || null
       })
       .eq("id", id);
     if (comboError) return alert("Error updating combo: " + comboError.message);
@@ -142,18 +124,11 @@ export default function EditSet() {
     <div className="products-container" style={{maxWidth: '100vw', minHeight: '100vh', height: 'auto', overflow: 'visible', padding: '0', margin: 0}}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>Edit Kit / Set</h1>
       <form className="product-form" onSubmit={handleSave}>
-        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(7, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center'}}>
-          <select required name="unit" value={selectedUnit} onChange={e => setSelectedUnit(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
-            <option value="">Select Unit</option>
-            {units.map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <select required name="category" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
-            <option value="">Select Category</option>
-            {categories.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
+        <div className="form-grid" style={{display: 'grid', gridTemplateColumns: 'repeat(5, 150px)', gap: '18px', width: 'fit-content', margin: '0 auto', alignItems: 'center'}}>
+          <select name="currency" value={currency} onChange={e => setCurrency(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px'}}>
+            <option value="">Select Currency</option>
+            <option value="K">K</option>
+            <option value="$">$</option>
           </select>
           <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />
           <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} style={{borderColor: '#00b4d8', minWidth: 0, width: '150px', maxWidth: '150px', height: '40px', verticalAlign: 'middle', padding: '0 8px', boxSizing: 'border-box', display: 'block', margin: 0}} />

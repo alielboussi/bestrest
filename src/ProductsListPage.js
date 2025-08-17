@@ -27,10 +27,22 @@ function ProductsListPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [adjustSetMode, setAdjustSetMode] = useState('receive');
+  const [deleteIsCombo, setDeleteIsCombo] = useState(false);
 
   const handleOpenAdjustModal = (product) => {
     setAdjustProduct(product);
-    setAdjustQty("");
+    // Default mode for sets is 'receive'; for products it's normal adjust
+    if (product.__isCombo) {
+      setAdjustSetMode('receive');
+      setAdjustQty(1);
+    } else if (selectedLocation) {
+      const inv = inventory.find(inv => inv.product_id === product.id && String(inv.location) === String(selectedLocation));
+      const qty = inv ? Number(inv.quantity) : 0;
+      setAdjustQty(qty);
+    } else {
+      setAdjustQty("");
+    }
     setAdjustModalOpen(true);
   };
 
@@ -42,6 +54,77 @@ function ProductsListPage() {
       if (!locationId) {
         alert("Select a location first.");
         setAdjustLoading(false);
+        return;
+      }
+      // Handle set receive/assembly: update component inventory according to combo_items
+      if (adjustProduct.__isCombo) {
+        const items = (comboItems || []).filter(ci => String(ci.combo_id) === String(adjustProduct.id));
+        let setCount = Number(adjustQty);
+        if (!Number.isFinite(setCount) || setCount <= 0) {
+          alert('Enter a positive number of sets.');
+          setAdjustLoading(false);
+          return;
+        }
+
+        if (adjustSetMode === 'assemble') {
+          const buildable = computeComboMaxQty(adjustProduct.id, locationId);
+          if (setCount > buildable) setCount = buildable;
+          if (setCount <= 0) {
+            alert('Insufficient component stock to assemble sets at this location.');
+            setAdjustLoading(false);
+            return;
+          }
+          for (const it of items) {
+            const need = (Number(it.quantity) || 0) * setCount;
+            if (need <= 0) continue;
+            const { data: invRow } = await supabase
+              .from('inventory')
+              .select('id, quantity')
+              .eq('product_id', it.product_id)
+              .eq('location', locationId)
+              .maybeSingle();
+            if (invRow) {
+              const newQty = Math.max(0, Number(invRow.quantity || 0) - need);
+              await supabase.from('inventory').update({ quantity: newQty }).eq('id', invRow.id);
+            } else {
+              await supabase.from('inventory').insert({ product_id: it.product_id, location: locationId, quantity: 0 });
+            }
+            await supabase.from('inventory_adjustments').insert({
+              product_id: it.product_id,
+              location_id: locationId,
+              quantity: -need,
+              adjustment_type: 'Set Assembly',
+              adjusted_at: new Date().toISOString()
+            });
+          }
+        } else {
+          // receive mode: increase components so these sets can be built later
+          for (const it of items) {
+            const add = (Number(it.quantity) || 0) * setCount;
+            if (add <= 0) continue;
+            const { data: invRow } = await supabase
+              .from('inventory')
+              .select('id, quantity')
+              .eq('product_id', it.product_id)
+              .eq('location', locationId)
+              .maybeSingle();
+            if (invRow) {
+              const newQty = Number(invRow.quantity || 0) + add;
+              await supabase.from('inventory').update({ quantity: newQty }).eq('id', invRow.id);
+            } else {
+              await supabase.from('inventory').insert({ product_id: it.product_id, location: locationId, quantity: add });
+            }
+            await supabase.from('inventory_adjustments').insert({
+              product_id: it.product_id,
+              location_id: locationId,
+              quantity: add,
+              adjustment_type: 'Set Receive',
+              adjusted_at: new Date().toISOString()
+            });
+          }
+        }
+        setAdjustModalOpen(false);
+        await fetchInventory();
         return;
       }
       // Check if opening stock exists for this product/location
@@ -169,6 +252,27 @@ function ProductsListPage() {
     }
   };
 
+  // Helpers for sets (use function declarations so they are hoisted)
+  function getStockForProduct(productId, locId) {
+    const lid = String(locId || '');
+    const rows = (inventory || []).filter(inv => String(inv.product_id) === String(productId) && (!lid || String(inv.location) === lid));
+    return rows.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+  }
+
+  function computeComboMaxQty(comboId, locId) {
+    const items = (comboItems || []).filter(ci => String(ci.combo_id) === String(comboId));
+    if (!items.length) return 0;
+    let minSets = Infinity;
+    for (const it of items) {
+      const stock = getStockForProduct(it.product_id, locId);
+      const perSet = Number(it.quantity) || 0;
+      if (perSet <= 0) return 0;
+      const possible = Math.floor(stock / perSet);
+      if (possible < minSets) minSets = possible;
+    }
+    return Number.isFinite(minSets) ? minSets : 0;
+  }
+
   // Helper to resolve a product's unit label
   const getUnitLabel = (product) => {
     const pid = product?.unit_of_measure_id;
@@ -178,47 +282,66 @@ function ProductsListPage() {
     return u.abbreviation || u.name || '-';
   };
 
-  // Filter products by location, search, and image presence
-  const filteredProducts = [
-    ...products.filter(product => {
-      // Exclude sets (combos) if unit name is literally 'set'
+  // Merge products and combos into one list and filter by location/search/image
+  const allItems = [
+    // tag combos so row rendering can branch
+    ...(combos || []).map(c => ({ ...c, __isCombo: true })),
+    ...(products || []).map(p => ({ ...p, __isCombo: false }))
+  ];
+
+  const filteredProducts = allItems.filter(item => {
+    const isCombo = !!item.__isCombo;
+    if (!isCombo) {
+      // Exclude legacy 'set' unit products
       let unitName = undefined;
-      if (product.unit && product.unit.name) {
-        unitName = product.unit.name;
+      if (item.unit && item.unit.name) {
+        unitName = item.unit.name;
       } else {
-        const unit = units.find(u => String(u.id) === String(product.unit_of_measure_id));
+        const unit = units.find(u => String(u.id) === String(item.unit_of_measure_id));
         unitName = unit?.name;
       }
       if (unitName && unitName.toLowerCase() === 'set') return false;
-      // Location filter
-      if (selectedLocation) {
-        if (product.product_locations && product.product_locations.length > 0) {
-          const linked = product.product_locations.some(pl => String(pl.location_id) === String(selectedLocation));
+    }
+    // Location filter
+    if (selectedLocation) {
+      if (isCombo) {
+        const linked = (comboLocations || []).some(cl => String(cl.combo_id) === String(item.id) && String(cl.location_id) === String(selectedLocation));
+        if (!linked) return false;
+      } else {
+        if (item.product_locations && item.product_locations.length > 0) {
+          const linked = item.product_locations.some(pl => String(pl.location_id) === String(selectedLocation));
           if (!linked) return false;
         } else {
           return false;
         }
       }
-      // Search filter
-      if (search.trim() !== "") {
-        const searchLower = search.toLowerCase();
+    }
+    // Search filter
+    if (search.trim() !== "") {
+      const searchLower = search.toLowerCase();
+      if (isCombo) {
         if (!(
-          (product.name && product.name.toLowerCase().includes(searchLower)) ||
-          (product.sku && product.sku.toLowerCase().includes(searchLower)) ||
-          (categories.find((c) => c.id === product.category_id)?.name?.toLowerCase().includes(searchLower))
-        )) {
-          return false;
-        }
+          (item.combo_name && item.combo_name.toLowerCase().includes(searchLower)) ||
+          (item.sku && item.sku.toLowerCase().includes(searchLower))
+        )) return false;
+      } else {
+        if (!(
+          (item.name && item.name.toLowerCase().includes(searchLower)) ||
+          (item.sku && item.sku.toLowerCase().includes(searchLower)) ||
+          (categories.find((c) => c.id === item.category_id)?.name?.toLowerCase().includes(searchLower))
+        )) return false;
       }
-      // Image filter
-      if (imageFilter === "with") {
-        if (!product.image_url || product.image_url.trim() === "") return false;
-      } else if (imageFilter === "without") {
-        if (product.image_url && product.image_url.trim() !== "") return false;
-      }
-      return true;
-    })
-  ];
+    }
+    // Image filter
+    if (imageFilter === "with") {
+      const url = isCombo ? (item.picture_url || '') : (item.image_url || '');
+      if (!url || url.trim() === "") return false;
+    } else if (imageFilter === "without") {
+      const url = isCombo ? (item.picture_url || '') : (item.image_url || '');
+      if (url && url.trim() !== "") return false;
+    }
+    return true;
+  });
 
   return (
     <div className="products-list-page" style={{maxWidth: '100vw', minHeight: '100vh', padding: 0, margin: 0}}>
@@ -275,7 +398,7 @@ function ProductsListPage() {
               </thead>
               <tbody>
                 {filteredProducts.map((item) => {
-                  const isCombo = !!item.combo_name;
+                  const isCombo = !!item.__isCombo;
                   return (
                     <tr key={isCombo ? `combo-${item.id}` : item.id}>
                       <td style={{textAlign: 'center'}}>
@@ -327,7 +450,8 @@ function ProductsListPage() {
                         {
                           (() => {
                             if (isCombo) {
-                              return '-';
+                              const qty = computeComboMaxQty(item.id, selectedLocation || '');
+                              return qty;
                             } else {
                               if (!inventory || inventory.length === 0) return <span style={{color:'#ff4d4f'}}>No inventory</span>;
                               let qty = 0;
@@ -356,29 +480,55 @@ function ProductsListPage() {
                       </td>
                       <td style={{textAlign: 'center', padding: '0.15rem'}}>
                         <div style={{display: 'flex', justifyContent: 'center', gap: '4px'}}>
-                          <button
-                            style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
-                            onClick={() => {
-                              // Navigate to Products.js and pass product id for editing
-                              window.location.href = `/products?edit=${item.id}`;
-                            }}
-                          >Edit</button>
-                          <button
-                            style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
-                            onClick={() => {
-                              setImageEditProduct(item);
-                              setImageEditFile(null);
-                              setImageEditModalOpen(true);
-                            }}
-                          >Edit Image</button>
-                          <button
-                            style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
-                            onClick={() => {
-                              setDeleteProductId(item.id);
-                              setDeleteConfirmText("");
-                              setDeleteConfirmOpen(true);
-                            }}
-                          >Delete</button>
+                          {isCombo ? (
+                            <>
+                              <button
+                                style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => { window.location.href = `/edit-set/${item.id}`; }}
+                              >Edit</button>
+                              <button
+                                style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => {
+                                  setImageEditProduct(item);
+                                  setImageEditFile(null);
+                                  setImageEditModalOpen(true);
+                                }}
+                              >Edit Image</button>
+                              <button
+                                style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => {
+                                  setDeleteIsCombo(true);
+                                  setDeleteProductId(item.id);
+                                  setDeleteConfirmText("");
+                                  setDeleteConfirmOpen(true);
+                                }}
+                              >Delete</button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                style={{background:'#00b4d8',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => { window.location.href = `/products?edit=${item.id}`; }}
+                              >Edit</button>
+                              <button
+                                style={{background:'#f9c74f',color:'#23272f',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => {
+                                  setImageEditProduct(item);
+                                  setImageEditFile(null);
+                                  setImageEditModalOpen(true);
+                                }}
+                              >Edit Image</button>
+                <button
+                                style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'6px 14px',fontWeight:'bold',cursor:'pointer'}}
+                                onClick={() => {
+                  setDeleteIsCombo(false);
+                                  setDeleteProductId(item.id);
+                                  setDeleteConfirmText("");
+                                  setDeleteConfirmOpen(true);
+                                }}
+                              >Delete</button>
+                            </>
+                          )}
       {/* Delete Confirmation Modal */}
       {deleteConfirmOpen && (
         <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:4000,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -396,9 +546,21 @@ function ProductsListPage() {
               <button
                 disabled={deleteConfirmText.trim().toLowerCase() !== 'yes'}
                 onClick={async () => {
-                  await handleDeleteProduct(deleteProductId, setProducts);
+                  if (deleteIsCombo) {
+                    try {
+                      await supabase.from('combo_items').delete().eq('combo_id', deleteProductId);
+                      await supabase.from('combo_locations').delete().eq('combo_id', deleteProductId);
+                      await supabase.from('combos').delete().eq('id', deleteProductId);
+                      setCombos(prev => prev.filter(c => String(c.id) !== String(deleteProductId)));
+                    } catch (err) {
+                      alert('Failed to delete set: ' + (err.message || err));
+                    }
+                  } else {
+                    await handleDeleteProduct(deleteProductId, setProducts);
+                  }
                   setDeleteConfirmOpen(false);
                   setDeleteProductId(null);
+                  setDeleteIsCombo(false);
                   setDeleteConfirmText("");
                 }}
                 style={{background:'#e74c3c',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor: deleteConfirmText.trim().toLowerCase() === 'yes' ? 'pointer' : 'not-allowed'}}
@@ -407,6 +569,7 @@ function ProductsListPage() {
                 onClick={() => {
                   setDeleteConfirmOpen(false);
                   setDeleteProductId(null);
+                  setDeleteIsCombo(false);
                   setDeleteConfirmText("");
                 }}
                 style={{background:'#888',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}
@@ -455,24 +618,32 @@ function ProductsListPage() {
         </div>
       )}
 
-      {/* Product Image Edit Modal */}
+      {/* Image Edit Modal (Product or Set) */}
       {imageEditModalOpen && imageEditProduct && (
         <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
-            <h3>Edit Product Image</h3>
-            <div style={{marginBottom:12}}>Product: <b>{imageEditProduct.name}</b></div>
+            <h3>{imageEditProduct.__isCombo ? 'Edit Set Image' : 'Edit Product Image'}</h3>
+            <div style={{marginBottom:12}}>
+              {imageEditProduct.__isCombo ? (
+                <>Set: <b>{imageEditProduct.combo_name}</b></>
+              ) : (
+                <>Product: <b>{imageEditProduct.name}</b></>
+              )}
+            </div>
             <input type="file" accept="image/*" onChange={e => setImageEditFile(e.target.files[0])} style={{marginBottom:12}} />
-            {imageEditProduct.image_url && (
+            {(imageEditProduct.__isCombo ? imageEditProduct.picture_url : imageEditProduct.image_url) && (
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
-                <img src={imageEditProduct.image_url} alt="Current" style={{maxWidth:'80px',maxHeight:'80px',borderRadius:'8px'}} />
+                <img src={imageEditProduct.__isCombo ? imageEditProduct.picture_url : imageEditProduct.image_url} alt="Current" style={{maxWidth:'80px',maxHeight:'80px',borderRadius:'8px'}} />
                 <button
                   onClick={async () => {
                     setImageEditLoading(true);
                     try {
-                      // Remove from product_images table
-                      await supabase.from('product_images').delete().eq('product_id', imageEditProduct.id);
-                      // Remove from products table
-                      await supabase.from('products').update({ image_url: '' }).eq('id', imageEditProduct.id);
+                      if (imageEditProduct.__isCombo) {
+                        await supabase.from('combos').update({ picture_url: '' }).eq('id', imageEditProduct.id);
+                      } else {
+                        await supabase.from('product_images').delete().eq('product_id', imageEditProduct.id);
+                        await supabase.from('products').update({ image_url: '' }).eq('id', imageEditProduct.id);
+                      }
                       setImageEditModalOpen(false);
                       setImageEditProduct(null);
                       setImageEditFile(null);
@@ -497,21 +668,28 @@ function ProductsListPage() {
                   try {
                     const file = imageEditFile;
                     const fileExt = file.name.split('.').pop();
-                    // FIX: stable, unique path per product
-                    const filePath = `products/${imageEditProduct.id}/main.${fileExt}`;
-                    // Upload to bucket 'productimages'
-                    const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
-                    if (uploadError) throw uploadError;
-                    // Get public URL
-                    const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
-                    const publicUrl = publicUrlData?.publicUrl;
-                    if (!publicUrl) throw new Error('Failed to get public URL for image.');
-                    // Insert into product_images table
-                    await supabase.from('product_images').insert([
-                      { product_id: imageEditProduct.id, image_url: publicUrl }
-                    ]);
-                    // Update image_url in products table
-                    await supabase.from('products').update({ image_url: publicUrl }).eq('id', imageEditProduct.id);
+                    let filePath, publicUrl;
+                    if (imageEditProduct.__isCombo) {
+                      filePath = `sets/${imageEditProduct.id}/main.${fileExt}`;
+                      const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
+                      if (uploadError) throw uploadError;
+                      const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
+                      publicUrl = publicUrlData?.publicUrl;
+                      if (!publicUrl) throw new Error('Failed to get public URL for image.');
+                      await supabase.from('combos').update({ picture_url: publicUrl }).eq('id', imageEditProduct.id);
+                    } else {
+                      // FIX: stable, unique path per product
+                      filePath = `products/${imageEditProduct.id}/main.${fileExt}`;
+                      const { error: uploadError } = await supabase.storage.from('productimages').upload(filePath, file, { upsert: true });
+                      if (uploadError) throw uploadError;
+                      const { data: publicUrlData } = supabase.storage.from('productimages').getPublicUrl(filePath);
+                      publicUrl = publicUrlData?.publicUrl;
+                      if (!publicUrl) throw new Error('Failed to get public URL for image.');
+                      await supabase.from('product_images').insert([
+                        { product_id: imageEditProduct.id, image_url: publicUrl }
+                      ]);
+                      await supabase.from('products').update({ image_url: publicUrl }).eq('id', imageEditProduct.id);
+                    }
                     setImageEditModalOpen(false);
                     setImageEditProduct(null);
                     setImageEditFile(null);
@@ -538,23 +716,103 @@ function ProductsListPage() {
         </div>
       )}
 
-      {/* Manual Inventory Adjust Modal */}
+      {/* Manual Inventory Adjust / Set Assembly Modal */}
       {adjustModalOpen && adjustProduct && (
         <div style={{position:'fixed',top:0,left:0,width:'100vw',height:'100vh',background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:400}}>
-            <h3>Adjust Inventory</h3>
-            <div style={{marginBottom:12}}>Product: <b>{adjustProduct.name}</b> (SKU: {adjustProduct.sku})</div>
+          <div style={{background:'#23272f',padding:32,borderRadius:12,minWidth:320,maxWidth:420}}>
+            <h3>{adjustProduct.__isCombo ? (adjustSetMode === 'assemble' ? 'Assemble Set' : 'Receive Sets') : 'Adjust Inventory'}</h3>
+            <div style={{marginBottom:12}}>
+              {adjustProduct.__isCombo ? (
+                <>Set: <b>{adjustProduct.combo_name}</b> (SKU: {adjustProduct.sku})</>
+              ) : (
+                <>Product: <b>{adjustProduct.name}</b> (SKU: {adjustProduct.sku})</>
+              )}
+            </div>
             <div style={{marginBottom:12}}>
               <label>Location:</label>
-              <select value={selectedLocation} onChange={handleLocationChange} style={{marginLeft:8}}>
+              <select
+                value={selectedLocation}
+                onChange={(e) => {
+                  handleLocationChange(e);
+                  const lid = e.target.value;
+                  if (adjustProduct) {
+                    if (adjustProduct.__isCombo) {
+                      if (adjustSetMode === 'assemble') {
+                        const b = computeComboMaxQty(adjustProduct.id, lid);
+                        setAdjustQty(b > 0 ? 1 : 0);
+                      } else {
+                        setAdjustQty(1);
+                      }
+                    } else {
+                      const inv = inventory.find(inv => inv.product_id === adjustProduct.id && String(inv.location) === String(lid));
+                      const qty = inv ? Number(inv.quantity) : 0;
+                      setAdjustQty(qty);
+                    }
+                  }
+                }}
+                style={{marginLeft:8}}
+              >
                 {locations.map(loc => (
                   <option key={loc.id} value={loc.id}>{loc.name}</option>
                 ))}
               </select>
             </div>
+            {adjustProduct.__isCombo ? (
+              <div style={{marginBottom:12, color:'#9aa4b2'}}>
+                {selectedLocation ? (
+                  (() => {
+                    const b = computeComboMaxQty(adjustProduct.id, selectedLocation);
+                    const locName = locations.find(l => String(l.id) === String(selectedLocation))?.name || '';
+                    return <span>Buildable Sets at {locName}: <b style={{color:'#e0e6ed'}}>{b}</b></span>;
+                  })()
+                ) : (
+                  <span>Select a location to view buildable sets</span>
+                )}
+              </div>
+            ) : (
+              <div style={{marginBottom:12, color:'#9aa4b2'}}>
+                {selectedLocation
+                  ? (
+                    (() => {
+                      const inv = inventory.find(inv => inv.product_id === adjustProduct.id && String(inv.location) === String(selectedLocation));
+                      const qty = inv ? Number(inv.quantity) : 0;
+                      const locName = locations.find(l => String(l.id) === String(selectedLocation))?.name || '';
+                      return <span>Current Qty at {locName}: <b style={{color:'#e0e6ed'}}>{qty}</b></span>;
+                    })()
+                  )
+                  : (<span>Select a location to view current quantity</span>)}
+              </div>
+            )}
+            {adjustProduct.__isCombo && (
+              <div style={{marginBottom:12}}>
+                <label>Mode:</label>
+                <select value={adjustSetMode} onChange={e => {
+                  const mode = e.target.value;
+                  setAdjustSetMode(mode);
+                  if (mode === 'assemble') {
+                    const b = computeComboMaxQty(adjustProduct.id, selectedLocation || '');
+                    setAdjustQty(b > 0 ? 1 : 0);
+                  } else {
+                    setAdjustQty(1);
+                  }
+                }} style={{marginLeft:8}}>
+                  <option value="receive">Receive (increase components)</option>
+                  <option value="assemble">Assemble (consume components)</option>
+                </select>
+              </div>
+            )}
             <div style={{marginBottom:12}}>
-              <label>Quantity:</label>
-              <input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{marginLeft:8,width:80}} />
+              {adjustProduct.__isCombo ? (
+                <>
+                  <label>{adjustSetMode === 'assemble' ? 'Assemble Sets:' : 'Receive Sets:'}</label>
+                  <input type="number" min={1} value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{marginLeft:8,width:80}} />
+                </>
+              ) : (
+                <>
+                  <label>Quantity:</label>
+                  <input type="number" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} style={{marginLeft:8,width:80}} />
+                </>
+              )}
             </div>
             <div style={{display:'flex',gap:12,marginTop:18}}>
               <button onClick={handleAdjustInventory} disabled={adjustLoading || !adjustQty} style={{background:'#43aa8b',color:'#fff',border:'none',borderRadius:'6px',padding:'8px 18px',fontWeight:'bold',cursor:'pointer'}}>

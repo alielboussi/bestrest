@@ -1,6 +1,7 @@
 import PriceLabels from './PriceLabels';
 import React from 'react';
 import { Route, Routes, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import BackToDashboard from './BackToDashboard';
 import LoginPage from './LoginPage';
 import Dashboard from './Dashboard';
 import POS from './POS';
@@ -61,6 +62,7 @@ function SmartRedirect() {
 function App() {
   return (
     <div className="App">
+      <BackToDashboard />
   <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<Dashboard />} />

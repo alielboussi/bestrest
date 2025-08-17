@@ -158,35 +158,41 @@ const Categories = () => {
     e.preventDefault();
     setSaving(true);
     try {
+      const nameTrimmed = (form.name || '').trim();
+      if (!nameTrimmed) {
+        setError('Please enter a category name.');
+        setSaving(false);
+        return;
+      }
       if (editingId) {
         const { error } = await supabase
           .from('categories')
-          .update(form)
+          .update({ name: nameTrimmed })
           .eq('id', editingId);
         if (error) throw error;
       } else {
-        // Check for duplicate name (case-insensitive)
-        const { data: existing } = await supabase
+        // Manual duplicate check (case-insensitive exact)
+        const { data: existingRows, error: fetchErr } = await supabase
           .from('categories')
-          .select('id')
-          .ilike('name', form.name);
-        if (existing && existing.length > 0) {
+          .select('id, name');
+        if (fetchErr) throw fetchErr;
+        const exists = (existingRows || []).some(c => (c.name || '').trim().toLowerCase() === nameTrimmed.toLowerCase());
+        if (exists) {
           setError('Category name already exists.');
           setSaving(false);
           return;
         }
-        // Remove id field if present
-        const { id, ...formWithoutId } = form;
-        const { error } = await supabase
+        const { error: insertErr } = await supabase
           .from('categories')
-          .insert([formWithoutId]);
-        if (error) throw error;
+          .insert([{ name: nameTrimmed }]);
+        if (insertErr) throw insertErr;
       }
       setForm(initialForm);
+      setSearch('');
       setEditingId(null);
       fetchCategories();
     } catch (err) {
-      setError('Failed to save category.');
+      setError('Failed to save category.' + (err?.message ? ` ${err.message}` : ''));
     } finally {
       setSaving(false);
     }
