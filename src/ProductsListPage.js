@@ -184,6 +184,179 @@ function ProductsListPage() {
   const [combos, setCombos] = useState([]);
   const [comboLocations, setComboLocations] = useState([]);
   const [comboItems, setComboItems] = useState([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const fileInputRef = React.useRef(null);
+
+  const handleDownloadTemplate = () => {
+    // Use tab-delimited content so Excel reliably splits into columns across locales
+    const header = 'sku\tproduct name\tqty\r\n';
+    const sample = '#00001\tExample Product\t10\r\n';
+    const tsv = header + sample;
+    const blob = new Blob([tsv], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'stock_import_template.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportStock = () => {
+    if (!selectedLocation) {
+      alert('Please select a location first.');
+      return;
+    }
+    const locName = locations.find(l => String(l.id) === String(selectedLocation))?.name || 'location';
+    const lines = [];
+    // Tab-delimited header for robust Excel import
+    lines.push('sku\tproduct name\tqty');
+    const esc = (s) => (s == null ? '' : String(s).replace(/[\r\n\t]/g, ' '));
+    (products || []).forEach(p => {
+      const inv = (inventory || []).find(r => String(r.product_id) === String(p.id) && String(r.location) === String(selectedLocation));
+      const qty = inv ? Number(inv.quantity) || 0 : 0;
+      lines.push([esc(p.sku || ''), esc(p.name || ''), String(qty)].join('\t'));
+    });
+    const tsv = lines.join('\r\n') + '\r\n';
+    const blob = new Blob([tsv], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    a.href = url;
+    a.download = `stock_export_${locName}_${ts}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseImportText = (text) => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+    const out = [];
+    // Detect delimiter: prefer tab, else semicolon, else comma
+    const detectDelimiter = (line) => {
+      if (line.includes('\t')) return '\t';
+      // Use counts to avoid false positives on names
+      const sc = (line.match(/;/g) || []).length;
+      const cc = (line.match(/,/g) || []).length;
+      if (sc >= 2 && sc >= cc) return ';';
+      if (cc >= 1) return ',';
+      return '\t';
+    };
+    let delimiter = lines.length ? detectDelimiter(lines[0]) : ',';
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (i === 0 && /sku/i.test(raw) && /(qty|quantity)/i.test(raw)) {
+        // Re-evaluate delimiter based on header row if needed
+        delimiter = detectDelimiter(raw);
+        continue; // skip header
+      }
+      const parts = raw.split(delimiter);
+      if (parts.length < 2) continue;
+      const sku = String(parts[0] || '').trim();
+      const qtyStr = String(parts[parts.length - 1] || '').trim();
+      const qty = Number(qtyStr);
+      if (!sku) continue;
+      out.push({ sku, qty: Number.isFinite(qty) ? qty : 0 });
+    }
+    return out;
+  };
+
+  const handleImportStock = async (file) => {
+    if (!selectedLocation) {
+      alert('Please select a location first.');
+      return;
+    }
+    if (!file) return;
+    setImportLoading(true);
+    try {
+      const text = await file.text();
+      const rows = parseImportText(text);
+      if (!rows.length) {
+        alert('No rows found. Ensure the file has columns: sku, product name, qty');
+        return;
+      }
+      // Map by SKU (use last occurrence)
+      const skuMap = new Map();
+      rows.forEach(r => skuMap.set(r.sku, r.qty));
+      const skus = Array.from(skuMap.keys());
+      // Fetch products for these SKUs
+      const { data: prodRows } = await supabase
+        .from('products')
+        .select('id, sku')
+        .in('sku', skus);
+      const foundMap = new Map((prodRows || []).map(r => [String(r.sku), r.id]));
+
+      const notFound = skus.filter(s => !foundMap.has(String(s)));
+      if (notFound.length > 0) {
+        // Continue but inform user
+        console.warn('SKUs not found:', notFound);
+      }
+
+      // Opening stock sessions for location
+      const { data: openingSessions } = await supabase
+        .from('opening_stock_sessions')
+        .select('id')
+        .eq('location_id', selectedLocation)
+        .eq('status', 'submitted');
+      const sessionIds = (openingSessions || []).map(s => s.id);
+
+      // Preload opening entries for matched products
+      const productIds = Array.from(foundMap.values());
+      let openingEntries = [];
+      if (sessionIds.length && productIds.length) {
+        const { data: entries } = await supabase
+          .from('opening_stock_entries')
+          .select('id, product_id')
+          .in('session_id', sessionIds)
+          .in('product_id', productIds);
+        openingEntries = entries || [];
+      }
+      const hasOpeningEntry = new Set(openingEntries.map(e => String(e.product_id)));
+
+      // Process each matched product
+      let updated = 0;
+      for (const [sku, qty] of skuMap.entries()) {
+        const pid = foundMap.get(String(sku));
+        if (!pid) continue; // skip unknown SKU
+        const quantity = Math.max(0, Number(qty) || 0);
+        // Upsert inventory for product/location
+        const { data: invRow } = await supabase
+          .from('inventory')
+          .select('id')
+          .eq('product_id', pid)
+          .eq('location', selectedLocation)
+          .maybeSingle();
+        if (invRow) {
+          await supabase.from('inventory').update({ quantity }).eq('id', invRow.id);
+        } else {
+          await supabase.from('inventory').insert({ product_id: pid, location: selectedLocation, quantity });
+        }
+        // Determine adjustment type
+        let adjustmentType = 'opening';
+        if (sessionIds.length > 0 && hasOpeningEntry.has(String(pid))) {
+          adjustmentType = 'Stock Transfer Qty Adjustment';
+        }
+        await supabase.from('inventory_adjustments').insert({
+          product_id: pid,
+          location_id: selectedLocation,
+          quantity,
+          adjustment_type: adjustmentType,
+          adjusted_at: new Date().toISOString()
+        });
+        updated += 1;
+      }
+      await fetchInventory();
+      const skipped = notFound.length;
+      alert(`Import complete. Updated ${updated} items.${skipped ? ` Skipped ${skipped} unknown SKUs.` : ''}`);
+    } catch (err) {
+      alert('Failed to import stock: ' + (err.message || err));
+    } finally {
+      setImportLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Handler for location dropdown change
   const handleLocationChange = (e) => {
@@ -346,7 +519,7 @@ function ProductsListPage() {
   return (
     <div className="products-list-page" style={{maxWidth: '100vw', minHeight: '100vh', padding: 0, margin: 0}}>
       <h1 className="products-title" style={{marginTop: '1rem'}}>All Products</h1>
-      <div style={{display: 'flex', gap: '2rem', marginBottom: '1rem', alignItems: 'center'}}>
+  <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap'}}>
         <input
           type="text"
           placeholder="Search products by name, SKU, or category..."
@@ -354,7 +527,7 @@ function ProductsListPage() {
           onChange={e => setSearch(e.target.value)}
           style={{padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '300px'}}
         />
-        <select name="location" value={selectedLocation} onChange={handleLocationChange} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
+  <select name="location" value={selectedLocation} onChange={handleLocationChange} style={{marginTop: '2mm', padding: '0.5rem 1rem', fontSize: '1.1rem', borderRadius: '6px', border: '1px solid #00b4d8', width: '220px'}}>
           <option value="">All Locations</option>
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>{loc.name}</option>
@@ -372,6 +545,32 @@ function ProductsListPage() {
             )}
           </option>
         </select>
+        <button
+          type="button"
+          onClick={handleDownloadTemplate}
+          style={{background:'#23272f', color:'#e0e6ed', border:'1px solid #00b4d8', borderRadius:'6px', padding:'0.5rem 1rem', fontWeight:'bold', cursor:'pointer'}}
+        >Download Template (.xls)</button>
+        <button
+          type="button"
+          disabled={!selectedLocation}
+          onClick={handleExportStock}
+          style={{background: !selectedLocation ? '#555' : '#23272f', color:'#e0e6ed', border:'1px solid #00b4d8', borderRadius:'6px', padding:'0.5rem 1rem', fontWeight:'bold', cursor: !selectedLocation ? 'not-allowed' : 'pointer'}}
+          title={!selectedLocation ? 'Select a location first' : `Export stock for ${locations.find(l => String(l.id)===String(selectedLocation))?.name || 'location'}`}
+        >Export Stock (.xls)</button>
+        <button
+          type="button"
+          disabled={!selectedLocation || importLoading}
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          style={{background: !selectedLocation ? '#555' : '#43aa8b', color:'#fff', border:'none', borderRadius:'6px', padding:'0.5rem 1rem', fontWeight:'bold', cursor: !selectedLocation ? 'not-allowed' : 'pointer'}}
+          title={!selectedLocation ? 'Select a location first' : 'Import stock for selected location'}
+        >{importLoading ? 'Importing…' : 'Import Stock'}</button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".xls,.csv,.tsv,.txt"
+          style={{ display: 'none' }}
+          onChange={e => handleImportStock(e.target.files && e.target.files[0])}
+        />
       </div>
     <div className="products-list" style={{width: '100%', overflowX: 'auto'}}>
         {loading ? (

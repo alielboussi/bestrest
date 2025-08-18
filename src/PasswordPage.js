@@ -53,7 +53,7 @@ function PasswordPage() {
     }
     if (input === data.password) {
       localStorage.setItem('closingStockPasswordEntered', 'true');
-      window.location.href = '/closing-stock';
+  window.location.href = '/closing-stock-mobile';
     } else {
       setError('Incorrect password.');
     }

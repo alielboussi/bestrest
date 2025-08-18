@@ -13,8 +13,6 @@ import Products from './Products';
 import ProductsListPage from './ProductsListPage';
 import Categories from './Categories';
 import UnitsOfMeasure from './UnitsOfMeasure';
-import OpeningStock from './OpeningStock';
-import ClosingStock from './ClosingStock';
 import Transfer from './Transfer';
 import TransferList from './TransferList';
 import supabase from './supabase';
@@ -22,7 +20,7 @@ import supabase from './supabase';
 // import StockViewer from './StockViewer';
 import Sets from "./Sets";
 import SalesReport from './SalesReport';
-import StockReport from './StockReport';
+// Removed desktop StockReport; using mobile versions only
 import StockApp from './StockApp';
 import StocktakeReport from './StocktakeReport';
 import LaybyManagement from "./LaybyManagement";
@@ -41,7 +39,7 @@ function SmartRedirect() {
       if (isAndroid) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          navigate('/stock-report', { replace: true });
+          navigate('/stock-report-mobile', { replace: true });
           return;
         }
         const { data: userRows } = await supabase.from('users').select('role').eq('id', user.id);
@@ -85,9 +83,8 @@ function App() {
   <Route path="/stocktake-report" element={<StocktakeReport />} />
   <Route path="/price-labels" element={<PriceLabels />} />
   <Route path="/price-labels-mobile" element={<PriceLabelMobile />} />
-        <Route path="/stock-report" element={<StockReport />} />
+  {/* Removed desktop StockReport route; use /stock-report-mobile instead */}
   <Route path="/incomplete-packages" element={<IncompletePackages />} />
-        <Route path="/opening-stock" element={<OpeningStock />} />
         <Route path="/transfer" element={<Transfer />} />
         <Route path="/sales-report" element={<SalesReport />} />
         <Route path="/company-settings" element={<CompanySettings />} />
@@ -95,7 +92,7 @@ function App() {
         <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
         {/* <Route path="/stock-viewer" element={<StockViewer />} /> */}
         <Route path="/transfers" element={<TransferList />} />
-        <Route path="/closing-stock" element={<ClosingStock />} />
+  {/* Removed desktop ClosingStock route; using mobile version only */}
         <Route path="/edit-set/:id" element={<EditSet />} />
         {/* Add more routes as needed */}
         <Route path="*" element={<LoginPage />} />

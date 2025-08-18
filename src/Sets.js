@@ -186,7 +186,7 @@ export default function Sets() {
   };
 
   // Save kit/set: creates entries in products, combos, combo_locations, and combo_items
-  // After creation, the set will be available for inventory aggregation in OpeningStock.js
+  // After creation, the set will be available for inventory aggregation during Start/End Period
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!kitName || !standardPrice || kitItems.length === 0 || !currency || !selectedLocations || selectedLocations.length === 0) {
@@ -268,7 +268,7 @@ export default function Sets() {
       });
     }
 
-    // Note: Inventory for the set will be calculated and updated in OpeningStock.js after stocktake
+  // Note: Inventory for the set will be accounted for during Start/End Period and stocktake flows
     alert("Kit/Set created!");
     setKitName(""); setStandardPrice(""); setPromotionalPrice(""); setPromoStart(""); setPromoEnd(""); setKitItems([]); setImageUrl("");
   setCurrency("K");

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getMaxSetQty } from './utils/setInventoryUtils';
 import { v4 as uuidv4 } from 'uuid';
 import supabase from './supabase';
-import './ClosingStock.css';
+import './ClosingStockMobile.css';
 
 function ClosingStockMobile() {
   // ...existing state declarations...

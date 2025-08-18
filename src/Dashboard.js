@@ -7,6 +7,7 @@ import {
   FaBox, FaChartLine, FaUsers, FaCogs, FaMapMarkerAlt, FaTags, FaFlask,
   FaRegEdit, FaExchangeAlt, FaCashRegister, FaUserShield
 } from 'react-icons/fa';
+import { v4 as uuidv4 } from 'uuid';
 import useStatistics from './hooks/useStatistics';
 // Removed user permissions and permissionUtils logic
 import './Dashboard.css';
@@ -41,6 +42,9 @@ function Dashboard() {
   const [typed, setTyped] = useState('');
   const [fullName, setFullName] = useState('');
   const secret = 'factoryreset';
+  const [periodBusy, setPeriodBusy] = useState(false);
+  const [periodMsg, setPeriodMsg] = useState('');
+  const [periodInfo, setPeriodInfo] = useState({ opening: null, closing: null, status: 'idle' });
 
   const MODULES = [
     { name: 'locations', label: 'Locations', route: '/locations', icon: FaMapMarkerAlt },
@@ -49,15 +53,13 @@ function Dashboard() {
     { name: 'products', label: 'Products', route: '/products', icon: FaTags },
     { name: 'sets', label: 'Sets', route: '/sets', icon: FaBox },
     { name: 'productslist', label: 'Products List', route: '/products-list', icon: FaTags },
-    { name: 'openingstock', label: 'Opening Stock', route: '/opening-stock', icon: FaRegEdit },
     { name: 'transfer', label: 'Stock Transfers', route: '/transfer', icon: FaExchangeAlt },
-    { name: 'transferlist', label: 'Edit Transfers', route: '/transfers', icon: FaRegEdit },
-    { name: 'closingstock', label: 'Closing Stock', route: '/closing-stock', icon: FaRegEdit },
+  { name: 'transferlist', label: 'Edit Transfers', route: '/transfers', icon: FaRegEdit },
     { name: 'customers', label: 'Customers', route: '/customers', icon: FaUsers },
     { name: 'pos', label: 'Sales', route: '/POS', icon: FaCashRegister },
     { name: 'salesreport', label: 'Sales Report', route: '/sales-report', icon: FaChartLine },
     { name: 'laybymanagement', label: 'Laybys', route: '/layby-management', icon: FaUsers },
-    { name: 'stockreport', label: 'Stock Report', route: '/stock-report', icon: FaBox },
+  // Stock Report (mobile) hidden from desktop dashboard
   { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },
   { name: 'pricelabels', label: 'Print Price Labels', route: '/price-labels', icon: FaTags },
   { name: 'incompletepackages', label: 'Incomplete Packages', route: '/incomplete-packages', icon: FaBox },
@@ -97,6 +99,38 @@ useEffect(() => {
     }
     fetchLocations();
   }, []);
+
+  // Load current period status for the selected location
+  useEffect(() => {
+    const loadPeriod = async () => {
+      if (!locationFilter) { setPeriodInfo({ opening: null, closing: null, status: 'idle' }); return; }
+      // Latest opening for location
+      const { data: openings } = await supabase
+        .from('opening_stock_sessions')
+        .select('id, started_at')
+        .eq('location_id', locationFilter)
+        .order('started_at', { ascending: false })
+        .limit(1);
+      const opening = openings && openings[0];
+      if (!opening) { setPeriodInfo({ opening: null, closing: null, status: 'none' }); return; }
+      // Latest closed closing after opening
+      const { data: closed } = await supabase
+        .from('closing_stock_sessions')
+        .select('id, ended_at')
+        .eq('location_id', locationFilter)
+        .eq('status', 'closed')
+        .gte('ended_at', opening.started_at)
+        .order('ended_at', { ascending: false })
+        .limit(1);
+      const closing = closed && closed[0];
+      if (closing) {
+        setPeriodInfo({ opening: opening.started_at, closing: closing.ended_at, status: 'closed' });
+      } else {
+        setPeriodInfo({ opening: opening.started_at, closing: null, status: 'open' });
+      }
+    };
+    loadPeriod();
+  }, [locationFilter]);
 
   // Fetch live stats for dashboard: inventory totals, layby dues, last stocktake date, total sales (K)
   useEffect(() => {
@@ -224,6 +258,162 @@ useEffect(() => {
     // Removed: Factory reset logic and button
   };
 
+  // Start a new stocktake period: snapshot current inventory as opening stock for the selected location
+  const handleStartPeriod = async () => {
+    if (!locationFilter) {
+      alert('Please select a location first.');
+      return;
+    }
+    // Guard: prevent starting if there is an opening without a later closed closing session
+    try {
+      const { data: openings } = await supabase
+        .from('opening_stock_sessions')
+        .select('id, started_at')
+        .eq('location_id', locationFilter)
+        .order('started_at', { ascending: false })
+        .limit(1);
+      const opening = openings && openings[0];
+      if (opening) {
+        const { data: closings } = await supabase
+          .from('closing_stock_sessions')
+          .select('id')
+          .eq('location_id', locationFilter)
+          .eq('status', 'closed')
+          .gte('ended_at', opening.started_at)
+          .limit(1);
+        const hasClosed = closings && closings.length > 0;
+        if (!hasClosed) {
+          alert('A period is already open for this location. Please submit Closing Stock and end the period before starting a new one.');
+          return;
+        }
+      }
+    } catch (_) {
+      // If guard check fails silently continue to confirmation
+    }
+    if (!window.confirm('Start a new period for the selected location? This will snapshot current stock as Opening Stock.')) return;
+    setPeriodBusy(true);
+    setPeriodMsg('Starting period...');
+    try {
+      const now = new Date().toISOString();
+      // Create opening session (mark as submitted so imports are treated as adjustments later)
+      const { data: openingSession, error: openErr } = await supabase
+        .from('opening_stock_sessions')
+        .insert({ location_id: locationFilter, started_at: now, status: 'submitted' })
+        .select()
+        .single();
+      if (openErr) throw openErr;
+      const sessionId = openingSession.id;
+      // Fetch all product ids
+      const { data: prodRows, error: prodErr } = await supabase
+        .from('products')
+        .select('id');
+      if (prodErr) throw prodErr;
+      const productIds = (prodRows || []).map(p => p.id);
+      // Fetch inventory for selected location
+      const { data: invRows, error: invErr } = await supabase
+        .from('inventory')
+        .select('product_id, quantity')
+        .eq('location', locationFilter);
+      if (invErr) throw invErr;
+      const invMap = new Map((invRows || []).map(r => [String(r.product_id), Number(r.quantity) || 0]));
+      // Build opening entries (include all products; default 0)
+  const entries = productIds.map(pid => ({ id: uuidv4(), session_id: sessionId, product_id: pid, qty: invMap.get(String(pid)) || 0 }));
+      // Insert in chunks to avoid payload limits
+      const chunkSize = 500;
+      for (let i = 0; i < entries.length; i += chunkSize) {
+        const chunk = entries.slice(i, i + chunkSize);
+        const { error: insErr } = await supabase.from('opening_stock_entries').insert(chunk);
+        if (insErr) throw insErr;
+      }
+      setPeriodMsg('Period started. Opening stock captured.');
+      alert('Period started successfully. Opening stock captured for this location.');
+  // Refresh widget
+  setPeriodInfo({ opening: now, closing: null, status: 'open' });
+    } catch (err) {
+      console.error(err);
+      alert('Failed to start period: ' + (err.message || err));
+    } finally {
+      setPeriodBusy(false);
+    }
+  };
+
+  // End the current stocktake period: ensure latest closing stock (from Closing Stock) is applied to inventory
+  const handleEndPeriod = async () => {
+    if (!locationFilter) {
+      alert('Please select a location first.');
+      return;
+    }
+    if (!window.confirm('End the current period for the selected location? This will set inventory to the submitted Closing Stock (missing items -> 0).')) return;
+    setPeriodBusy(true);
+    setPeriodMsg('Ending period...');
+    try {
+      // Find latest opening session for this location
+      const { data: openings } = await supabase
+        .from('opening_stock_sessions')
+        .select('id, started_at')
+        .eq('location_id', locationFilter)
+        .order('started_at', { ascending: false })
+        .limit(1);
+      const opening = openings && openings[0];
+      if (!opening) {
+        alert('No opening period found for this location. Start a period first.');
+        setPeriodBusy(false);
+        return;
+      }
+      // Find latest closed closing session after opening start
+      const { data: closings } = await supabase
+        .from('closing_stock_sessions')
+        .select('id, ended_at, status')
+        .eq('location_id', locationFilter)
+        .eq('status', 'closed')
+        .gte('ended_at', opening.started_at)
+        .order('ended_at', { ascending: false })
+        .limit(1);
+      const closing = closings && closings[0];
+      if (!closing) {
+        alert('No submitted Closing Stock found. Please submit Closing Stock first (Closing Stock page).');
+        setPeriodBusy(false);
+        return;
+      }
+      // Fetch closing entries for this session
+      const { data: closeEntries } = await supabase
+        .from('closing_stock_entries')
+        .select('product_id, qty')
+        .eq('session_id', closing.id);
+      const closeMap = new Map((closeEntries || []).map(e => [String(e.product_id), Number(e.qty) || 0]));
+      // Fetch all product ids
+      const { data: prodRows } = await supabase.from('products').select('id');
+      const pids = (prodRows || []).map(p => p.id);
+      // Fetch existing inventory rows for location
+      const { data: invRows } = await supabase
+        .from('inventory')
+        .select('id, product_id, quantity')
+        .eq('location', locationFilter);
+      const invByPid = new Map((invRows || []).map(r => [String(r.product_id), r]));
+      // Apply closing stock to inventory (missing -> 0)
+      for (const pid of pids) {
+        const desired = closeMap.get(String(pid)) || 0;
+        const existing = invByPid.get(String(pid));
+        if (existing) {
+          if (Number(existing.quantity) !== desired) {
+            await supabase.from('inventory').update({ quantity: desired }).eq('id', existing.id);
+          }
+        } else {
+          await supabase.from('inventory').insert({ product_id: pid, location: locationFilter, quantity: desired });
+        }
+      }
+      setPeriodMsg('Period closed. Inventory synced to Closing Stock.');
+      alert('Period ended successfully. Inventory has been set to Closing Stock values.');
+  // Refresh widget
+  setPeriodInfo(prev => ({ opening: prev.opening, closing: closing.ended_at, status: 'closed' }));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to end period: ' + (err.message || err));
+    } finally {
+      setPeriodBusy(false);
+    }
+  };
+
 
   if (loading) {
     return <div style={{ textAlign: 'center', marginTop: 80, fontSize: 22 }}>Loading...</div>;
@@ -270,6 +460,35 @@ useEffect(() => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <label htmlFor="dash-to" style={{ fontSize: 13 }}>To:</label>
               <input id="dash-to" type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                className="dashboard-page-btn gray"
+                onClick={handleStartPeriod}
+                disabled={periodBusy}
+                title="Start a new stocktake period (captures Opening Stock from current inventory)"
+              >
+                Start Period
+              </button>
+              <button
+                className="dashboard-page-btn gray"
+                onClick={handleEndPeriod}
+                disabled={periodBusy}
+                title="End current period (sets inventory to Closing Stock values)"
+              >
+                End Period
+              </button>
+              {periodMsg && (
+                <span style={{ fontSize: 12, color: '#9aa4b2' }}>{periodMsg}</span>
+              )}
+              {/* Period Status Widget */}
+              {locationFilter && (
+                <div style={{ marginLeft: 8, padding: '6px 10px', border: '1px solid #00b4d8', borderRadius: 6, color: '#e0e6ed', background: '#23272f' }}>
+                  <div style={{ fontSize: 12, marginBottom: 2 }}>Period Status</div>
+                  <div style={{ fontSize: 12 }}>Opening: {periodInfo.opening ? new Date(periodInfo.opening).toLocaleString() : '-'}</div>
+                  <div style={{ fontSize: 12 }}>Closing: {periodInfo.closing ? new Date(periodInfo.closing).toLocaleString() : (periodInfo.status === 'open' ? 'Not closed' : '-')}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

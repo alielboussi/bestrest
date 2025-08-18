@@ -28,29 +28,33 @@ const StocktakeReport = () => {
     supabase.from('locations').select('id, name').then(({ data }) => setLocations(data || []));
   }, []);
 
-  // Fetch most recent complete cycle for selected location
+  // Fetch most recent complete cycle (latest opening that has a closed closing after it) for selected location
   useEffect(() => {
     if (!location) { setCycle(null); return; }
     async function fetchCycle() {
       setLoading(true);
-      // Get latest opening session
-      const { data: openingSessions } = await supabase
+      // Get opening sessions (latest first)
+      const { data: openings } = await supabase
         .from('opening_stock_sessions')
         .select('id, started_at')
         .eq('location_id', location)
         .order('started_at', { ascending: false });
-      const openingSession = (openingSessions || [])[0];
-      if (!openingSession) { setCycle(null); setLoading(false); return; }
-      // Get first closing session after opening
-      const { data: closingSessions } = await supabase
-        .from('closing_stock_sessions')
-        .select('id, ended_at')
-        .eq('location_id', location)
-        .gte('ended_at', openingSession.started_at)
-        .order('ended_at', { ascending: true });
-      const closingSession = (closingSessions || [])[0];
-      if (!closingSession) { setCycle(null); setLoading(false); return; }
-      setCycle({ openingSession, closingSession });
+      if (!openings || openings.length === 0) { setCycle(null); setLoading(false); return; }
+      let latestCycle = null;
+      for (const o of openings) {
+        // Find latest closed closing session after this opening
+        const { data: closings } = await supabase
+          .from('closing_stock_sessions')
+          .select('id, ended_at')
+          .eq('location_id', location)
+          .eq('status', 'closed')
+          .gte('ended_at', o.started_at)
+          .order('ended_at', { ascending: false })
+          .limit(1);
+        const closing = closings && closings[0];
+        if (closing) { latestCycle = { openingSession: o, closingSession: closing }; break; }
+      }
+      setCycle(latestCycle);
       setLoading(false);
     }
     fetchCycle();

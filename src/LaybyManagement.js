@@ -13,7 +13,7 @@ export default function LaybyManagement() {
     const user = JSON.parse(localStorage.getItem('user'));
     if (user && user.role === 'user') {
       const handlePopState = () => {
-        if (window.location.pathname !== '/layby-management' && window.location.pathname !== '/stock-report') {
+  if (window.location.pathname !== '/layby-management' && window.location.pathname !== '/stock-report-mobile') {
           window.location.replace('/layby-management');
         }
       };
