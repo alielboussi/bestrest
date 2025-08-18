@@ -8,9 +8,9 @@ export default function BackToDashboard() {
   const path = location.pathname || '';
   const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
-  // Hide on Android app and on login/dashboard
+  // Hide on Android app and on login/dashboard (robust for query/hash)
   if (isAndroid) return null;
-  if (path === '/dashboard' || path === '/login') return null;
+  if (path === '/' || path === '/dashboard' || /^\/login(\b|\/|\?|#)/i.test(path)) return null;
   // Hide on explicit mobile routes
   if (/\bmobile\b/i.test(path)) return null; // matches -mobile routes
 

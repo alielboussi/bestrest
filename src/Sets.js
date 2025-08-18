@@ -12,6 +12,7 @@ export default function Sets() {
   const [search, setSearch] = useState("");
   const [kitName, setKitName] = useState("");
   const [sku, setSku] = useState("");
+  const [skuMode, setSkuMode] = useState("auto"); // 'auto' | 'manual'
   const [standardPrice, setStandardPrice] = useState("");
   const [promotionalPrice, setPromotionalPrice] = useState("");
   const [promoStart, setPromoStart] = useState("");
@@ -28,6 +29,8 @@ export default function Sets() {
   const [sets, setSets] = useState([]);
   const [setsSearch, setSetsSearch] = useState("");
   const [currency, setCurrency] = useState("K");
+  const [skuExists, setSkuExists] = useState(false);
+  const [skuChecking, setSkuChecking] = useState(false);
   // Removed user permissions state
   const navigate = useNavigate();
 
@@ -85,6 +88,59 @@ export default function Sets() {
   const canEdit = true;
   const canDelete = true;
 
+  // SKU helpers
+  const padSku = (n) => `#${String(n).padStart(5, '0')}`;
+  const numberFromSku = (s) => {
+    if (!s) return null;
+    const str = String(s).trim();
+    const m = str.match(/^#?(\d+)$/);
+    return m ? parseInt(m[1], 10) : null;
+  };
+  const computeNextSku = async () => {
+    // Gather used numeric SKUs from combos and products to keep sequence unique across both
+    const [combosRes, productsRes] = await Promise.all([
+      supabase.from('combos').select('sku'),
+      supabase.from('products').select('sku')
+    ]);
+    const used = new Set();
+    (combosRes.data || []).forEach(row => { const n = numberFromSku(row.sku); if (n !== null) used.add(n); });
+    (productsRes.data || []).forEach(row => { const n = numberFromSku(row.sku); if (n !== null) used.add(n); });
+    let i = 1;
+    while (used.has(i)) i += 1;
+    const next = padSku(i);
+    setSku(next);
+    return next;
+  };
+
+  useEffect(() => {
+    if (skuMode === 'auto') {
+      computeNextSku();
+    }
+  }, [skuMode]);
+
+  // Live duplicate SKU check in manual mode
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      if (skuMode !== 'manual' || !sku || !sku.trim()) {
+        if (active) setSkuExists(false);
+        return;
+      }
+      setSkuChecking(true);
+      const [cRes, pRes] = await Promise.all([
+        supabase.from('combos').select('id').eq('sku', sku).limit(1),
+        supabase.from('products').select('id').eq('sku', sku).limit(1),
+      ]);
+      if (!active) return;
+      setSkuChecking(false);
+      const cDup = Array.isArray(cRes.data) && cRes.data.length > 0;
+      const pDup = Array.isArray(pRes.data) && pRes.data.length > 0;
+      setSkuExists(cDup || pDup);
+    };
+    run();
+    return () => { active = false; };
+  }, [sku, skuMode]);
+
   // Filter products for search (by name or SKU, or show all if search is empty)
   const filteredProducts = products.filter(p => {
     if (kitItems.some(item => item.product_id === p.id)) return false;
@@ -137,13 +193,44 @@ export default function Sets() {
       alert("Please fill all required fields, select at least one location, currency, and add at least one product.");
       return;
     }
+    // Ensure SKU when auto mode
+    let finalSku = sku;
+    if (skuMode === 'auto' || !finalSku) {
+      finalSku = await computeNextSku();
+    }
+    // Guard: duplicate SKU check right before creating (using array result, not maybeSingle)
+    const { data: skuRows } = await supabase
+      .from('combos')
+      .select('id')
+      .eq('sku', finalSku)
+      .limit(1);
+    if (Array.isArray(skuRows) && skuRows.length > 0) {
+      if (skuMode === 'auto') {
+        // Race: recompute and retry once or twice
+        let attempts = 0;
+        let ok = false;
+        while (attempts < 3 && !ok) {
+          attempts += 1;
+          finalSku = await computeNextSku();
+          const { data: again } = await supabase.from('combos').select('id').eq('sku', finalSku).limit(1);
+          ok = !(Array.isArray(again) && again.length > 0);
+        }
+        if (!ok) {
+          alert('Unable to assign a unique SKU automatically. Please switch to Manual and set a unique SKU.');
+          return;
+        }
+      } else {
+        alert('SKU already exists, please choose another.');
+        return;
+      }
+    }
     // 1. Check for existing combo by name or SKU
-    const { data: existingCombo } = await supabase
+    const { data: existingList } = await supabase
       .from("combos")
       .select("id")
-      .or(`combo_name.eq.${kitName},sku.eq.${sku}`)
-      .maybeSingle();
-    if (existingCombo) {
+      .or(`combo_name.eq.${kitName},sku.eq.${finalSku}`)
+      .limit(1);
+    if (Array.isArray(existingList) && existingList.length > 0) {
       alert("A set/combo with this name or SKU already exists.");
       return;
     }
@@ -153,7 +240,7 @@ export default function Sets() {
       .from("combos")
       .insert([{
         combo_name: kitName,
-        sku,
+  sku: finalSku,
         standard_price: standardPrice,
         combo_price: standardPrice,
         promotional_price: promotionalPrice === "" ? null : promotionalPrice,
@@ -183,9 +270,14 @@ export default function Sets() {
 
     // Note: Inventory for the set will be calculated and updated in OpeningStock.js after stocktake
     alert("Kit/Set created!");
-    setKitName(""); setSku(""); setStandardPrice(""); setPromotionalPrice(""); setPromoStart(""); setPromoEnd(""); setKitItems([]); setImageUrl("");
+    setKitName(""); setStandardPrice(""); setPromotionalPrice(""); setPromoStart(""); setPromoEnd(""); setKitItems([]); setImageUrl("");
   setCurrency("K");
   setSelectedLocations([]);
+    if (skuMode === 'auto') {
+      await computeNextSku();
+    } else {
+      setSku("");
+    }
   };
 
   // Removed permission access check
@@ -225,9 +317,29 @@ export default function Sets() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <input name="sku" placeholder="SKU" value={sku} onChange={e => setSku(e.target.value)} />
+          <div style={{display:'flex', alignItems:'center', gap:6}}>
+            <select value={skuMode} onChange={e => setSkuMode(e.target.value)} style={{height:30}}>
+              <option value="auto">Auto</option>
+              <option value="manual">Manual</option>
+            </select>
+            <div style={{display:'flex', flexDirection:'column'}}>
+              <input
+                name="sku"
+                placeholder="SKU"
+                value={sku}
+                onChange={e => setSku(e.target.value)}
+                readOnly={skuMode==='auto'}
+                style={skuMode==='manual' && skuExists ? { borderColor:'#ff4d4d' } : undefined}
+                aria-invalid={skuMode==='manual' && skuExists}
+              />
+              {skuMode==='manual' && sku && skuExists && (
+                <span style={{ color:'#ff6b6b', fontSize:'0.8rem' }}>SKU already exists</span>
+              )}
+            </div>
+          </div>
           <input required name="kitName" placeholder="Kit/Set Name" value={kitName} onChange={e => setKitName(e.target.value)} />
         </div>
+  {/* Auto SKU mode will always assign the next missing SKU in sequence; no separate fill button needed. */}
         {/* Row 2: prices, dates, image URL */}
         <div className="sets-row-5 sets-grid" style={{width: '100%', maxWidth: 1200, margin: '0 auto', marginTop: '6px'}}>
           <input required type="number" step="0.01" name="standardPrice" placeholder="Standard Price" value={standardPrice} onChange={e => setStandardPrice(e.target.value)} />
@@ -263,7 +375,15 @@ export default function Sets() {
               })}
             </div>
           </div>
-          <button type="submit" className="sets-save-btn" style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.5rem 1.2rem', fontWeight: 'bold', fontSize: '0.98rem', boxShadow: '0 2px 8px #00b4d855', cursor: 'pointer', width: 'auto', alignSelf: 'flex-start'}}>Create Kit/Set</button>
+          <button
+            type="submit"
+            className="sets-save-btn"
+            disabled={skuMode==='manual' && skuExists}
+            title={skuMode==='manual' && skuExists ? 'SKU already exists' : undefined}
+            style={{background: '#00b4d8', color: '#fff', border: 'none', borderRadius: '6px', padding: '0.5rem 1.2rem', fontWeight: 'bold', fontSize: '0.98rem', boxShadow: '0 2px 8px #00b4d855', cursor: skuMode==='manual' && skuExists ? 'not-allowed' : 'pointer', opacity: skuMode==='manual' && skuExists ? 0.7 : 1, width: 'auto', alignSelf: 'flex-start'}}
+          >
+            Create Kit/Set
+          </button>
         </div>
 
         <div className="sets-section-title" style={{color: '#00b4d8'}}>Kit Components</div>
