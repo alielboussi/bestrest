@@ -2,6 +2,33 @@ import React, { useState, useEffect } from "react";
 import supabase from "./supabase";
 import "./Products.css";
 
+// Text normalization helpers for robust SKU matching
+const stripQuotes = (s) => String(s ?? '').replace(/^\s*["']|["']\s*$/g, '');
+const cleanText = (s) => stripQuotes(String(s ?? '').trim());
+const skuVariants = (sku) => {
+  const base = cleanText(sku);
+  const noHash = base.replace(/^#/, '');
+  return Array.from(new Set([base, noHash]));
+};
+
+// Simple per-location undo cache for imports (localStorage)
+const UNDO_KEY_PREFIX = 'stockImportUndo:';
+const getUndoKey = (locId) => `${UNDO_KEY_PREFIX}${locId}`;
+const saveUndoCache = (locId, payload) => {
+  try { localStorage.setItem(getUndoKey(locId), JSON.stringify(payload)); } catch {}
+};
+const loadUndoCache = (locId) => {
+  try {
+    const s = localStorage.getItem(getUndoKey(locId));
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+};
+const clearUndoCache = (locId) => {
+  try { localStorage.removeItem(getUndoKey(locId)); } catch {}
+};
+
 // Delete product handler
 const handleDeleteProduct = async (productId, setProducts) => {
   try {
@@ -185,7 +212,10 @@ function ProductsListPage() {
   const [comboLocations, setComboLocations] = useState([]);
   const [comboItems, setComboItems] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
+  const [undoLoading, setUndoLoading] = useState(false);
+  const [undoInfo, setUndoInfo] = useState(null);
   const fileInputRef = React.useRef(null);
+  const nextImportModeRef = React.useRef('overwrite'); // 'overwrite' | 'deduct'
 
   const handleDownloadTemplate = () => {
     // Use tab-delimited content so Excel reliably splits into columns across locales
@@ -254,8 +284,8 @@ function ProductsListPage() {
       }
       const parts = raw.split(delimiter);
       if (parts.length < 2) continue;
-      const sku = String(parts[0] || '').trim();
-      const qtyStr = String(parts[parts.length - 1] || '').trim();
+  const sku = cleanText(parts[0]);
+  const qtyStr = cleanText(parts[parts.length - 1]);
       const qty = Number(qtyStr);
       if (!sku) continue;
       out.push({ sku, qty: Number.isFinite(qty) ? qty : 0 });
@@ -271,24 +301,37 @@ function ProductsListPage() {
     if (!file) return;
     setImportLoading(true);
     try {
+  const mode = nextImportModeRef.current === 'deduct' ? 'deduct' : 'overwrite';
       const text = await file.text();
       const rows = parseImportText(text);
       if (!rows.length) {
         alert('No rows found. Ensure the file has columns: sku, product name, qty');
         return;
       }
-      // Map by SKU (use last occurrence)
+      // Map by cleaned SKU (use last occurrence)
       const skuMap = new Map();
-      rows.forEach(r => skuMap.set(r.sku, r.qty));
+      rows.forEach(r => {
+        const key = cleanText(r.sku);
+        if (key) skuMap.set(key, r.qty);
+      });
       const skus = Array.from(skuMap.keys());
-      // Fetch products for these SKUs
+      // Build candidate variants for DB query (handle leading '#')
+      const candidatesSet = new Set();
+      skus.forEach(s => skuVariants(s).forEach(v => candidatesSet.add(v)));
+      const candidates = Array.from(candidatesSet);
+      // Fetch products for these SKUs (exact match in DB, then we'll map by normalized variants)
       const { data: prodRows } = await supabase
         .from('products')
         .select('id, sku')
-        .in('sku', skus);
-      const foundMap = new Map((prodRows || []).map(r => [String(r.sku), r.id]));
+        .in('sku', candidates);
+      // Build a flexible lookup map: normalized keys (with and without '#') in lowercase
+      const foundMap = new Map();
+      (prodRows || []).forEach(r => {
+        const dbSku = cleanText(r.sku);
+        skuVariants(dbSku).forEach(k => foundMap.set(k.toLowerCase(), r.id));
+      });
 
-      const notFound = skus.filter(s => !foundMap.has(String(s)));
+  const notFound = skus.filter(s => !foundMap.has(s.toLowerCase()));
       if (notFound.length > 0) {
         // Continue but inform user
         console.warn('SKUs not found:', notFound);
@@ -315,46 +358,145 @@ function ProductsListPage() {
       }
       const hasOpeningEntry = new Set(openingEntries.map(e => String(e.product_id)));
 
+      // Collect undo snapshot entries: previous quantity per product at location
+      const undoEntries = [];
+
       // Process each matched product
       let updated = 0;
+      let skippedAlreadyZero = 0;
       for (const [sku, qty] of skuMap.entries()) {
-        const pid = foundMap.get(String(sku));
+        const pid = foundMap.get(sku.toLowerCase());
         if (!pid) continue; // skip unknown SKU
         const quantity = Math.max(0, Number(qty) || 0);
         // Upsert inventory for product/location
         const { data: invRow } = await supabase
           .from('inventory')
-          .select('id')
+          .select('id, quantity')
           .eq('product_id', pid)
           .eq('location', selectedLocation)
           .maybeSingle();
-        if (invRow) {
-          await supabase.from('inventory').update({ quantity }).eq('id', invRow.id);
+
+        const prevQty = invRow ? (Number(invRow.quantity) || 0) : 0;
+        undoEntries.push({ product_id: pid, prevQty });
+        let changed = false;
+
+        if (mode === 'deduct') {
+          // If already zero, skip on repeated reverts; never go below zero
+          if (prevQty <= 0 || quantity <= 0) {
+            if (prevQty <= 0) skippedAlreadyZero += 1;
+          } else {
+            const newQty = Math.max(0, prevQty - quantity);
+            if (newQty !== prevQty) {
+              if (invRow) {
+                await supabase.from('inventory').update({ quantity: newQty }).eq('id', invRow.id);
+              } else if (newQty > 0) {
+                await supabase.from('inventory').insert({ product_id: pid, location: selectedLocation, quantity: newQty });
+              }
+              await supabase.from('inventory_adjustments').insert({
+                product_id: pid,
+                location_id: selectedLocation,
+                quantity: newQty, // log absolute qty for consistency
+                adjustment_type: 'Import Deduct',
+                adjusted_at: new Date().toISOString()
+              });
+              changed = true;
+            }
+          }
         } else {
-          await supabase.from('inventory').insert({ product_id: pid, location: selectedLocation, quantity });
+          // overwrite mode: set absolute quantity
+          if (invRow) {
+            await supabase.from('inventory').update({ quantity }).eq('id', invRow.id);
+          } else {
+            await supabase.from('inventory').insert({ product_id: pid, location: selectedLocation, quantity });
+          }
+          // Determine adjustment type
+          let adjustmentType = 'opening';
+          if (sessionIds.length > 0 && hasOpeningEntry.has(String(pid))) {
+            adjustmentType = 'Stock Transfer Qty Adjustment';
+          }
+          await supabase.from('inventory_adjustments').insert({
+            product_id: pid,
+            location_id: selectedLocation,
+            quantity, // absolute quantity after overwrite
+            adjustment_type: adjustmentType,
+            adjusted_at: new Date().toISOString()
+          });
+          changed = true;
         }
-        // Determine adjustment type
-        let adjustmentType = 'opening';
-        if (sessionIds.length > 0 && hasOpeningEntry.has(String(pid))) {
-          adjustmentType = 'Stock Transfer Qty Adjustment';
-        }
-        await supabase.from('inventory_adjustments').insert({
-          product_id: pid,
-          location_id: selectedLocation,
-          quantity,
-          adjustment_type: adjustmentType,
-          adjusted_at: new Date().toISOString()
-        });
-        updated += 1;
+        if (changed) updated += 1;
       }
+
+      // Save undo snapshot per location if any updates
+      if (updated > 0) {
+        const snapshot = { ts: new Date().toISOString(), location_id: selectedLocation, entries: undoEntries };
+        saveUndoCache(selectedLocation, snapshot);
+        setUndoInfo(snapshot);
+      }
+
       await fetchInventory();
       const skipped = notFound.length;
-      alert(`Import complete. Updated ${updated} items.${skipped ? ` Skipped ${skipped} unknown SKUs.` : ''}`);
+      if (mode === 'deduct') {
+        alert(`Import (Deduct) complete. Updated ${updated} items.${skipped ? ` Skipped ${skipped} unknown SKUs.` : ''}${skippedAlreadyZero ? ` Skipped ${skippedAlreadyZero} items already at 0.` : ''}`);
+      } else {
+        alert(`Import complete. Updated ${updated} items.${skipped ? ` Skipped ${skipped} unknown SKUs.` : ''}`);
+      }
     } catch (err) {
       alert('Failed to import stock: ' + (err.message || err));
     } finally {
       setImportLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      nextImportModeRef.current = 'overwrite';
+    }
+  };
+
+  const handleUndoImport = async () => {
+    const locId = selectedLocation;
+    if (!locId) {
+      alert('Select a location first.');
+      return;
+    }
+    const snapshot = loadUndoCache(locId);
+    if (!snapshot || !Array.isArray(snapshot.entries) || snapshot.entries.length === 0) {
+      alert('No undo data found for this location.');
+      return;
+    }
+    if (!window.confirm('Undo last import for this location? This will restore previous quantities for affected items.')) return;
+    setUndoLoading(true);
+    try {
+      let restored = 0;
+      for (const entry of snapshot.entries) {
+        const pid = entry.product_id;
+        const prevQty = Math.max(0, Number(entry.prevQty) || 0);
+        const { data: invRow } = await supabase
+          .from('inventory')
+          .select('id')
+          .eq('product_id', pid)
+          .eq('location', locId)
+          .maybeSingle();
+        if (invRow) {
+          await supabase.from('inventory').update({ quantity: prevQty }).eq('id', invRow.id);
+        } else if (prevQty > 0) {
+          await supabase.from('inventory').insert({ product_id: pid, location: locId, quantity: prevQty });
+        } else {
+          // nothing to create when prev is zero and row missing
+        }
+        await supabase.from('inventory_adjustments').insert({
+          product_id: pid,
+          location_id: locId,
+          quantity: prevQty,
+          adjustment_type: 'Import Undo',
+          adjusted_at: new Date().toISOString()
+        });
+        restored += 1;
+      }
+      await fetchInventory();
+      clearUndoCache(locId);
+      setUndoInfo(null);
+      alert(`Undo complete. Restored ${restored} items.`);
+    } catch (err) {
+      alert('Failed to undo import: ' + (err.message || err));
+    } finally {
+      setUndoLoading(false);
     }
   };
 
@@ -362,6 +504,14 @@ function ProductsListPage() {
   const handleLocationChange = (e) => {
     setSelectedLocation(e.target.value);
   };
+
+  useEffect(() => {
+    if (selectedLocation) {
+      setUndoInfo(loadUndoCache(selectedLocation));
+    } else {
+      setUndoInfo(null);
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
     fetchAll();
@@ -564,6 +714,13 @@ function ProductsListPage() {
           style={{background: !selectedLocation ? '#555' : '#43aa8b', color:'#fff', border:'none', borderRadius:'6px', padding:'0.5rem 1rem', fontWeight:'bold', cursor: !selectedLocation ? 'not-allowed' : 'pointer'}}
           title={!selectedLocation ? 'Select a location first' : 'Import stock for selected location'}
         >{importLoading ? 'Importing…' : 'Import Stock'}</button>
+        <button
+          type="button"
+          disabled={!selectedLocation || !undoInfo || undoLoading}
+          onClick={handleUndoImport}
+          style={{background: (!selectedLocation || !undoInfo) ? '#555' : '#e67e22', color:'#fff', border:'none', borderRadius:'6px', padding:'0.5rem 1rem', fontWeight:'bold', cursor: (!selectedLocation || !undoInfo) ? 'not-allowed' : 'pointer'}}
+          title={(!selectedLocation) ? 'Select a location first' : (undoInfo ? `Undo last import from ${new Date(undoInfo.ts).toLocaleString()}` : 'No undo available for this location')}
+        >{undoLoading ? 'Undoing…' : 'Undo Last Import'}</button>
         <input
           type="file"
           ref={fileInputRef}
