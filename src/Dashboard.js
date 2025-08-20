@@ -63,6 +63,7 @@ function Dashboard() {
   { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },
   { name: 'pricelabels', label: 'Print Price Labels', route: '/price-labels', icon: FaTags },
   { name: 'incompletepackages', label: 'Incomplete Packages', route: '/incomplete-packages', icon: FaBox },
+  { name: 'openingbalanceentry', label: 'Opening Balance Entry', route: '/opening-balance-entry', icon: FaCashRegister },
   ];
 
 useEffect(() => {

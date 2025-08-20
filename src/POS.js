@@ -17,8 +17,8 @@ export default function POS() {
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
-  const [customerForm, setCustomerForm] = useState({ name: "", phone: "", tpin: "", address: "", city: "" });
-  const [editCustomerForm, setEditCustomerForm] = useState({ id: null, name: "", phone: "", tpin: "", address: "", city: "" });
+  const [customerForm, setCustomerForm] = useState({ name: "", phone: "", tpin: "", address: "", city: "", currency: 'K' });
+  const [editCustomerForm, setEditCustomerForm] = useState({ id: null, name: "", phone: "", tpin: "", address: "", city: "", currency: 'K' });
   const [customerError, setCustomerError] = useState("");
   const [editCustomerError, setEditCustomerError] = useState("");
   const [customerLoading, setCustomerLoading] = useState(false);
@@ -34,6 +34,8 @@ export default function POS() {
   const [vatIncluded, setVatIncluded] = useState(true);
   const [discountAll, setDiscountAll] = useState(0);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [paymentRef, setPaymentRef] = useState('');
   const [receiptNumber, setReceiptNumber] = useState("");
   const [customerLaybys, setCustomerLaybys] = useState([]);
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -46,6 +48,7 @@ export default function POS() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [inventoryDeductedMsg, setInventoryDeductedMsg] = useState(""); // New state for inventory deducted message
   const [remainingDue, setRemainingDue] = useState(0); // Total remaining (opening + outstanding laybys)
+  const [useOpeningBalance, setUseOpeningBalance] = useState(false); // When true, don't deduct stock; reduce customer's opening balance
 
   // Fetch locations and customers (only once)
   useEffect(() => {
@@ -252,23 +255,27 @@ export default function POS() {
     }
     // Capitalize name before saving
     const name = capitalizeWords(customerForm.name.trim());
+    const payload = {
+      name,
+      phone: customerForm.phone.trim(),
+      tpin: customerForm.tpin.trim(),
+      address: customerForm.address.trim(),
+      city: customerForm.city.trim(),
+      currency: customerForm.currency || 'K',
+    };
     const { data, error } = await supabase
       .from("customers")
-      .insert([{ 
-        name,
-        phone: customerForm.phone.trim(),
-        tpin: customerForm.tpin.trim(),
-        address: customerForm.address.trim(),
-        city: customerForm.city.trim()
-      }])
+      .insert([payload])
       .select();
     if (error) {
       setCustomerError(error.message);
     } else {
       setCustomers((prev) => [...prev, ...data]);
       setSelectedCustomer(data[0].id);
+      // Set POS currency from the selected customer's preference
+      if (data[0].currency) setCurrency(data[0].currency);
       setShowCustomerModal(false);
-      setCustomerForm({ name: "", phone: "", tpin: "", address: "", city: "" });
+  setCustomerForm({ name: "", phone: "", tpin: "", address: "", city: "", currency: 'K' });
     }
     setCustomerLoading(false);
   };
@@ -281,7 +288,8 @@ export default function POS() {
       phone: customer.phone || "",
       tpin: customer.tpin || "",
       address: customer.address || "",
-      city: customer.city || ""
+  city: customer.city || "",
+  currency: customer.currency || 'K'
     });
     setEditCustomerError("");
     setShowEditCustomerModal(true);
@@ -298,20 +306,22 @@ export default function POS() {
     }
     // Capitalize name before saving
     const name = capitalizeWords(editCustomerForm.name.trim());
+    const updatePayload = {
+      name,
+      phone: editCustomerForm.phone.trim(),
+      tpin: editCustomerForm.tpin.trim(),
+      address: editCustomerForm.address.trim(),
+      city: editCustomerForm.city.trim(),
+      currency: editCustomerForm.currency || 'K',
+    };
     const { error } = await supabase
       .from("customers")
-      .update({
-        name,
-        phone: editCustomerForm.phone.trim(),
-        tpin: editCustomerForm.tpin.trim(),
-        address: editCustomerForm.address.trim(),
-        city: editCustomerForm.city.trim()
-      })
+      .update(updatePayload)
       .eq("id", editCustomerForm.id);
     if (error) {
       setEditCustomerError(error.message);
     } else {
-      setCustomers((prev) => prev.map(c => c.id === editCustomerForm.id ? { ...c, ...editCustomerForm, name } : c));
+  setCustomers((prev) => prev.map(c => c.id === editCustomerForm.id ? { ...c, ...editCustomerForm, name } : c));
       setShowEditCustomerModal(false);
       // If the edited customer is selected, update their info
       if (selectedCustomer === editCustomerForm.id) {
@@ -429,26 +439,108 @@ export default function POS() {
       setCheckoutError("Please enter a receipt number.");
       return;
     }
-    // Prevent selling more than available stock
-    for (const item of cart) {
-      if (item.isCustom) continue;
-      // Find product in products or sets
-      let availableStock = null;
-      if (item.isSet) {
-        // For sets, use sets array
-        const setObj = sets.find(s => s.id === item.id || s.id === (item.id && item.id.replace('set-', '')));
-        availableStock = setObj ? setObj.stock : null;
-      } else {
-        const prodObj = products.find(p => p.id === item.id);
-        availableStock = prodObj ? prodObj.stock : null;
-      }
-      if (availableStock !== null && item.qty > availableStock) {
-        setCheckoutError(`Cannot sell more than available stock for ${item.name}. Requested: ${item.qty}, Available: ${availableStock}`);
-        return;
+    // Prevent selling more than available stock (skip when using opening balance / no-stock deduction)
+    if (!useOpeningBalance) {
+      for (const item of cart) {
+        if (item.isCustom) continue;
+        // Find product in products or sets
+        let availableStock = null;
+        if (item.isSet) {
+          // Robustly get numeric combo id from either a number or a string like 'set-123'
+          const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : Number(item.id);
+          const setObj = sets.find(s => Number(s.id) === Number(comboIdInt));
+          availableStock = setObj ? Number(setObj.stock) : null;
+        } else {
+          const prodObj = products.find(p => p.id === item.id);
+          availableStock = prodObj ? prodObj.stock : null;
+        }
+        if (availableStock !== null && item.qty > availableStock) {
+          setCheckoutError(`Cannot sell more than available stock for ${item.name}. Requested: ${item.qty}, Available: ${availableStock}`);
+          return;
+        }
       }
     }
-  // If paymentAmount is not set or 0, treat as layby/partial
-  let payAmt = Number(paymentAmount);
+    // If using opening balance: do a no-stock-deduction sale that reduces opening balance
+    const cust = customers.find(c => String(c.id) === String(selectedCustomer));
+    if (useOpeningBalance) {
+      const opening = Number(cust?.opening_balance || 0);
+      if (opening <= 0) {
+        setCheckoutError('Customer has no opening balance to use.');
+        return;
+      }
+      if (total > opening) {
+        setCheckoutError(`Total exceeds customer's opening balance. Total: ${total.toFixed(2)}, Opening: ${opening.toFixed(2)}`);
+        return;
+      }
+      setCheckoutLoading(true);
+      try {
+        // Record a special sale without stock deduction
+        const { data: saleData, error: saleError } = await supabase
+          .from('sales')
+          .insert([
+            {
+              customer_id: cust.id,
+              sale_date: date,
+              total_amount: total,
+              status: 'opening_balance',
+              updated_at: new Date().toISOString(),
+              location_id: selectedLocation,
+              layby_id: null,
+              currency: currency,
+              discount: discountAmount,
+              down_payment: 0,
+              receipt_number: `#${receiptNumber.trim().replace(/^#*/, "")}`,
+            },
+          ])
+          .select();
+        if (saleError) throw saleError;
+        const saleId = saleData[0].id;
+        // Save sale items as entered
+        const saleItems = [];
+    for (const item of cart) {
+          if (item.isCustom) {
+            // Schema has no display_name column; custom items will have null product_id.
+            // If you need to keep the name, store it in a separate table or encode into receipt_number/notes.
+      saleItems.push({ sale_id: saleId, product_id: null, quantity: Number(item.qty), unit_price: Number(item.price), currency: item.currency || currency, display_name: item.name });
+          } else if (item.isSet) {
+            const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : item.id;
+            const { data: comboItemsData } = await supabase
+              .from('combo_items')
+              .select('product_id, quantity')
+              .eq('combo_id', comboIdInt);
+            for (const ci of comboItemsData || []) {
+              saleItems.push({ sale_id: saleId, product_id: ci.product_id, quantity: Number(ci.quantity) * Number(item.qty), unit_price: 0, currency: item.currency || currency });
+            }
+          } else {
+            saleItems.push({ sale_id: saleId, product_id: item.id, quantity: Number(item.qty), unit_price: Number(item.price), currency: item.currency || currency });
+          }
+        }
+        const { error: itemsError } = await supabase.from('sales_items').insert(saleItems);
+        if (itemsError) throw itemsError;
+        // Reduce opening balance by total
+        const newOpening = Math.max(0, Number(cust.opening_balance || 0) - total);
+        await supabase.from('customers').update({ opening_balance: newOpening }).eq('id', cust.id);
+  setCheckoutSuccess('Recorded against opening balance. Stock was not deducted.');
+  // Reset UI (clear customer so the field is reset)
+  setCart([]);
+  setPaymentAmount(0);
+  setReceiptNumber("");
+  setUseOpeningBalance(false);
+  setSelectedCustomer("");
+  setSearch("");
+  setDiscountAll(0);
+  setRemainingDue(0);
+  await fetchCustomerLaybys("");
+      } catch (err) {
+        setCheckoutError(err.message || 'Checkout with opening balance failed.');
+      }
+      setCheckoutLoading(false);
+      return;
+    }
+
+    // Normal path: cash/layby with optional application to opening balance as part of payment
+    // If paymentAmount is not set or 0, treat as layby/partial
+    let payAmt = Number(paymentAmount);
     if (payAmt < 0 || payAmt > total) {
       setCheckoutError("Enter a valid payment amount (<= total).");
       return;
@@ -460,7 +552,6 @@ export default function POS() {
       // 0. Apply opening balance first; compute remainder to use for sale
       let remainingPay = Number(payAmt) || 0;
       if (selectedCustomer && remainingPay > 0) {
-        const cust = customers.find(c => String(c.id) === String(selectedCustomer));
         const opening = Number(cust?.opening_balance || 0);
         if (opening > 0) {
           if (remainingPay >= opening) {
@@ -564,7 +655,7 @@ export default function POS() {
 
       // 5. Insert sale payment only for the remainder after opening balance
       if (remainingPay > 0) {
-        const paymentType = remainingPay < total ? 'layby' : 'cash';
+        const paymentType = paymentMethod || 'Cash';
         const { error: payError } = await supabase.from("sales_payments").insert([
           {
             sale_id: saleId,
@@ -572,12 +663,13 @@ export default function POS() {
             payment_type: paymentType,
             currency,
             payment_date: new Date().toISOString(),
+            reference: paymentRef || null,
           },
         ]);
         if (payError) throw payError;
       }
 
-      setCheckoutSuccess("Sale completed successfully!");
+  setCheckoutSuccess("Sale completed successfully!");
       // Deduct inventory ONLY for completed sales (not layby/partial)
   if (remainingPay >= total) {
         for (const item of cart) {
@@ -586,7 +678,7 @@ export default function POS() {
           if (item.isSet) {
             // Deduct inventory for all products in the set
             // Find combo_items for this set
-            const comboIdInt = typeof item.id === 'string' ? parseInt(item.id.replace('set-', ''), 10) : item.id;
+            const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : Number(item.id);
             const { data: comboItemsData, error: comboItemsError } = await supabase
               .from('combo_items')
               .select('product_id, quantity')
@@ -692,11 +784,17 @@ export default function POS() {
         }
       }
       // After checkout, refresh products and sets to update stock
-      setCart([]);
-      setPaymentAmount(0);
-      setReceiptNumber("");
-      // Optionally, refresh laybys for this customer
-      fetchCustomerLaybys(selectedCustomer);
+  setCart([]);
+  setPaymentAmount(0);
+  setReceiptNumber("");
+  setPaymentMethod('Cash');
+  setPaymentRef('');
+  setSelectedCustomer("");
+  setSearch("");
+  setDiscountAll(0);
+  setRemainingDue(0);
+  // Optionally, refresh laybys for this customer
+  fetchCustomerLaybys("");
       // Refresh products and sets for selected location
       if (selectedLocation) {
         // Re-run fetchProductsAndSets logic
@@ -744,10 +842,10 @@ export default function POS() {
             for (const item of items) {
               const prod = productMap[item.product_id];
               const stock = prod ? prod.stock : 0;
-              if (stock < item.quantity)
+              if (stock <= 0) return 0;
               minQty = Math.min(minQty, Math.floor(stock / item.quantity));
             }
-            return minQty;
+            return Number.isFinite(minQty) ? minQty : 0;
           }
           const filteredSets = combosForLocation
             .map(combo => {
@@ -1057,27 +1155,25 @@ export default function POS() {
 
   // Filter products and sets by search
   const searchValue = search.trim().toLowerCase();
-  const filteredProducts = products.filter(product => {
-  if (!searchValue) return true;
-  return (
-    (product.name && product.name.toLowerCase().includes(searchValue)) ||
-    (product.sku && product.sku.toLowerCase().includes(searchValue))
-  );
-  });
-  const filteredSets = sets.filter(set => {
-  if (!searchValue) return true;
-  return (
-    (set.combo_name && set.combo_name.toLowerCase().includes(searchValue)) ||
-    (set.sku && set.sku.toLowerCase().includes(searchValue))
-  );
-  });
+  const filteredProducts = searchValue
+    ? products.filter(product => (
+        (product.name && product.name.toLowerCase().includes(searchValue)) ||
+        (product.sku && product.sku.toLowerCase().includes(searchValue))
+      ))
+    : [];
+  const filteredSets = searchValue
+    ? sets.filter(set => (
+        (set.combo_name && set.combo_name.toLowerCase().includes(searchValue)) ||
+        (set.sku && set.sku.toLowerCase().includes(searchValue))
+      ))
+    : [];
 
   return (
     <div className="pos-container">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
         <h2 style={{ margin: 0, fontSize: '1.2rem' }}><FaCashRegister style={{ marginRight: 6, fontSize: '1.1rem' }} /> Point of Sale</h2>
       </div>
-      <div className="pos-row" style={{
+  <div className="pos-row" style={{
         display: 'flex',
         alignItems: 'center',
         marginBottom: 6,
@@ -1087,7 +1183,7 @@ export default function POS() {
         flexWrap: 'wrap',
       }}>
         {/* Unified controls row */}
-        <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
+  <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)} required style={{ fontSize: '1rem', width: 170, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
           <option value="">Select Location</option>
           {locations.map(loc => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
         </select>
@@ -1098,7 +1194,7 @@ export default function POS() {
           style={{
             fontSize: '1rem',
             width: 160,
-            height: 38,
+            height: 40,
             borderRadius: 6,
             boxSizing: 'border-box',
             padding: '0 12px',
@@ -1109,25 +1205,24 @@ export default function POS() {
             appearance: 'none',
             WebkitAppearance: 'none',
             MozAppearance: 'none',
-            marginTop: '-4mm',
           }}
         />
-        <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 80, height: 38, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
+  <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 80, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
           <option value="K">K</option>
           <option value="$">$</option>
         </select>
-        <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '1rem', width: 180, height: 38, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
+  <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '1rem', width: 180, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
           <option value="">Select Customer</option>
           {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
         </select>
         {selectedCustomer && (
-          <button type="button" style={{ fontSize: '1rem', width: 70, height: 38, borderRadius: 6, boxSizing: 'border-box', marginRight: 0, background: '#888', color: '#fff', border: 'none' }} onClick={() => {
-            const cust = customers.find(c => c.id === selectedCustomer);
+          <button type="button" style={{ fontSize: '1rem', width: 70, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0, background: '#888', color: '#fff', border: 'none' }} onClick={() => {
+            const cust = customers.find(c => String(c.id) === String(selectedCustomer));
             if (cust) openEditCustomerModal(cust);
           }}>Edit</button>
         )}
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 38, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '-4mm' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
+          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 40, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
         )}
         {selectedCustomer && remainingDue > 0 && (
           <span style={{
@@ -1162,7 +1257,7 @@ export default function POS() {
       {/* Search row: Add Custom Product/Service button before search field */}
       <div className="pos-row" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 10, width: 1200 }}>
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: '3mm' }}>
+          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 0 }}>
             <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
           </button>
         )}
@@ -1181,11 +1276,10 @@ export default function POS() {
             boxSizing: 'border-box',
             background: '#222',
             color: '#fff',
-            border: '1.5px solid #ff5252',
+            border: '1px solid #333',
             marginLeft: 0,
-            boxShadow: '0 0 8px 2px #ff5252',
-            outline: '2px solid #ff5252',
-            transition: 'box-shadow 0.2s, border 0.2s',
+            outline: 'none',
+            transition: 'border 0.2s',
           }}
         />
       </div>
@@ -1268,7 +1362,7 @@ export default function POS() {
         </div>
       )}
 
-      {/* Custom Product/Service Modal */}
+  {/* Custom Product/Service Modal */}
       {showCustomProductModal && (
         <div className="pos-modal">
           <div className="pos-modal-content">
@@ -1321,16 +1415,59 @@ export default function POS() {
         </div>
         <div><b>Total: {total.toFixed(2)} {currency}</b></div>
       </div>
-      <div className="pos-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-        <input
+      <div className="pos-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap' }}>
+          <input
           type="number"
           min="0"
           max={total}
           value={paymentAmount}
           onChange={e => setPaymentAmount(Number(e.target.value))}
           placeholder="Payment Amount"
-          style={{ minWidth: 90, fontSize: '0.95rem', height: 28, marginRight: 4 }}
+          style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40, marginRight: 0 }}
+          disabled={useOpeningBalance}
         />
+        <select
+          value={paymentMethod}
+          onChange={e => setPaymentMethod(e.target.value)}
+          disabled={useOpeningBalance}
+          style={{
+            height: 40,
+            width: 220,
+            minWidth: 220,
+            boxSizing: 'border-box',
+            borderRadius: 6,
+            flex: '0 0 220px',
+            background: '#222',
+            color: '#fff',
+            border: '1px solid #333',
+            padding: '0 10px'
+          }}
+        >
+          <option value="Cash">Cash</option>
+          <option value="Visa Card">Visa Card</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Mobile Money">Mobile Money</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Reference (optional)"
+          value={paymentRef}
+          onChange={e => setPaymentRef(e.target.value)}
+          style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40 }}
+          disabled={useOpeningBalance}
+        />
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.95rem', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={useOpeningBalance}
+            onChange={(e) => setUseOpeningBalance(e.target.checked)}
+            disabled={!selectedCustomer || Number(customers.find(c => String(c.id) === String(selectedCustomer))?.opening_balance || 0) <= 0}
+          />
+          Don't deduct stock (use customer's Opening Balance)
+        </label>
         <button
           onClick={handleCheckout}
           disabled={checkoutLoading || total <= 0}
@@ -1338,7 +1475,9 @@ export default function POS() {
         >
           {checkoutLoading
             ? "Processing..."
-            : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout")}
+            : (useOpeningBalance
+                ? 'Checkout (Opening Balance)'
+                : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout"))}
         </button>
       </div>
       {/* Sales/Layby search/filter section */}
@@ -1412,7 +1551,124 @@ export default function POS() {
       {showCustomerModal && (
         <div className="pos-modal">
           <div className="pos-modal-content">
-            {/* Customer Modal content goes here */}
+            <h3 style={{ marginTop: 0 }}>New Customer</h3>
+            {customerError && (
+              <div style={{ color: '#ff5252', marginBottom: 8 }}>{customerError}</div>
+            )}
+            <form onSubmit={handleAddCustomer} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Name or Business Name"
+                value={customerForm.name}
+                onChange={e => setCustomerForm(f => ({ ...f, name: e.target.value }))}
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="Phone (optional)"
+                value={customerForm.phone}
+                onChange={e => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="TPIN (optional)"
+                value={customerForm.tpin}
+                onChange={e => setCustomerForm(f => ({ ...f, tpin: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="Address (optional)"
+                value={customerForm.address}
+                onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="City (optional)"
+                value={customerForm.city}
+                onChange={e => setCustomerForm(f => ({ ...f, city: e.target.value }))}
+              />
+              <select
+                value={customerForm.currency}
+                onChange={e => setCustomerForm(f => ({ ...f, currency: e.target.value }))}
+                title="Customer currency"
+              >
+                <option value="K">K (Kwacha)</option>
+                <option value="$">$ (USD)</option>
+                <option value="R">R (Rand)</option>
+                <option value="€">€ (EUR)</option>
+                <option value="£">£ (GBP)</option>
+              </select>
+              {/* Opening Balance field removed (handled on dedicated page) */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="submit" disabled={customerLoading} style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, border: 'none', borderRadius: 6, padding: '8px 18px' }}>
+                  {customerLoading ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={() => { setShowCustomerModal(false); setCustomerError(''); }} style={{ background: '#888', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px' }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {showEditCustomerModal && (
+        <div className="pos-modal">
+          <div className="pos-modal-content">
+            <h3 style={{ marginTop: 0 }}>Edit Customer</h3>
+            {editCustomerError && (
+              <div style={{ color: '#ff5252', marginBottom: 8 }}>{editCustomerError}</div>
+            )}
+            <form onSubmit={handleEditCustomer} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                type="text"
+                placeholder="Name or Business Name"
+                value={editCustomerForm.name}
+                onChange={e => setEditCustomerForm(f => ({ ...f, name: e.target.value }))}
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="Phone (optional)"
+                value={editCustomerForm.phone}
+                onChange={e => setEditCustomerForm(f => ({ ...f, phone: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="TPIN (optional)"
+                value={editCustomerForm.tpin}
+                onChange={e => setEditCustomerForm(f => ({ ...f, tpin: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="Address (optional)"
+                value={editCustomerForm.address}
+                onChange={e => setEditCustomerForm(f => ({ ...f, address: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="City (optional)"
+                value={editCustomerForm.city}
+                onChange={e => setEditCustomerForm(f => ({ ...f, city: e.target.value }))}
+              />
+              <select
+                value={editCustomerForm.currency}
+                onChange={e => setEditCustomerForm(f => ({ ...f, currency: e.target.value }))}
+                title="Customer currency"
+              >
+                <option value="K">K (Kwacha)</option>
+                <option value="$">$ (USD)</option>
+                <option value="R">R (Rand)</option>
+                <option value="€">€ (EUR)</option>
+                <option value="£">£ (GBP)</option>
+              </select>
+              {/* Opening Balance field removed (handled on dedicated page) */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button type="submit" disabled={editCustomerLoading} style={{ background: '#00b4d8', color: '#fff', fontWeight: 600, border: 'none', borderRadius: 6, padding: '8px 18px' }}>
+                  {editCustomerLoading ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={() => { setShowEditCustomerModal(false); setEditCustomerError(''); }} style={{ background: '#888', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 18px' }}>Cancel</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

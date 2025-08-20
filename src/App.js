@@ -28,6 +28,7 @@ import LaybyManagementMobile from "./LaybyManagementMobile";
 import EditSet from './EditSet';
 import PriceLabelMobile from './PriceLabelMobile';
 import IncompletePackages from './IncompletePackages';
+import OpeningBalanceEntry from './OpeningBalanceEntry';
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 // SmartRedirect: redirects / based on user role
@@ -94,6 +95,7 @@ function App() {
         <Route path="/transfers" element={<TransferList />} />
   {/* Removed desktop ClosingStock route; using mobile version only */}
         <Route path="/edit-set/:id" element={<EditSet />} />
+  <Route path="/opening-balance-entry" element={<OpeningBalanceEntry />} />
         {/* Add more routes as needed */}
         <Route path="*" element={<LoginPage />} />
       </Routes>
