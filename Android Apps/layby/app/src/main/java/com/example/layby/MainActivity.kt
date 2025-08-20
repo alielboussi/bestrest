@@ -90,8 +90,44 @@ fun WebViewScreen(url: String, activity: MainActivity) {
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
-                webViewClient = WebViewClient()
+                settings.domStorageEnabled = true
+                settings.databaseEnabled = true
+                settings.setSupportZoom(true)
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                }
+
+                webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                        super.onPageStarted(view, url, favicon)
+                    }
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        return false // keep all navigation inside the WebView
+                    }
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        // Fallback: open in external browser if main frame fails
+                        if (request == null || request.isForMainFrame) {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                    }
+                }
                 webChromeClient = WebChromeClient()
+
                 loadUrl(url)
 
                 setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->

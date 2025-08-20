@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
-import { exportLaybyPDF, exportLaybyCSV } from "./exportLaybyUtils";
+import { exportLaybyPDF } from "./exportLaybyUtils";
 import "./LaybyManagement.css";
 // Removed user permissions logic
 
@@ -26,7 +26,7 @@ export default function LaybyManagement() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   const [receipt, setReceipt] = useState("");
-  const [reminderDate, setReminderDate] = useState("");
+  // Reminder column removed
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
@@ -79,8 +79,7 @@ export default function LaybyManagement() {
       if (error) return setError(error.message);
 
       // 2. Get all sales for these laybys
-      const saleIds = (laybys || []).map(l => Number(l.sale_id)).filter(id => !isNaN(id));
-      console.log('saleIds for Supabase query:', saleIds);
+  const saleIds = (laybys || []).map(l => Number(l.sale_id)).filter(id => !isNaN(id));
       let salesMap = {};
       if (saleIds.length) {
         const { data: sales, error: salesError } = await supabase
@@ -139,7 +138,6 @@ export default function LaybyManagement() {
         if (payments) {
           paid += Number(payments);
         }
-        console.log('Layby:', layby.id, 'Sale ID:', layby.sale_id, 'SaleIdNum:', saleIdNum, 'Down Payment:', downPayment, 'Payments:', payments, 'Paid:', paid);
         return {
           ...layby,
           total_amount: layby.total_amount,
@@ -240,16 +238,7 @@ export default function LaybyManagement() {
     setSelectedLayby(null);
   }
 
-  // Set reminder for next payment (use sale_id)
-  async function handleSetReminder(saleId) {
-    if (!reminderDate) return;
-    setLoading(true);
-    const { error } = await supabase.from("sales").update({ reminder_date: reminderDate, updated_at: new Date().toISOString() }).eq("id", saleId);
-    if (error) setError(error.message);
-    else setSuccess("Reminder set!");
-    setLoading(false);
-    setReminderDate("");
-  }
+  // Reminder functionality removed
 
   // Update notes for a layby
   async function handleUpdateNotes(laybyId) {
@@ -260,59 +249,7 @@ export default function LaybyManagement() {
     setLoading(false);
   }
 
-  // Export handlers
-  async function handleExport(type) {
-    if (!selectedLayby) return;
-    // Fetch products for this layby (from sales_items)
-    const { data: saleItems } = await supabase
-      .from("sales_items")
-      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
-      .eq("sale_id", selectedLayby.sale_id);
-    const products = (saleItems || []).map(i => ({
-      name: i.product?.name || i.display_name || '',
-      sku: i.product?.sku || '',
-      qty: i.quantity,
-      price: i.unit_price
-    }));
-    // Fetch payments for this layby
-    const { data: payments } = await supabase
-      .from("sales_payments")
-      .select("amount, payment_date")
-      .eq("sale_id", selectedLayby.sale_id);
-    // Get customer details
-    const customer = selectedLayby.customerInfo || {};
-    // Prepare data
-    const logoUrl = window.location.origin + '/bestrest-logo.png';
-    const companyName = 'BestRest';
-    if (type === 'pdf') {
-      const { data: saleRows } = await supabase
-        .from('sales')
-        .select('currency, discount')
-        .eq('id', selectedLayby.sale_id)
-        .single();
-      const currency = saleRows?.currency || customer.currency || 'K';
-      const discount = Number(saleRows?.discount || 0);
-      const doc = exportLaybyPDF({ companyName, logoUrl, customer: { ...customer, opening_balance: customer.opening_balance || 0 }, layby: selectedLayby, products, payments, currency, discount });
-      // Attempt upload/cache for parity
-      await uploadLaybyPDF(selectedLayby, doc, customer);
-    } else {
-      const { data: saleRows } = await supabase
-        .from('sales')
-        .select('currency, discount')
-        .eq('id', selectedLayby.sale_id)
-        .single();
-      const currency = saleRows?.currency || customer.currency || 'K';
-      const discount = Number(saleRows?.discount || 0);
-      const csv = exportLaybyCSV({ customer: { ...customer, opening_balance: customer.opening_balance || 0 }, layby: selectedLayby, products, payments, currency, discount });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `layby_statement_${customer.name || 'customer'}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  }
+  // CSV export removed; inline PDF export retained per row
 
   // Filter and sort laybys for display
   const filteredLaybys = laybys
@@ -324,8 +261,7 @@ export default function LaybyManagement() {
         phone.includes(search.toLowerCase())
       );
     })
-    .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
-    .slice(0, 5);
+  .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
 
   // All actions always accessible
   const canAdd = true;
@@ -334,8 +270,8 @@ export default function LaybyManagement() {
 
   return (
     <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
-      <h2 style={{ fontSize: '2.1rem', color: '#4caf50', textAlign: 'center', marginBottom: 28 }}>Layby Management</h2>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <h2 style={{ fontSize: '1.6rem', color: '#4caf50', textAlign: 'center', marginBottom: 20 }}>Layby Management</h2>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <input
           type="text"
           placeholder="Search customer name or phone..."
@@ -346,9 +282,9 @@ export default function LaybyManagement() {
       </div>
       {error && <div style={{ color: "#ff5252", marginBottom: 10 }}>{error}</div>}
       {success && <div style={{ color: "#4caf50", marginBottom: 10 }}>{success}</div>}
-      {/* Export buttons for each layby row */}
-      <div style={{ width: '100%', background: 'transparent', borderRadius: 8, overflowX: 'visible' }}>
-        <table className="pos-table" style={{ width: '100%', minWidth: 600, background: '#23272f', borderRadius: 8, margin: '0 auto', fontSize: '0.86rem' }}>
+      {/* Table container is horizontally scrollable if needed */}
+      <div style={{ width: '100%', background: 'transparent', borderRadius: 8, overflowX: 'auto' }}>
+    <table className="pos-table" style={{ width: '100%', minWidth: 600, background: '#23272f', borderRadius: 8, margin: '0 auto', fontSize: '0.8rem', tableLayout: 'fixed' }}>
           <thead>
             <tr>
               <th className="text-col">Customer</th>
@@ -356,84 +292,33 @@ export default function LaybyManagement() {
               <th className="num-col">Total</th>
               <th className="num-col">Paid</th>
               <th className="num-col">Outstanding</th>
-              <th className="num-col">Reminder</th>
-              <th className="text-col">Updated</th>
-              <th className="action-col">Actions</th>
-              <th className="action-col">Export</th>
+  <th className="actions-col">Actions</th>
+  <th className="export-col">Export</th>
+  <th className="updated-col">Updated</th>
             </tr>
           </thead>
           <tbody>
             {filteredLaybys.map(layby => (
               <tr key={layby.id} style={{ background: layby.outstanding === 0 ? '#0f2e1d' : undefined }}>
-                <td className="text-col">
+                <td className="text-col" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                   <div>{layby.customerInfo?.name}</div>
-                  {Number(layby.outstanding || 0) > 0 && (
-                    <div style={{
-                      marginTop: 4,
-                      display: 'inline-block',
-                      background: '#2e7d32',
-                      color: '#fff',
-                      padding: '2px 6px',
-                      borderRadius: 6,
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 0 0 1px rgba(255,255,255,0.06) inset'
-                    }}>
-                      Remaining: {formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}
-                    </div>
-                  )}
                 </td>
-                <td className="text-col">{layby.customerInfo?.phone}</td>
+                <td className="text-col" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{layby.customerInfo?.phone}</td>
                 <td className="num-col">{formatCurrency(layby.total_amount, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">{formatCurrency(layby.paid, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">{formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}</td>
-                <td className="num-col">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input type="date" value={layby.reminder_date || ""} onChange={e => setReminderDate(e.target.value)} style={{ background: '#181f2f', color: '#fff', border: '1px solid #333', borderRadius: 4, padding: '1px 2px', minWidth: 70, maxWidth: 90, fontSize: '0.8rem' }} />
-                    <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={() => handleSetReminder(layby.sale_id)} disabled={!reminderDate}>Set</button>
-                  </div>
-                </td>
-                <td className="text-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
-                <td className="action-col" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {Number(layby.outstanding || 0) > 0 && (
-                    <span style={{
-                      background: '#2e7d32',
-                      color: '#fff',
-                      padding: '2px 6px',
-                      borderRadius: 6,
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 0 0 1px rgba(255,255,255,0.06) inset'
-                    }}>
-                      Remaining: {formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}
-                    </span>
-                  )}
+        <td className="actions-col" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button
-                    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }}
+          style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 100, maxWidth: 120 }}
                     onClick={() => setSelectedLayby(layby)}
                     disabled={(layby.outstanding === 0 && !(Number(layby.customerInfo?.opening_balance || 0) > 0)) || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
                   >
                     Add Payment
                   </button>
                 </td>
-                <td className="action-col">
-                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90, marginRight: 2 }} onClick={async () => {
-                    // Reuse cached PDF if it exists in layby_view
-                    const { data: laybyViewRows } = await supabase
-                      .from('layby_view')
-                      .select('Layby_URL')
-                      .eq('id', layby.id)
-                      .maybeSingle();
-                    if (laybyViewRows?.Layby_URL) {
-                      const a = document.createElement('a');
-                      a.href = laybyViewRows.Layby_URL;
-                      const customerName = (layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
-                      a.download = `${customerName}.pdf`;
-                      a.click();
-                      return;
-                    }
+        <td className="export-col">
+                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '0 6px', fontWeight: 600, fontSize: '0.72rem', minWidth: 50, maxWidth: 70, height: 22, marginRight: 2 }} onClick={async () => {
+                    // Always generate using the current layout
                     // Fetch products for this layby (from sales_items)
                     const { data: saleItems } = await supabase
                       .from("sales_items")
@@ -465,39 +350,9 @@ export default function LaybyManagement() {
                     // Upload and cache URL, then trigger download
                     await uploadLaybyPDF(layby, doc, customer);
                   }}>PDF</button>
-                  <button style={{ background: '#4caf50', color: '#fff', borderRadius: 4, padding: '1px 2px', fontWeight: 600, fontSize: '0.8rem', minWidth: 70, maxWidth: 90 }} onClick={async () => {
-                    const { data: saleItems } = await supabase
-                      .from("sales_items")
-                      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
-                      .eq("sale_id", layby.sale_id);
-                    const products = (saleItems || []).map(i => ({
-                      name: i.product?.name || i.display_name || '',
-                      sku: i.product?.sku || '',
-                      qty: i.quantity,
-                      price: i.unit_price
-                    }));
-                    const { data: payments } = await supabase
-                      .from("sales_payments")
-                      .select("amount, payment_date")
-                      .eq("sale_id", layby.sale_id);
-                    const customer = layby.customerInfo || {};
-                const { data: saleRows2 } = await supabase
-                  .from('sales')
-                  .select('currency, discount')
-                  .eq('id', layby.sale_id)
-                  .single();
-                const currency = saleRows2?.currency || layby.customerInfo?.currency || 'K';
-                const discount = Number(saleRows2?.discount || 0);
-                const csv = exportLaybyCSV({ customer: { ...customer, opening_balance: layby.customerInfo?.opening_balance || 0 }, layby, products, payments, currency, discount });
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `layby_statement_${customer.name || 'customer'}.csv`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}>CSV</button>
+                  {/* CSV export removed */}
                 </td>
+                <td className="updated-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
               </tr>
             ))}
           </tbody>

@@ -28,8 +28,8 @@
 .layby-mgmt-container h2 {
   text-align: center;
   color: #4caf50;
-  margin-bottom: 24px;
-  font-size: 2.1rem;
+  margin-bottom: 20px;
+  font-size: 1.6rem;
 }
 .layby-mgmt-container table {
   width: 100%;
@@ -38,11 +38,24 @@
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 18px;
+  table-layout: fixed;
 }
 .layby-mgmt-container th, .layby-mgmt-container td {
-  padding: 10px 8px;
+  padding: 8px 6px;
   border-bottom: 1px solid #333;
   text-align: left;
+  white-space: nowrap;
+}
+.pos-table .text-col {
+  white-space: normal;
+  word-break: break-word;
+}
+.pos-table .num-col { white-space: nowrap; width: 9%; }
+.pos-table .text-col { width: 15%; }
+.pos-table .actions-col { white-space: nowrap; width: 13%; }
+.pos-table .export-col { white-space: nowrap; width: 12%; }
+.pos-table .updated-col { white-space: nowrap; width: 10%; }
+.pos-table .action-col {
   white-space: nowrap;
 }
 .layby-mgmt-container th {

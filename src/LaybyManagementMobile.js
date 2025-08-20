@@ -15,39 +15,95 @@ function LaybyManagementMobile() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
 
+  // Simple currency formatter
+  const formatCurrency = (amount, currency = 'K') => {
+    if (amount === null || amount === undefined || amount === '') return '';
+    const n = Number(amount);
+    const formatted = n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${currency} ${formatted}`;
+  };
+
   useEffect(() => {
     if (locked) return;
     async function fetchLaybys() {
       setLoading(true);
-      const { data: laybys, error } = await supabase
+      setError('');
+      // 1) All active laybys
+      const { data: laybyRows, error: laybyErr } = await supabase
         .from('laybys')
         .select('id, customer_id, sale_id, total_amount, paid_amount, status, notes, created_at, updated_at')
         .not('status', 'eq', 'completed');
-      if (error) {
+      if (laybyErr) {
+        setError(laybyErr.message);
         setLaybys([]);
         setLoading(false);
         return;
       }
-      // Fetch customer details for display and badges
-      const customerIds = Array.from(new Set((laybys || []).map(l => l.customer_id).filter(Boolean)));
+      const laybys = laybyRows || [];
+
+      // 2) Sales for down_payment/reminder
+      const saleIds = Array.from(new Set(laybys.map(l => Number(l.sale_id)).filter(id => !isNaN(id))));
+      let salesMap = {};
+      if (saleIds.length) {
+        const { data: sales, error: salesErr } = await supabase
+          .from('sales')
+          .select('id, down_payment, reminder_date, currency, discount')
+          .in('id', saleIds);
+        if (!salesErr) {
+          salesMap = (sales || []).reduce((acc, s) => { acc[s.id] = s; return acc; }, {});
+        }
+      }
+
+      // 3) Payments aggregated per sale
+      let paymentsMap = {};
+      if (saleIds.length) {
+        const { data: pays, error: paysErr } = await supabase
+          .from('sales_payments')
+          .select('sale_id, amount')
+          .in('sale_id', saleIds);
+        if (!paysErr) {
+          paymentsMap = (pays || []).reduce((acc, p) => {
+            acc[p.sale_id] = (acc[p.sale_id] || 0) + Number(p.amount || 0);
+            return acc;
+          }, {});
+        }
+      }
+
+      // 4) Customers
+      const customerIds = Array.from(new Set(laybys.map(l => l.customer_id).filter(Boolean)));
+      let custMap = {};
       if (customerIds.length) {
         const { data: customers } = await supabase
           .from('customers')
           .select('id, name, phone, currency, opening_balance')
           .in('id', customerIds);
-        const map = (customers || []).reduce((acc, c) => {
-          acc[c.id] = c;
-          return acc;
-        }, {});
-        setCustomersMap(map);
-      } else {
-        setCustomersMap({});
+        custMap = (customers || []).reduce((acc, c) => { acc[c.id] = c; return acc; }, {});
       }
-      setLaybys(laybys || []);
+      setCustomersMap(custMap);
+
+      // 5) Build enriched list
+      const enriched = laybys.map(l => {
+        const sale = salesMap[Number(l.sale_id)] || {};
+        let paid = 0;
+        if (sale.down_payment) paid += Number(sale.down_payment);
+        if (paymentsMap[Number(l.sale_id)]) paid += Number(paymentsMap[Number(l.sale_id)]);
+        return {
+          ...l,
+          paid,
+          outstanding: Number(l.total_amount) - paid,
+          reminder_date: sale.reminder_date,
+          sale_currency: sale.currency,
+          sale_discount: Number(sale.discount || 0),
+          customerInfo: custMap[l.customer_id] || {},
+        };
+      }).sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+
+      setLaybys(enriched);
       setLoading(false);
     }
     fetchLaybys();
   }, [locked]);
+
 
   // Password check handler
   async function handleUnlock(e) {
@@ -197,19 +253,15 @@ function LaybyManagementMobile() {
   const filteredLaybys = laybys.filter(layby => {
     const name = layby.customerInfo?.name?.toLowerCase() || customersMap[layby.customer_id]?.name?.toLowerCase() || "";
     const phone = layby.customerInfo?.phone?.toLowerCase() || customersMap[layby.customer_id]?.phone?.toLowerCase() || "";
-    const due = ((Number(layby.total_amount) || 0) - (Number(layby.paid) || Number(layby.paid_amount) || 0)).toString();
+    const due = (Number(layby.outstanding) || 0).toString();
     const searchTerm = search.toLowerCase();
-    return (
-      !searchTerm ||
-      name.includes(searchTerm) ||
-      phone.includes(searchTerm) ||
-      due.includes(searchTerm)
-    );
+    return (!searchTerm || name.includes(searchTerm) || phone.includes(searchTerm) || due.includes(searchTerm));
   });
 
   return (
     <div className="layby-mobile-container">
       <div className="layby-mobile-title">Laybys (Mobile)</div>
+  {/* Backfill button removed — new Opening Balance flow already creates laybys */}
       <div className="layby-mobile-search">
         <input
           type="text"
@@ -233,20 +285,16 @@ function LaybyManagementMobile() {
           </thead>
           <tbody>
             {filteredLaybys.map(l => {
-              const currency = customersMap[l.customer_id]?.currency || 'K';
-              const total = l.total_amount ? `${currency} ${l.total_amount}` : '';
-              const paid = l.paid_amount ? `${currency} ${l.paid_amount}` : '';
-              const due = (Number(l.total_amount) || 0) - (Number(l.paid_amount) || 0);
-              const dueStr = `${currency} ${due}`;
+              const currency = l.sale_currency || l.customerInfo?.currency || customersMap[l.customer_id]?.currency || 'K';
               return (
                 <tr key={l.id}>
                   <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
                   <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>
-                    <div>{customersMap[l.customer_id]?.name || l.customer_id}</div>
+                    <div>{l.customerInfo?.name || customersMap[l.customer_id]?.name || l.customer_id}</div>
                   </td>
-                  <td>{total}</td>
-                  <td>{paid}</td>
-                  <td>{dueStr}</td>
+                  <td>{formatCurrency(l.total_amount, currency)}</td>
+                  <td>{formatCurrency(l.paid, currency)}</td>
+                  <td>{formatCurrency(l.outstanding, currency)}</td>
                   <td>
                     <button
                       className="layby-mobile-export-btn"
