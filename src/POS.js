@@ -15,6 +15,7 @@ export default function POS() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
   const [customerForm, setCustomerForm] = useState({ name: "", phone: "", tpin: "", address: "", city: "", currency: 'K' });
@@ -48,7 +49,6 @@ export default function POS() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [inventoryDeductedMsg, setInventoryDeductedMsg] = useState(""); // New state for inventory deducted message
   const [remainingDue, setRemainingDue] = useState(0); // Total remaining (opening + outstanding laybys)
-  const [useOpeningBalance, setUseOpeningBalance] = useState(false); // When true, don't deduct stock; reduce customer's opening balance
 
   // Fetch locations and customers (only once)
   useEffect(() => {
@@ -439,103 +439,24 @@ export default function POS() {
       setCheckoutError("Please enter a receipt number.");
       return;
     }
-    // Prevent selling more than available stock (skip when using opening balance / no-stock deduction)
-    if (!useOpeningBalance) {
-      for (const item of cart) {
-        if (item.isCustom) continue;
-        // Find product in products or sets
-        let availableStock = null;
-        if (item.isSet) {
-          // Robustly get numeric combo id from either a number or a string like 'set-123'
-          const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : Number(item.id);
-          const setObj = sets.find(s => Number(s.id) === Number(comboIdInt));
-          availableStock = setObj ? Number(setObj.stock) : null;
-        } else {
-          const prodObj = products.find(p => p.id === item.id);
-          availableStock = prodObj ? prodObj.stock : null;
-        }
-        if (availableStock !== null && item.qty > availableStock) {
-          setCheckoutError(`Cannot sell more than available stock for ${item.name}. Requested: ${item.qty}, Available: ${availableStock}`);
-          return;
-        }
-      }
-    }
-    // If using opening balance: do a no-stock-deduction sale that reduces opening balance
-    const cust = customers.find(c => String(c.id) === String(selectedCustomer));
-    if (useOpeningBalance) {
-      const opening = Number(cust?.opening_balance || 0);
-      if (opening <= 0) {
-        setCheckoutError('Customer has no opening balance to use.');
-        return;
-      }
-      if (total > opening) {
-        setCheckoutError(`Total exceeds customer's opening balance. Total: ${total.toFixed(2)}, Opening: ${opening.toFixed(2)}`);
-        return;
-      }
-      setCheckoutLoading(true);
-      try {
-        // Record a special sale without stock deduction
-        const { data: saleData, error: saleError } = await supabase
-          .from('sales')
-          .insert([
-            {
-              customer_id: cust.id,
-              sale_date: date,
-              total_amount: total,
-              status: 'opening_balance',
-              updated_at: new Date().toISOString(),
-              location_id: selectedLocation,
-              layby_id: null,
-              currency: currency,
-              discount: discountAmount,
-              down_payment: 0,
-              receipt_number: `#${receiptNumber.trim().replace(/^#*/, "")}`,
-            },
-          ])
-          .select();
-        if (saleError) throw saleError;
-        const saleId = saleData[0].id;
-        // Save sale items as entered
-        const saleItems = [];
+    // Prevent selling more than available stock
     for (const item of cart) {
-          if (item.isCustom) {
-            // Schema has no display_name column; custom items will have null product_id.
-            // If you need to keep the name, store it in a separate table or encode into receipt_number/notes.
-      saleItems.push({ sale_id: saleId, product_id: null, quantity: Number(item.qty), unit_price: Number(item.price), currency: item.currency || currency, display_name: item.name });
-          } else if (item.isSet) {
-            const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : item.id;
-            const { data: comboItemsData } = await supabase
-              .from('combo_items')
-              .select('product_id, quantity')
-              .eq('combo_id', comboIdInt);
-            for (const ci of comboItemsData || []) {
-              saleItems.push({ sale_id: saleId, product_id: ci.product_id, quantity: Number(ci.quantity) * Number(item.qty), unit_price: 0, currency: item.currency || currency });
-            }
-          } else {
-            saleItems.push({ sale_id: saleId, product_id: item.id, quantity: Number(item.qty), unit_price: Number(item.price), currency: item.currency || currency });
-          }
-        }
-        const { error: itemsError } = await supabase.from('sales_items').insert(saleItems);
-        if (itemsError) throw itemsError;
-        // Reduce opening balance by total
-        const newOpening = Math.max(0, Number(cust.opening_balance || 0) - total);
-        await supabase.from('customers').update({ opening_balance: newOpening }).eq('id', cust.id);
-  setCheckoutSuccess('Recorded against opening balance. Stock was not deducted.');
-  // Reset UI (clear customer so the field is reset)
-  setCart([]);
-  setPaymentAmount(0);
-  setReceiptNumber("");
-  setUseOpeningBalance(false);
-  setSelectedCustomer("");
-  setSearch("");
-  setDiscountAll(0);
-  setRemainingDue(0);
-  await fetchCustomerLaybys("");
-      } catch (err) {
-        setCheckoutError(err.message || 'Checkout with opening balance failed.');
+      if (item.isCustom) continue;
+      // Find product in products or sets
+      let availableStock = null;
+      if (item.isSet) {
+        // Robustly get numeric combo id from either a number or a string like 'set-123'
+        const comboIdInt = typeof item.id === 'string' ? parseInt(String(item.id).replace('set-', ''), 10) : Number(item.id);
+        const setObj = sets.find(s => Number(s.id) === Number(comboIdInt));
+        availableStock = setObj ? Number(setObj.stock) : null;
+      } else {
+        const prodObj = products.find(p => p.id === item.id);
+        availableStock = prodObj ? prodObj.stock : null;
       }
-      setCheckoutLoading(false);
-      return;
+      if (availableStock !== null && item.qty > availableStock) {
+        setCheckoutError(`Cannot sell more than available stock for ${item.name}. Requested: ${item.qty}, Available: ${availableStock}`);
+        return;
+      }
     }
 
     // Normal path: cash/layby with optional application to opening balance as part of payment
@@ -552,6 +473,7 @@ export default function POS() {
       // 0. Apply opening balance first; compute remainder to use for sale
       let remainingPay = Number(payAmt) || 0;
       if (selectedCustomer && remainingPay > 0) {
+        const cust = customers.find(c => String(c.id) === String(selectedCustomer));
         const opening = Number(cust?.opening_balance || 0);
         if (opening > 0) {
           if (remainingPay >= opening) {
@@ -1155,6 +1077,13 @@ export default function POS() {
 
   // Filter products and sets by search
   const searchValue = search.trim().toLowerCase();
+  const customerSearchValue = customerSearch.trim().toLowerCase();
+  const filteredCustomersForSelect = customerSearchValue
+    ? customers.filter(c => (
+        (c.name && c.name.toLowerCase().includes(customerSearchValue)) ||
+        (c.phone && String(c.phone).toLowerCase().includes(customerSearchValue))
+      ))
+    : customers;
   const filteredProducts = searchValue
     ? products.filter(product => (
         (product.name && product.name.toLowerCase().includes(searchValue)) ||
@@ -1207,13 +1136,20 @@ export default function POS() {
             MozAppearance: 'none',
           }}
         />
-  <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 80, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
+        <select value={currency} onChange={e => setCurrency(e.target.value)} style={{ fontSize: '1rem', width: 80, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
           <option value="K">K</option>
           <option value="$">$</option>
         </select>
-  <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '1rem', width: 180, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
+        <input
+          type="text"
+          value={customerSearch}
+          onChange={e => setCustomerSearch(e.target.value)}
+          placeholder="Search customer (name or phone)"
+          style={{ fontSize: '1rem', width: 220, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0, marginTop: '-2mm', background: '#222', color: '#fff', border: '1px solid #333', padding: '0 12px' }}
+        />
+        <select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)} style={{ fontSize: '1rem', width: 220, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0 }}>
           <option value="">Select Customer</option>
-          {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+          {filteredCustomersForSelect.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
         </select>
         {selectedCustomer && (
           <button type="button" style={{ fontSize: '1rem', width: 70, height: 40, borderRadius: 6, boxSizing: 'border-box', marginRight: 0, background: '#888', color: '#fff', border: 'none' }} onClick={() => {
@@ -1222,7 +1158,28 @@ export default function POS() {
           }}>Edit</button>
         )}
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomerModal(true)} style={{ fontSize: '1rem', width: 170, height: 40, borderRadius: 6, background: '#00b4ff', color: '#fff', fontWeight: 600, border: 'none', boxSizing: 'border-box', marginRight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FaUserPlus style={{ marginRight: 6 }} /> New Customer</button>
+          <button
+            type="button"
+            onClick={() => setShowCustomerModal(true)}
+            style={{
+              fontSize: '1rem',
+              width: 170,
+              height: 40,
+              borderRadius: 6,
+              background: '#00b4ff',
+              color: '#fff',
+              fontWeight: 600,
+              border: 'none',
+              boxSizing: 'border-box',
+              marginRight: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: '-3.5mm'
+            }}
+          >
+            <FaUserPlus style={{ marginRight: 6 }} /> New Customer
+          </button>
         )}
         {selectedCustomer && remainingDue > 0 && (
           <span style={{
@@ -1241,7 +1198,7 @@ export default function POS() {
         )}
       </div>
       {/* ...rest of the component remains unchanged... */}
-      <div className="pos-row" style={{ gap: 6, marginBottom: 6, alignItems: 'center', display: 'flex', flexWrap: 'wrap' }}>
+  <div className="pos-row" style={{ gap: 6, marginBottom: 6, alignItems: 'center', display: 'flex', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 0, position: 'relative', marginLeft: '3mm', width: 170 }}>
           <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: '1.1rem', color: '#aaa', pointerEvents: 'none', zIndex: 2 }}>#</span>
           <input
@@ -1249,7 +1206,7 @@ export default function POS() {
             placeholder="Receipt Number"
             value={receiptNumber}
             onChange={e => setReceiptNumber(e.target.value)}
-            style={{ fontSize: '0.95rem', height: 38, width: '100%', paddingLeft: 22, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', position: 'relative' }}
+    style={{ fontSize: '0.95rem', height: 40, width: '100%', paddingLeft: 22, borderRadius: 6, boxSizing: 'border-box', background: '#222', color: '#fff', border: '1px solid #333', position: 'relative' }}
           />
         </div>
       </div>
@@ -1257,7 +1214,7 @@ export default function POS() {
       {/* Search row: Add Custom Product/Service button before search field */}
       <div className="pos-row" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 10, width: 1200 }}>
         {canAdd && (
-          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 38, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: 0 }}>
+          <button type="button" onClick={() => setShowCustomProductModal(true)} style={{ fontSize: '0.92rem', padding: '2px 8px', height: 40, width: 170, minWidth: 170, maxWidth: 170, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00b4d8', color: '#fff', border: 'none', borderRadius: 6, marginLeft: '3mm' }}>
             <FaPlus style={{ marginRight: 4 }} /> Add Custom Product/Service
           </button>
         )}
@@ -1268,10 +1225,11 @@ export default function POS() {
           onChange={e => setSearch(e.target.value)}
           style={{
             fontSize: '0.95rem',
-            height: 38,
-            minHeight: 38,
-            maxHeight: 38,
+            height: 40,
+            minHeight: 40,
+            maxHeight: 40,
             flex: 1,
+            minWidth: 'calc(600px + 5cm)',
             borderRadius: 6,
             boxSizing: 'border-box',
             background: '#222',
@@ -1416,7 +1374,7 @@ export default function POS() {
         <div><b>Total: {total.toFixed(2)} {currency}</b></div>
       </div>
       <div className="pos-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap' }}>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'nowrap' }}>
           <input
           type="number"
           min="0"
@@ -1424,13 +1382,11 @@ export default function POS() {
           value={paymentAmount}
           onChange={e => setPaymentAmount(Number(e.target.value))}
           placeholder="Payment Amount"
-          style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40, marginRight: 0 }}
-          disabled={useOpeningBalance}
+      style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40, marginRight: 0, marginTop: '0.5mm' }}
         />
         <select
           value={paymentMethod}
           onChange={e => setPaymentMethod(e.target.value)}
-          disabled={useOpeningBalance}
           style={{
             height: 40,
             width: 220,
@@ -1441,7 +1397,8 @@ export default function POS() {
             background: '#222',
             color: '#fff',
             border: '1px solid #333',
-            padding: '0 10px'
+            padding: '0 10px',
+            marginTop: '2.5mm'
           }}
         >
           <option value="Cash">Cash</option>
@@ -1450,24 +1407,14 @@ export default function POS() {
           <option value="Bank Transfer">Bank Transfer</option>
           <option value="Mobile Money">Mobile Money</option>
         </select>
-        <input
+          <input
           type="text"
           placeholder="Reference (optional)"
           value={paymentRef}
           onChange={e => setPaymentRef(e.target.value)}
-          style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40 }}
-          disabled={useOpeningBalance}
+            style={{ width: 220, minWidth: 220, flex: '0 0 220px', fontSize: '0.95rem', height: 40 }}
         />
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.95rem', userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            checked={useOpeningBalance}
-            onChange={(e) => setUseOpeningBalance(e.target.checked)}
-            disabled={!selectedCustomer || Number(customers.find(c => String(c.id) === String(selectedCustomer))?.opening_balance || 0) <= 0}
-          />
-          Don't deduct stock (use customer's Opening Balance)
-        </label>
         <button
           onClick={handleCheckout}
           disabled={checkoutLoading || total <= 0}
@@ -1475,9 +1422,7 @@ export default function POS() {
         >
           {checkoutLoading
             ? "Processing..."
-            : (useOpeningBalance
-                ? 'Checkout (Opening Balance)'
-                : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout"))}
+            : (paymentAmount < total ? "Checkout (Partial/Layby)" : "Checkout")}
         </button>
       </div>
       {/* Sales/Layby search/filter section */}

@@ -49,7 +49,7 @@
 }
 .pos-row input[type="date"] {
   width: 180px;
-  margin: 0;
+  margin: -3.5mm 0 0 0; /* additional 0.5mm upward nudge */
 }
 
 /* Remove duplicate input[type="date"] style, handled above */
