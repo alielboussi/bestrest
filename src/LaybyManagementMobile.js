@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
 import supabase from './supabase';
-import { exportLaybyPDF, exportLaybyCSV } from './exportLaybyUtils';
+import { exportLaybyPDF } from './exportLaybyUtils';
 import './LaybyManagementMobile.css';
 
 
 
 function LaybyManagementMobile() {
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [laybys, setLaybys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [customersMap, setCustomersMap] = useState({});
@@ -127,106 +128,127 @@ function LaybyManagementMobile() {
     }
   }
 
-  // Export or share PDF for a layby
+  // Export PDF: generate fresh, download immediately, then upload in background
   async function handleExport(layby) {
-    // Check if PDF URL already exists in layby_view
-    const { data: laybyViewRows, error: laybyViewError } = await supabase
-      .from('layby_view')
-      .select('Layby_URL')
-      .eq('id', layby.id)
-      .maybeSingle();
-    let pdfUrl = laybyViewRows?.Layby_URL;
-  if (pdfUrl) {
-      // Scroll to top to ensure modal is centered in viewport
-      window.scrollTo({ top: 0, behavior: 'auto' });
-      // Show modal with customer-friendly label and filename
-      let downloaded = false;
-      const modal = document.createElement('div');
-      modal.style.position = 'fixed';
-      modal.style.left = '0';
-      modal.style.top = '0';
-      modal.style.width = '100vw';
-      modal.style.height = '100vh';
-      modal.style.background = 'rgba(0,0,0,0.55)';
-      modal.style.display = 'flex';
-      modal.style.alignItems = 'flex-start';
-      modal.style.justifyContent = 'center';
-      modal.style.zIndex = '9999';
-    // Get customer name for label and filename
-  const customerName = (customersMap[layby.customer_id]?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
-      const downloadLabel = `Download PDF for ${customersMap[layby.customer_id]?.name || 'Customer'}`;
-      const downloadFilename = `${customerName}.pdf`;
-      modal.innerHTML = `
-        <div style="background: #23272f; color: #fff; border-radius: 10px; padding: 28px 18px 18px 18px; min-width: 260px; max-width: 95vw; box-shadow: 0 2px 12px rgba(0,0,0,0.18); text-align: center; display: flex; flex-direction: column; align-items: center; margin-top: 4cm;">
-          <div style="font-size: 1.1em; margin-bottom: 10px; font-weight: 600;">PDF already generated!</div>
-          <div style="margin-bottom: 18px;">Click the button below to download your PDF:</div>
-          <a id="pdf-download-link" href="${pdfUrl}" download="${downloadFilename}" style="display: inline-block; background: #00bfff; color: #fff; padding: 10px 22px; border-radius: 6px; font-weight: 600; font-size: 1em; text-decoration: none; margin-bottom: 18px; width: 100%; max-width: 300px;">${downloadLabel}</a>
-          <div style="margin-top: 18px; display: flex; gap: 18px; justify-content: center; width: 100%;">
-            <button id="pdf-modal-cancel" style="background: #444; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 500; font-size: 1em; border: none;">Cancel</button>
-            <button id="pdf-modal-ok" style="background: #00bfff; color: #fff; border-radius: 6px; padding: 8px 18px; font-weight: 600; font-size: 1em; border: none;">OK</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      // Download button click
-      const downloadBtn = modal.querySelector('#pdf-download-link');
-      downloadBtn.addEventListener('click', () => {
-        downloaded = true;
+    try {
+      // Fetch sale-related data in parallel for speed
+      const [saleItemsRes, paymentsRes, saleRes] = await Promise.all([
+        supabase
+          .from('sales_items')
+          .select('product_id, quantity, unit_price, display_name, product:products(name, sku)')
+          .eq('sale_id', layby.sale_id),
+        supabase
+          .from('sales_payments')
+          .select('amount, payment_date')
+          .eq('sale_id', layby.sale_id),
+        supabase
+          .from('sales')
+          .select('currency, discount')
+          .eq('id', layby.sale_id)
+          .single(),
+      ]);
+
+      const saleItems = saleItemsRes.data || [];
+      const payments = paymentsRes.data || [];
+      const saleRow = saleRes.data || {};
+
+      const products = saleItems.map(i => ({
+        name: i.product?.name || i.display_name || '',
+        sku: i.product?.sku || '',
+        qty: i.quantity,
+        price: i.unit_price,
+      }));
+
+      const currency = saleRow.currency || customersMap[layby.customer_id]?.currency || 'K';
+      const discount = Number(saleRow.discount || 0);
+      const customer = { ...(customersMap[layby.customer_id] || {}), opening_balance: customersMap[layby.customer_id]?.opening_balance || 0 };
+      const logoUrl = window.location.origin + '/bestrest-logo.png';
+      const companyName = 'BestRest';
+
+      // Generate PDF
+      const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
+      const safeName = (customer.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_') || 'Customer';
+      const fileName = `${safeName}_Layby_${layby.id}.pdf`;
+
+      // Prefer anchor download with blob URL (most reliable on Android)
+      let blob;
+      try {
+        blob = doc.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        // Extra fallback for WebViews that ignore the download attribute
         setTimeout(() => {
-          if (document.body.contains(modal)) document.body.removeChild(modal);
-        }, 500);
-      });
-      // Cancel button
-      modal.querySelector('#pdf-modal-cancel').addEventListener('click', () => {
-        if (document.body.contains(modal)) document.body.removeChild(modal);
-      });
-      // OK button
-      modal.querySelector('#pdf-modal-ok').addEventListener('click', () => {
-        if (!downloaded) {
-          if (!window.confirm('Are you sure you want to close this dialog? You have not downloaded the PDF yet.')) {
-            return;
+          try {
+            // Try opening in a new tab; if blocked, navigate the current tab
+            const opened = window.open(url, '_blank');
+            if (!opened) {
+              window.location.href = url;
+            }
+          } catch {}
+        }, 100);
+        // Revoke a bit later to avoid races on slower devices
+        setTimeout(() => {
+          try { URL.revokeObjectURL(url); } catch {}
+          a.remove();
+        }, 5000);
+      } catch (e) {
+        console.warn('Anchor download failed, falling back to jsPDF.save:', e);
+        try {
+          doc.save(fileName);
+        } catch (e2) {
+          console.warn('jsPDF save failed, opening blob URL as last resort:', e2);
+          try {
+            const blobUrl = doc.output('bloburl');
+            window.open(blobUrl, '_blank');
+          } catch (e3) {
+            console.warn('PDF open failed:', e3);
           }
         }
-        if (document.body.contains(modal)) document.body.removeChild(modal);
-      });
-      return;
-    }
-    // ...existing code for generating and uploading PDF...
-    // Generate PDF now if no cached URL
-    const { data: saleItems } = await supabase
-      .from('sales_items')
-      .select('product_id, quantity, unit_price, display_name, product:products(name, sku)')
-      .eq('sale_id', layby.sale_id);
-    const products = (saleItems || []).map(i => ({ name: i.product?.name || i.display_name || '', sku: i.product?.sku || '', qty: i.quantity, price: i.unit_price }));
-    const { data: payments } = await supabase
-      .from('sales_payments')
-      .select('amount, payment_date')
-      .eq('sale_id', layby.sale_id);
-    const { data: saleRows } = await supabase
-      .from('sales')
-      .select('currency, discount')
-      .eq('id', layby.sale_id)
-      .single();
-    const currency = saleRows?.currency || customersMap[layby.customer_id]?.currency || 'K';
-    const discount = Number(saleRows?.discount || 0);
-    const customer = { ...(customersMap[layby.customer_id] || {}), opening_balance: customersMap[layby.customer_id]?.opening_balance || 0 };
-    const logoUrl = window.location.origin + '/bestrest-logo.png';
-    const companyName = 'BestRest';
-    const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
-    // Try to upload and save URL like desktop
-    try {
-      const blob = doc.output('blob');
-      const bucket = 'laybypdfs';
-      const filePath = `laybys/${layby.id}.pdf`;
-      const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, blob, { upsert: true, contentType: 'application/pdf' });
-      if (!uploadErr) {
-        const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-        const publicUrl = publicUrlData?.publicUrl;
-        if (publicUrl) {
-          try { await supabase.from('layby_view').update({ Layby_URL: publicUrl }).eq('id', layby.id); } catch {}
-        }
       }
-    } catch {}
+
+      // Upload in background; update public URL for future use
+      try {
+        // Reuse generated blob if available
+        const uploadBlob = blob || doc.output('blob');
+        const bucket = 'laybypdfs';
+        const filePath = `laybys/${layby.id}.pdf`;
+        const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, uploadBlob, { upsert: true, contentType: 'application/pdf' });
+        if (!uploadErr) {
+          // Prefer a signed URL to avoid public bucket dependency
+          let finalUrl = '';
+          try {
+            const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(filePath, 7 * 24 * 60 * 60); // 7 days
+            finalUrl = signed?.signedUrl || '';
+          } catch {}
+          if (!finalUrl) {
+            const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+            finalUrl = publicUrlData?.publicUrl || '';
+          }
+          if (finalUrl) {
+            await supabase.from('layby_view').update({ Layby_URL: finalUrl }).eq('id', layby.id);
+            // On Android WebView, rely on HTTP(S) navigation to download/display PDF reliably
+            if (isAndroid) {
+              try {
+                const opened = window.open(finalUrl, '_blank');
+                if (!opened) {
+                  window.location.href = finalUrl;
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('PDF upload skipped/failed:', e);
+      }
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Could not export PDF. Please try again.');
+    }
   }
 
   if (locked) {
@@ -271,16 +293,19 @@ function LaybyManagementMobile() {
           onChange={e => setSearch(e.target.value)}
         />
       </div>
+      {loading && (
+        <div className="layby-mobile-loading">Loading…</div>
+      )}
       <div className="layby-mobile-table-wrapper">
         <table className="layby-mobile-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Customer</th>
-              <th>Total</th>
-              <th>Paid</th>
-              <th>Due</th>
-              <th>Export</th>
+              <th className="date-col">Date</th>
+              <th className="customer-col">Customer</th>
+              <th className="num-col">Total</th>
+              <th className="num-col">Paid</th>
+              <th className="num-col">Due</th>
+              <th className="export-col">Export</th>
             </tr>
           </thead>
           <tbody>
@@ -288,16 +313,17 @@ function LaybyManagementMobile() {
               const currency = l.sale_currency || l.customerInfo?.currency || customersMap[l.customer_id]?.currency || 'K';
               return (
                 <tr key={l.id}>
-                  <td style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
-                  <td style={{ wordBreak: 'break-word', whiteSpace: 'normal', fontSize: '0.85em' }}>
+                  <td className="date-col" style={{ fontSize: '0.85em' }}>{new Date(l.created_at).toLocaleDateString()}</td>
+                  <td className="customer-col" style={{ fontSize: '0.85em' }}>
                     <div>{l.customerInfo?.name || customersMap[l.customer_id]?.name || l.customer_id}</div>
                   </td>
-                  <td>{formatCurrency(l.total_amount, currency)}</td>
-                  <td>{formatCurrency(l.paid, currency)}</td>
-                  <td>{formatCurrency(l.outstanding, currency)}</td>
-                  <td>
+                  <td className="num-col">{formatCurrency(l.total_amount, currency)}</td>
+                  <td className="num-col">{formatCurrency(l.paid, currency)}</td>
+                  <td className="num-col">{formatCurrency(l.outstanding, currency)}</td>
+                  <td className="export-col">
                     <button
                       className="layby-mobile-export-btn"
+                      aria-label={`Export layby ${l.id} as PDF`}
                       onClick={() => handleExport(l)}
                     >PDF</button>
                   </td>

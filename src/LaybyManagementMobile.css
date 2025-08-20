@@ -44,11 +44,11 @@
   font-size: 15px;
   text-align: center;
 }
-/* LaybyManagementMobile.css: Mobile-optimized styles for iPhone/Samsung S22 and later */
+/* LaybyManagementMobile.css: Mobile-optimized styles for modern Android phones (e.g., S22 Ultra) */
 .layby-mobile-container {
-  max-width: 430px;
+  max-width: 480px; /* allow a bit wider for large phones */
   margin: 0 auto;
-  padding: 12px 4px 32px 4px;
+  padding: 12px 6px 28px 6px;
   background: #181c23;
   min-height: 100vh;
   color: #e0e6ed;
@@ -72,35 +72,33 @@
   font-size: 1.1rem;
 }
 .layby-mobile-table {
-  max-width: 430px;
-  margin: 0 auto;
   width: 100%;
   border-collapse: collapse;
-  font-size: 1rem;
+  font-size: 0.98rem;
   background: #23272f;
   border-radius: 10px;
   overflow: hidden;
-  table-layout: fixed; /* Fix column width to match header */
+  table-layout: fixed; /* fixed layout helps prevent jitter and keeps columns consistent */
 }
 .layby-mobile-table th, .layby-mobile-table td {
-  padding-left: 4px;
-  padding-right: 4px;
   padding: 8px 4px;
   text-align: left;
   border-bottom: 1px solid #222;
-  word-break: break-word;
-  white-space: normal;
 }
+.layby-mobile-table .date-col { width: 76px; white-space: nowrap; }
+.layby-mobile-table .customer-col { width: auto; word-break: break-word; white-space: normal; }
+.layby-mobile-table .num-col { width: 72px; text-align: right; white-space: nowrap; }
+.layby-mobile-table .export-col { width: 68px; text-align: center; white-space: nowrap; }
 .layby-mobile-table th:last-child, .layby-mobile-table td:last-child {
   text-align: center; /* Center align the 'Export' column */
 }
 
 /* Ensure export buttons always show text and are not clipped */
 .layby-mobile-table button {
-  min-width: 32px;
+  min-width: 40px;
   max-width: 100%;
   overflow: visible;
-  text-overflow: unset;
+  text-overflow: clip;
   white-space: nowrap;
   display: inline-block;
   text-align: center;
@@ -121,21 +119,21 @@
     padding: 8px 0;
   }
   .layby-mobile-table th, .layby-mobile-table td {
-    padding: 6px 2px;
-    font-size: 0.98em;
+  padding: 6px 3px;
+  font-size: 0.95em;
   }
   .layby-mobile-table button {
-    min-width: 32px;
-    font-size: 0.65rem;
-    padding: 1px 0;
+  min-width: 40px;
+  font-size: 0.75rem;
+  padding: 4px 8px;
   }
 }
 @media (max-width: 500px) {
   .layby-mobile-container {
-    max-width: 430px;
+    max-width: 480px;
     width: 100%;
     margin: 0 auto;
-    padding: 0 2px 24px 2px;
+    padding: 0 4px 20px 4px;
     border-radius: 0 0 10px 10px;
   }
   .layby-mobile-title {
@@ -147,7 +145,7 @@
   }
   .layby-mobile-table {
     border-radius: 0 0 10px 10px;
-    font-size: 0.98em;
+    font-size: 0.96em;
     width: 100%;
   }
 }
@@ -164,7 +162,7 @@
 .layby-mobile-search,
 .layby-mobile-table {
   width: 100%;
-  max-width: 430px;
+  max-width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -172,15 +170,7 @@
 /* Root: use full viewport width and height */
 
 /* Portrait layout: center and align all main elements, allow horizontal scroll only for table */
-.layby-mobile-container {
-  max-width: 430px;
-  margin: 0 auto;
-  padding: 12px 4px 32px 4px;
-  background: #181c23;
-  min-height: 100vh;
-  color: #e0e6ed;
-  font-family: 'Inter', Arial, sans-serif;
-}
+/* Consolidated container rule above */
 .layby-mobile-title,
 .layby-mobile-search {
   width: 100%;
@@ -211,29 +201,23 @@
 }
 .layby-mobile-table-wrapper {
   width: 100%;
-  overflow-x: auto;
-  margin: 0 auto 24px auto;
+  overflow-x: auto; /* allow scroll as a fallback on very small widths */
+  margin: 0 auto 16px auto;
   box-sizing: border-box;
-  max-width: 430px;
+  max-width: 480px;
 }
-.layby-mobile-table {
-  min-width: 600px;
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 1rem;
-  background: #23272f;
-  border-radius: 0 0 10px 10px;
-  overflow: hidden;
-  table-layout: fixed;
-  margin-bottom: 0;
+
+/* Export button baseline */
+.layby-mobile-export-btn {
+  background: #00bfff;
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 600;
 }
-.layby-mobile-table th, .layby-mobile-table td {
-  padding: 8px 4px;
-  text-align: left;
-  border-bottom: 1px solid #222;
-  word-break: break-word;
-  white-space: nowrap;
-}
+/* Consolidated table rule above */
+/* Use column classes to control wrapping instead of forcing nowrap */
 .layby-mobile-table th:last-child, .layby-mobile-table td:last-child {
   text-align: center;
 }
@@ -253,36 +237,22 @@
 }
 
 /* Table and header styling (keep your existing styles for colors, etc.) */
-.layby-mobile-title {
-  font-size: 1.3rem;
-  text-align: center;
-  color: #00b4d8;
-  background: #222;
-  padding: 10px 0;
-  border-radius: 10px 10px 0 0;
-  margin-bottom: 0;
-}
+/* Consolidated title rule above */
 
-.layby-mobile-table {
-  background: #23272f;
-  border-radius: 0 0 10px 10px;
-  overflow: hidden;
-  table-layout: fixed;
-  margin-bottom: 24px;
-}
+/* Consolidated table rule above */
 
 .layby-mobile-table th {
   background: #222;
   color: #00b4d8;
   font-weight: bold;
-  font-size: 1.1em;
-  padding: 10px 8px;
+  font-size: 1.02em;
+  padding: 8px 6px;
 }
 
 .layby-mobile-table td {
   color: #e0e6ed;
-  font-size: 1em;
-  padding: 10px 8px;
+  font-size: 0.98em;
+  padding: 8px 6px;
 }
 
 /* PDF Modal Styles */

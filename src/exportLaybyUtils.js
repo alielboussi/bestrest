@@ -238,46 +238,48 @@ export function exportLaybyPDF({
     didDrawPage: didDrawPageHook
   });
 
-  // Payments tables: small, side-by-side columns, max 3 per page, never overlap disclaimer
-  doc.addPage();
-  const paymentsHeaderEndY = drawHeader(doc, margin);
-  // Table layout config
-  const maxTablesPerPage = 3;
-  const maxRowsPerTable = 10; // adjust as needed for your page size and font
-  const tableWidth = 180;
-  const tableSpacing = 18;
-  const tableFontSize = 9;
-  const tableStartY = paymentsHeaderEndY + 14;
-  const tableStartXs = [margin, margin + tableWidth + tableSpacing, margin + 2 * (tableWidth + tableSpacing)];
-  let paymentIdx = 0;
-  let tableCol = 0;
-  let tablePage = 1;
-  while (paymentIdx < sortedPayments.length) {
-    if (tableCol === 0 && tablePage > 1) {
-      doc.addPage();
-      drawHeader(doc, margin);
-    }
-    const tableRows = sortedPayments.slice(paymentIdx, paymentIdx + maxRowsPerTable).map(p => [
-      new Date(p.payment_date).toLocaleDateString(),
-      formatCurrency(p.amount)
-    ]);
-    doc.autoTable({
-      head: [['Date', 'Amount']],
-      body: tableRows,
-      startY: tableStartY,
-      styles: { fontSize: tableFontSize, cellPadding: 3, valign: 'middle' },
-      headStyles: { fillColor: [76, 175, 80], fontStyle: 'bold', halign: 'center', valign: 'middle' },
-      columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' } },
-      margin: { left: tableStartXs[tableCol], right: 0 },
-      tableWidth: tableWidth,
-      theme: 'grid',
-      didDrawPage: didDrawPageHook
-    });
-    paymentIdx += maxRowsPerTable;
-    tableCol++;
-    if (tableCol >= maxTablesPerPage) {
-      tableCol = 0;
-      tablePage++;
+  // Payments tables: only add a new page if payments exist
+  if (sortedPayments.length > 0) {
+    doc.addPage();
+    const paymentsHeaderEndY = drawHeader(doc, margin);
+    // Table layout config
+    const maxTablesPerPage = 3;
+    const maxRowsPerTable = 10; // adjust as needed for your page size and font
+    const tableWidth = 180;
+    const tableSpacing = 18;
+    const tableFontSize = 9;
+    const tableStartY = paymentsHeaderEndY + 14;
+    const tableStartXs = [margin, margin + tableWidth + tableSpacing, margin + 2 * (tableWidth + tableSpacing)];
+    let paymentIdx = 0;
+    let tableCol = 0;
+    let tablePage = 1;
+    while (paymentIdx < sortedPayments.length) {
+      if (tableCol === 0 && tablePage > 1) {
+        doc.addPage();
+        drawHeader(doc, margin);
+      }
+      const tableRows = sortedPayments.slice(paymentIdx, paymentIdx + maxRowsPerTable).map(p => [
+        new Date(p.payment_date).toLocaleDateString(),
+        formatCurrency(p.amount)
+      ]);
+      doc.autoTable({
+        head: [['Date', 'Amount']],
+        body: tableRows,
+        startY: tableStartY,
+        styles: { fontSize: tableFontSize, cellPadding: 3, valign: 'middle' },
+        headStyles: { fillColor: [76, 175, 80], fontStyle: 'bold', halign: 'center', valign: 'middle' },
+        columnStyles: { 0: { halign: 'center' }, 1: { halign: 'center' } },
+        margin: { left: tableStartXs[tableCol], right: 0 },
+        tableWidth: tableWidth,
+        theme: 'grid',
+        didDrawPage: didDrawPageHook
+      });
+      paymentIdx += maxRowsPerTable;
+      tableCol++;
+      if (tableCol >= maxTablesPerPage) {
+        tableCol = 0;
+        tablePage++;
+      }
     }
   }
 

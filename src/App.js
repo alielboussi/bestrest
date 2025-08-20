@@ -29,6 +29,7 @@ import EditSet from './EditSet';
 import PriceLabelMobile from './PriceLabelMobile';
 import IncompletePackages from './IncompletePackages';
 import OpeningBalanceEntry from './OpeningBalanceEntry';
+import AllSales from './AllSales';
 // Utility to detect Android WebView
 const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 // SmartRedirect: redirects / based on user role
@@ -89,6 +90,7 @@ function App() {
         <Route path="/transfer" element={<Transfer />} />
         <Route path="/sales-report" element={<SalesReport />} />
         <Route path="/company-settings" element={<CompanySettings />} />
+  <Route path="/all-sales" element={<AllSales />} />
         <Route path="/sets" element={<Sets />} />
         <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
         {/* <Route path="/stock-viewer" element={<StockViewer />} /> */}

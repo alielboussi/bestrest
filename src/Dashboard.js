@@ -58,6 +58,7 @@ function Dashboard() {
     { name: 'customers', label: 'Customers', route: '/customers', icon: FaUsers },
     { name: 'pos', label: 'Sales', route: '/POS', icon: FaCashRegister },
     { name: 'salesreport', label: 'Sales Report', route: '/sales-report', icon: FaChartLine },
+  { name: 'allsales', label: 'All Sales', route: '/all-sales', icon: FaRegEdit },
     { name: 'laybymanagement', label: 'Laybys', route: '/layby-management', icon: FaUsers },
   // Stock Report (mobile) hidden from desktop dashboard
   { name: 'stocktakereport', label: 'Stocktake Report', route: '/stocktake-report', icon: FaRegEdit },

@@ -1,0 +1,41 @@
+/* Container */
+.allsales-container { padding: 12px; color: #e0e6ed; background: #181c23; min-height: 100vh; }
+.allsales-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.allsales-header h2 { margin: 0; font-size: 1.2rem; color: #00b4d8; }
+.allsales-search { flex: 1; min-width: 220px; padding: 8px 10px; border-radius: 6px; border: 1px solid #333; background: #23272f; color: #e0e6ed; }
+
+/* Table */
+.allsales-table-wrap { overflow-x: auto; background: #23272f; border-radius: 10px; }
+.allsales-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.allsales-table th, .allsales-table td { padding: 8px 6px; border-bottom: 1px solid #222; }
+.allsales-table th { background: #222; color: #00b4d8; text-align: left; }
+
+/* Column sizing */
+.date-col { width: 90px; white-space: nowrap; }
+.receipt-col { width: 120px; white-space: nowrap; }
+.customer-col { width: auto; word-break: break-word; }
+.status-col { width: 90px; white-space: nowrap; }
+.num-col { width: 110px; text-align: right; white-space: nowrap; }
+.actions-col { width: 90px; text-align: center; white-space: nowrap; }
+
+/* Buttons */
+.allsales-edit-btn { background: #00bfff; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-weight: 600; }
+.allsales-save-btn { background: #10b981; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 700; }
+.allsales-cancel-btn { background: #444; color: #fff; border: none; border-radius: 6px; padding: 8px 14px; font-weight: 600; }
+
+/* Modal */
+.allsales-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.allsales-modal { background: #23272f; color: #e0e6ed; border-radius: 10px; padding: 16px; width: 95vw; max-width: 680px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+.allsales-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.allsales-form label { display: flex; flex-direction: column; font-size: 0.92rem; gap: 6px; }
+.allsales-form input, .allsales-form select { padding: 8px 10px; border-radius: 6px; border: 1px solid #333; background: #181c23; color: #e0e6ed; }
+.allsales-layby-block { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.allsales-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+
+/* Misc */
+.allsales-loading { text-align: center; margin-top: 30px; font-size: 1.05rem; }
+
+@media (max-width: 560px) {
+  .allsales-form { grid-template-columns: 1fr; }
+  .allsales-layby-block { grid-template-columns: 1fr; }
+}

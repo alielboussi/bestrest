@@ -26,6 +26,7 @@ export default function LaybyManagement() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   const [receipt, setReceipt] = useState("");
+  const [paymentType, setPaymentType] = useState('cash');
   // Reminder column removed
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,8 +34,14 @@ export default function LaybyManagement() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showPdfPrompt, setShowPdfPrompt] = useState(false);
+  // Payments editor modal state
+  const [paymentEditLayby, setPaymentEditLayby] = useState(null); // layby object
+  const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentsBusy, setPaymentsBusy] = useState(false);
+  const [paymentsErr, setPaymentsErr] = useState('');
   // Helper: upload generated PDF to Supabase storage and try to cache its public URL
   const uploadLaybyPDF = async (layby, doc, customersMapLike) => {
+    let triggered = false;
     try {
       const blob = doc.output('blob');
       const bucket = 'laybypdfs';
@@ -54,9 +61,18 @@ export default function LaybyManagement() {
         a.href = publicUrl;
         a.download = `${customerName}.pdf`;
         a.click();
+        triggered = true;
       }
     } catch (e) {
       console.error('PDF upload/cache failed:', e?.message || e);
+    } finally {
+      if (!triggered) {
+        // Fallback: direct download from jsPDF in case upload/public URL failed
+        try {
+          const customerName = (customersMapLike?.name || layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+          doc.save(`${customerName}.pdf`);
+        } catch {}
+      }
     }
   };
   const navigate = useNavigate();
@@ -174,7 +190,7 @@ export default function LaybyManagement() {
       setLoading(false);
       return;
     }
-    // Apply to customer's opening balance first, then to layby if remainder
+    // Apply to selected layby first (so due reduces immediately), then any remainder to opening balance
     try {
       const customerId = selectedLayby.customer_id;
       const { data: custRow } = await supabase
@@ -185,49 +201,41 @@ export default function LaybyManagement() {
       const opening = Number(custRow?.opening_balance || 0);
       const curr = custRow?.currency || 'K';
       let amt = Number(paymentAmount);
-    if (opening > 0 && amt > 0) {
-        if (amt <= opening) {
-          // Fully consume within opening balance
-          const { error: upErr } = await supabase
-            .from('customers')
-            .update({ opening_balance: opening - amt })
-            .eq('id', customerId);
-          if (upErr) throw upErr;
-          // Mark success and finish
-          await supabase.from("laybys").update({ updated_at: new Date().toISOString() }).eq("id", selectedLayby.id);
-      setSuccess('Payment added!');
-          setLoading(false);
-          setPaymentAmount("");
-          setPaymentDate("");
-          setReceipt("");
-          setSelectedLayby(null);
-          return;
-        } else {
-          // Reduce opening to zero and use remainder for layby
-          const remainder = amt - opening;
-          const { error: upErr } = await supabase
-            .from('customers')
-            .update({ opening_balance: 0 })
-            .eq('id', customerId);
-          if (upErr) throw upErr;
-          amt = remainder;
-        }
+
+      // Determine how much to apply to the layby
+      const currentOutstanding = Number(selectedLayby.outstanding || 0);
+      const applyToLayby = Math.max(0, Math.min(amt, currentOutstanding));
+      const remainder = Math.max(0, amt - applyToLayby);
+
+      // 1) Apply to layby via sales_payments (reflects in pages and PDFs)
+  if (applyToLayby > 0) {
+        const { error: payErr } = await supabase.from('sales_payments').insert([
+          {
+            sale_id: selectedLayby.sale_id,
+            amount: applyToLayby,
+    payment_type: paymentType,
+            currency: curr,
+            payment_date: paymentDate,
+            reference: receipt,
+          },
+        ]);
+        if (payErr) throw payErr;
       }
-      // Apply remaining amount (or full amount if no opening) to layby payments
-      const { error: payErr } = await supabase.from("sales_payments").insert([
-        {
-          sale_id: selectedLayby.sale_id, // Use sale_id (integer), not layby.id (UUID)
-          amount: amt,
-          payment_type: "layby",
-          currency: curr,
-          payment_date: paymentDate,
-          reference: receipt,
-        },
-      ]);
-      // Update layby updated_at
-      await supabase.from("laybys").update({ updated_at: new Date().toISOString() }).eq("id", selectedLayby.id);
-      if (payErr) throw payErr;
-      setSuccess("Payment added!");
+
+      // 2) Apply remainder (if any) to opening balance
+      if (remainder > 0 && opening > 0) {
+        const consume = Math.min(remainder, opening);
+        const { error: upErr } = await supabase
+          .from('customers')
+          .update({ opening_balance: opening - consume })
+          .eq('id', customerId);
+        if (upErr) throw upErr;
+      }
+
+      // Touch layby updated_at so ordering refreshes
+      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', selectedLayby.id);
+
+      setSuccess('Payment added!');
     } catch (ex) {
       setError(ex?.message || 'Failed to add payment');
     }
@@ -235,7 +243,8 @@ export default function LaybyManagement() {
     setPaymentAmount("");
     setPaymentDate("");
     setReceipt("");
-    setSelectedLayby(null);
+  setSelectedLayby(null);
+  setPaymentType('cash');
   }
 
   // Reminder functionality removed
@@ -267,6 +276,114 @@ export default function LaybyManagement() {
   const canAdd = true;
   const canEdit = true;
   const canDelete = true;
+
+  // Open payments editor for a layby (loads sales_payments rows)
+  async function openPaymentsEditor(layby) {
+    setPaymentsErr('');
+    setPaymentsBusy(true);
+    setPaymentEditLayby(layby);
+    try {
+      const { data, error } = await supabase
+        .from('sales_payments')
+        .select('id, amount, payment_date, reference, currency, payment_type')
+        .eq('sale_id', layby.sale_id)
+        .order('payment_date', { ascending: true })
+        .order('id', { ascending: true });
+      if (error) throw error;
+      const payments = (data || []).map(r => {
+        const norm = (r.payment_type || '').toLowerCase();
+        const normalizedType = ['cash','bank_transfer','mobile_money','cheque','visa_card'].includes(norm) ? norm : 'cash';
+        return { ...r, amount: Number(r.amount || 0), payment_type: normalizedType };
+      });
+      // Also include the sale's down payment as a read-only row at the top (if any)
+      let downRow = null;
+      try {
+        const { data: saleRow } = await supabase
+          .from('sales')
+          .select('id, down_payment, created_at, currency')
+          .eq('id', layby.sale_id)
+          .maybeSingle();
+        const dp = Number(saleRow?.down_payment || 0);
+        if (dp > 0) {
+          downRow = {
+            id: `down-${saleRow.id}`,
+            amount: dp,
+            payment_date: (saleRow?.created_at || new Date().toISOString()),
+            reference: 'Down Payment',
+            currency: saleRow?.currency || layby.customerInfo?.currency || 'K',
+            payment_type: 'down_payment',
+            _readonly: true,
+          };
+        }
+      } catch {}
+      const rows = downRow ? [downRow, ...payments] : payments;
+      setPaymentRows(rows);
+    } catch (e) {
+      setPaymentsErr(e?.message || 'Failed to load payments');
+    } finally {
+      setPaymentsBusy(false);
+    }
+  }
+
+  // Standardized payment types used across Add and Edit Payment UIs
+  const allowedPaymentTypes = ['cash', 'bank_transfer', 'mobile_money', 'cheque', 'visa_card'];
+  const paymentTypeLabels = {
+    cash: 'Cash',
+    bank_transfer: 'Bank Transfer',
+    mobile_money: 'Mobile Money',
+    cheque: 'Cheque',
+    visa_card: 'Visa Card',
+  };
+
+  function updatePaymentRow(id, patch) {
+    setPaymentRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  }
+
+  async function savePayments() {
+    if (!paymentEditLayby) return;
+    setPaymentsBusy(true);
+    setPaymentsErr('');
+    try {
+      // Persist edits row-by-row
+      for (const row of paymentRows) {
+        if (row._readonly || String(row.id).startsWith('down-')) continue; // skip read-only down payment
+        const { id, amount, payment_date, reference, currency, payment_type } = row;
+        const { error: upErr } = await supabase
+          .from('sales_payments')
+          .update({ amount: Number(amount || 0), payment_date, reference, currency, payment_type })
+          .eq('id', id);
+        if (upErr) throw upErr;
+      }
+      // Touch layby updated_at so list refreshes calculations
+      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+      setSuccess('Payments updated.');
+      setPaymentEditLayby(null);
+      setPaymentRows([]);
+    } catch (e) {
+      setPaymentsErr(e?.message || 'Failed to save payments');
+    } finally {
+      setPaymentsBusy(false);
+    }
+  }
+
+  async function deletePayment(id) {
+    if (!paymentEditLayby) return;
+  if (String(id).startsWith('down-')) return; // cannot delete down payment here
+    if (!window.confirm('Delete this payment?')) return;
+    setPaymentsBusy(true);
+    setPaymentsErr('');
+    try {
+      const { error } = await supabase.from('sales_payments').delete().eq('id', id);
+      if (error) throw error;
+      setPaymentRows(prev => prev.filter(r => r.id !== id));
+      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+      setSuccess('Payment deleted.');
+    } catch (e) {
+      setPaymentsErr(e?.message || 'Failed to delete payment');
+    } finally {
+      setPaymentsBusy(false);
+    }
+  }
 
   return (
     <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
@@ -307,7 +424,7 @@ export default function LaybyManagement() {
                 <td className="num-col">{formatCurrency(layby.total_amount, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">{formatCurrency(layby.paid, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">{formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}</td>
-        <td className="actions-col" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <td className="actions-col" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <button
           style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 100, maxWidth: 120 }}
                     onClick={() => setSelectedLayby(layby)}
@@ -315,6 +432,14 @@ export default function LaybyManagement() {
                   >
                     Add Payment
                   </button>
+                  <button
+            style={{ background: '#6c5ce7', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 110 }}
+            title="View and edit payments for this layby"
+            onClick={() => openPaymentsEditor(layby)}
+            disabled={(JSON.parse(localStorage.getItem('user'))?.role === 'user')}
+          >
+            Edit Payments
+          </button>
                 </td>
         <td className="export-col">
                   <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '0 6px', fontWeight: 600, fontSize: '0.72rem', minWidth: 50, maxWidth: 70, height: 22, marginRight: 2 }} onClick={async () => {
@@ -347,8 +472,9 @@ export default function LaybyManagement() {
                     const logoUrl = window.location.origin + '/bestrest-logo.png';
                     const companyName = 'BestRest';
                     const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
-                    // Upload and cache URL, then trigger download
-                    await uploadLaybyPDF(layby, doc, customer);
+                    // Immediate download using jsPDF to ensure it works
+                    const customerName = (layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+                    doc.save(`${customerName}.pdf`);
                   }}>PDF</button>
                   {/* CSV export removed */}
                 </td>
@@ -361,12 +487,77 @@ export default function LaybyManagement() {
       {selectedLayby && (
         <form onSubmit={handleAddPayment} style={{ marginTop: 24, background: '#23272f', padding: 18, borderRadius: 8 }}>
           <h3>Add Payment for {selectedLayby.customerInfo?.name}</h3>
-          <input type="number" placeholder="Amount" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required />
-          <input type="date" placeholder="Date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
-          <input type="text" placeholder="Receipt #" value={receipt} onChange={e => setReceipt(e.target.value)} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
+            <input type="number" placeholder="Amount" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required style={{ width: '100%' }} />
+            <input type="date" placeholder="Date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required style={{ width: '100%' }} />
+            <select value={paymentType} onChange={e => setPaymentType(e.target.value)} style={{ width: '100%' }}>
+              {allowedPaymentTypes.map(t => (
+                <option key={t} value={t}>{paymentTypeLabels[t]}</option>
+              ))}
+            </select>
+            <input type="text" placeholder="Receipt #" value={receipt} onChange={e => setReceipt(e.target.value)} style={{ width: '100%' }} />
+          </div>
           <button type="submit" disabled={loading}>{loading ? "Processing..." : "Add Payment"}</button>
           <button type="button" style={{ marginLeft: 8 }} onClick={() => setSelectedLayby(null)}>Cancel</button>
         </form>
+      )}
+      {paymentEditLayby && (
+        <div className="pdf-modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="pdf-modal-content" style={{ maxWidth: 760, width: '95vw' }}>
+            <h3 style={{ marginTop: 0 }}>Edit Payments – {paymentEditLayby.customerInfo?.name}</h3>
+            {paymentsErr && <div style={{ color: '#ff5252', marginBottom: 8 }}>{paymentsErr}</div>}
+            <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid #333', borderRadius: 6, padding: 8, background: '#1f2430' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'center', padding: 6, width: '12ch' }}>Date</th>
+                    <th style={{ textAlign: 'center', padding: 6, width: '12ch' }}>Amount</th>
+                    <th style={{ textAlign: 'center', padding: 6, width: '12ch' }}>Type</th>
+                    <th style={{ textAlign: 'center', padding: '6px 6px 6px 0', width: '3.2cm' }}>Delete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentRows.map(row => (
+                    <tr key={row.id}>
+                      <td style={{ padding: 6, textAlign: 'center', verticalAlign: 'middle' }}>
+                        <input type="date" value={(row.payment_date || '').slice(0,10)} onChange={e => updatePaymentRow(row.id, { payment_date: e.target.value })} style={{ width: '100%', padding: '4px 6px', textAlign: 'center' }} disabled={row._readonly} />
+                      </td>
+                      <td style={{ padding: 6, textAlign: 'center', verticalAlign: 'middle' }}>
+                        <input type="number" step="0.01" value={row.amount} onChange={e => updatePaymentRow(row.id, { amount: Number(e.target.value) })} style={{ width: 'calc(100% - 12px)', textAlign: 'center', padding: '4px 6px' }} disabled={row._readonly} />
+                      </td>
+                      <td style={{ padding: 6, textAlign: 'center', verticalAlign: 'middle' }}>
+                        <select
+                          value={['cash','bank_transfer','mobile_money','cheque','visa_card'].includes((row.payment_type || '').toLowerCase()) ? (row.payment_type || '').toLowerCase() : 'cash'}
+                          onChange={e => updatePaymentRow(row.id, { payment_type: e.target.value })}
+                          style={{ width: '12ch', padding: '4px 6px', margin: '0 auto' }}
+                          disabled={row._readonly}
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="bank_transfer">Bank Transfer</option>
+                          <option value="mobile_money">Mobile Money</option>
+                          <option value="cheque">Cheque</option>
+                          <option value="visa_card">Visa Card</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '6px 6px 6px 0', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <button onClick={() => deletePayment(row.id)} disabled={paymentsBusy || row._readonly} style={{ background: '#ff5252', color: '#fff', borderRadius: 4, padding: '2px 0', fontSize: '0.72rem', width: '3cm', margin: '0 auto', opacity: row._readonly ? 0.6 : 1, textAlign: 'center', display: 'block' }}>Del</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {paymentRows.length === 0 && !paymentsBusy && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', color: '#9aa4b2', padding: 8 }}>No payments yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+              <button onClick={() => setPaymentEditLayby(null)} disabled={paymentsBusy} style={{ background: '#444', color: '#fff', borderRadius: 6, padding: '6px 12px' }}>Close</button>
+              <button onClick={savePayments} disabled={paymentsBusy} style={{ background: '#00bfff', color: '#fff', borderRadius: 6, padding: '6px 12px', fontWeight: 700 }}>{paymentsBusy ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
       )}
       {/* PDF download prompt modal */}
       {showPdfPrompt && (
