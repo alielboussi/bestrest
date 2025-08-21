@@ -78,17 +78,31 @@
   background: #23272f;
   border-radius: 10px;
   overflow: hidden;
-  table-layout: fixed; /* fixed layout helps prevent jitter and keeps columns consistent */
+  table-layout: auto; /* allow browser to size columns based on content (more robust on Android WebView) */
+  min-width: 620px; /* force horizontal scroll instead of crushing columns on small Android screens */
 }
 .layby-mobile-table th, .layby-mobile-table td {
   padding: 8px 4px;
   text-align: left;
   border-bottom: 1px solid #222;
 }
-.layby-mobile-table .date-col { width: 76px; white-space: nowrap; }
-.layby-mobile-table .customer-col { width: auto; word-break: break-word; white-space: normal; }
-.layby-mobile-table .num-col { width: 72px; text-align: right; white-space: nowrap; }
-.layby-mobile-table .export-col { width: 68px; text-align: center; white-space: nowrap; }
+.layby-mobile-table .date-col { width: 86px; min-width: 86px; white-space: nowrap; }
+/* IMPORTANT: avoid breaking every letter on Android WebView by using normal word-break and a sensible min-width */
+.layby-mobile-table .customer-col {
+  width: auto;
+  min-width: 160px; /* gives the name column enough space; table can scroll if overflow */
+  word-break: normal;           /* do not break inside words */
+  overflow-wrap: break-word;    /* allow breaking long names at spaces */
+  white-space: normal;          /* normal wrapping for body cells */
+}
+.layby-mobile-table thead .customer-col { white-space: nowrap !important; } /* ensure "Customer" header stays on one line */
+.layby-mobile-table tbody .customer-col div {
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.layby-mobile-table .num-col { width: 78px; min-width: 78px; text-align: right; white-space: nowrap; }
+.layby-mobile-table .export-col { width: 72px; min-width: 72px; text-align: center; white-space: nowrap; }
 .layby-mobile-table th:last-child, .layby-mobile-table td:last-child {
   text-align: center; /* Center align the 'Export' column */
 }
@@ -108,6 +122,7 @@
   background: #222;
   color: #00b4d8;
   font-size: 1.05em;
+  white-space: nowrap; /* prevent vertical wrapping of headers on Android */
 }
 .layby-mobile-table tr:last-child td {
   border-bottom: none;
@@ -201,7 +216,7 @@
 }
 .layby-mobile-table-wrapper {
   width: 100%;
-  overflow-x: auto; /* allow scroll as a fallback on very small widths */
+  overflow-x: auto; /* always allow scroll to handle min-width */
   margin: 0 auto 16px auto;
   box-sizing: border-box;
   max-width: 480px;

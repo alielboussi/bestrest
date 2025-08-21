@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import supabase from './supabase';
 import { exportLaybyPDF } from './exportLaybyUtils';
+import { openOrCreateLaybyPdf } from './laybyPdfService';
 import './LaybyManagementMobile.css';
 
 
@@ -128,9 +129,14 @@ function LaybyManagementMobile() {
     }
   }
 
-  // Export PDF: generate fresh, download immediately, then upload in background
+  // Export PDF: use shared service to open existing or create+upload then open
   async function handleExport(layby) {
     try {
+      // Fast path: shared util handles existence check, generation, upload, and opening
+      const opened = await openOrCreateLaybyPdf(layby, customersMap);
+      if (opened) return;
+
+      // Fallback path: (shouldn’t run usually) – local generation and upload
       // Fetch sale-related data in parallel for speed
       const [saleItemsRes, paymentsRes, saleRes] = await Promise.all([
         supabase
@@ -166,85 +172,9 @@ function LaybyManagementMobile() {
       const companyName = 'BestRest';
 
       // Generate PDF
-      const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
-      const safeName = (customer.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_') || 'Customer';
-      const fileName = `${safeName}_Layby_${layby.id}.pdf`;
-
-      // Prefer anchor download with blob URL (most reliable on Android)
-      let blob;
-      try {
-        blob = doc.output('blob');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        // Extra fallback for WebViews that ignore the download attribute
-        setTimeout(() => {
-          try {
-            // Try opening in a new tab; if blocked, navigate the current tab
-            const opened = window.open(url, '_blank');
-            if (!opened) {
-              window.location.href = url;
-            }
-          } catch {}
-        }, 100);
-        // Revoke a bit later to avoid races on slower devices
-        setTimeout(() => {
-          try { URL.revokeObjectURL(url); } catch {}
-          a.remove();
-        }, 5000);
-      } catch (e) {
-        console.warn('Anchor download failed, falling back to jsPDF.save:', e);
-        try {
-          doc.save(fileName);
-        } catch (e2) {
-          console.warn('jsPDF save failed, opening blob URL as last resort:', e2);
-          try {
-            const blobUrl = doc.output('bloburl');
-            window.open(blobUrl, '_blank');
-          } catch (e3) {
-            console.warn('PDF open failed:', e3);
-          }
-        }
-      }
-
-      // Upload in background; update public URL for future use
-      try {
-        // Reuse generated blob if available
-        const uploadBlob = blob || doc.output('blob');
-        const bucket = 'laybypdfs';
-        const filePath = `laybys/${layby.id}.pdf`;
-        const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, uploadBlob, { upsert: true, contentType: 'application/pdf' });
-        if (!uploadErr) {
-          // Prefer a signed URL to avoid public bucket dependency
-          let finalUrl = '';
-          try {
-            const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(filePath, 7 * 24 * 60 * 60); // 7 days
-            finalUrl = signed?.signedUrl || '';
-          } catch {}
-          if (!finalUrl) {
-            const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-            finalUrl = publicUrlData?.publicUrl || '';
-          }
-          if (finalUrl) {
-            await supabase.from('layby_view').update({ Layby_URL: finalUrl }).eq('id', layby.id);
-            // On Android WebView, rely on HTTP(S) navigation to download/display PDF reliably
-            if (isAndroid) {
-              try {
-                const opened = window.open(finalUrl, '_blank');
-                if (!opened) {
-                  window.location.href = finalUrl;
-                }
-              } catch {}
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('PDF upload skipped/failed:', e);
-      }
+  const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
+  const safeName = (customer.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_') || 'Customer';
+  try { doc.save(`${safeName}_Layby_${layby.id}.pdf`); } catch {}
     } catch (err) {
       console.error('Export failed:', err);
       alert('Could not export PDF. Please try again.');

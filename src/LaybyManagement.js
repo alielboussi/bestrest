@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import supabase from "./supabase";
 import { useNavigate } from "react-router-dom";
 import { exportLaybyPDF } from "./exportLaybyUtils";
+import { openOrCreateLaybyPdf } from './laybyPdfService';
 import "./LaybyManagement.css";
 // Removed user permissions logic
 
@@ -441,41 +442,13 @@ export default function LaybyManagement() {
             Edit Payments
           </button>
                 </td>
-        <td className="export-col">
-                  <button style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '0 6px', fontWeight: 600, fontSize: '0.72rem', minWidth: 50, maxWidth: 70, height: 22, marginRight: 2 }} onClick={async () => {
-                    // Always generate using the current layout
-                    // Fetch products for this layby (from sales_items)
-                    const { data: saleItems } = await supabase
-                      .from("sales_items")
-                      .select("product_id, quantity, unit_price, display_name, product:products(name, sku)")
-                      .eq("sale_id", layby.sale_id);
-                    const products = (saleItems || []).map(i => ({
-                      name: i.product?.name || i.display_name || '',
-                      sku: i.product?.sku || '',
-                      qty: i.quantity,
-                      price: i.unit_price
-                    }));
-                    // Fetch payments for this layby
-                    const { data: payments } = await supabase
-                      .from("sales_payments")
-                      .select("amount, payment_date")
-                      .eq("sale_id", layby.sale_id);
-                    // Fetch sale to get currency
-                    const { data: saleRows } = await supabase
-                      .from("sales")
-                      .select("currency, discount")
-                      .eq("id", layby.sale_id)
-                      .single();
-                    const currency = saleRows?.currency || layby.customerInfo?.currency || 'K';
-                    const discount = Number(saleRows?.discount || 0);
-                    const customer = { ...(layby.customerInfo || {}), opening_balance: layby.customerInfo?.opening_balance || 0 };
-                    const logoUrl = window.location.origin + '/bestrest-logo.png';
-                    const companyName = 'BestRest';
-                    const doc = exportLaybyPDF({ companyName, logoUrl, customer, layby, products, payments, currency, discount });
-                    // Immediate download using jsPDF to ensure it works
-                    const customerName = (layby.customerInfo?.name || 'Customer').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
-                    doc.save(`${customerName}.pdf`);
-                  }}>PDF</button>
+                <td className="export-col">
+          <button
+                    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '0 6px', fontWeight: 600, fontSize: '0.72rem', minWidth: 50, maxWidth: 70, height: 22, marginRight: 2 }}
+                    onClick={async () => {
+            await openOrCreateLaybyPdf(layby);
+                    }}
+                  >PDF</button>
                   {/* CSV export removed */}
                 </td>
                 <td className="updated-col" style={{ color: '#00bfff', fontSize: 13 }}>{layby.updated_at ? new Date(layby.updated_at).toLocaleDateString('en-GB') : ''}</td>
