@@ -128,6 +128,14 @@
 .transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { max-width: none; }
 /* removed 5th column */
 
+/* Allow long item names (first column) to wrap instead of being cut off */
+.transfer-table td:nth-child(1) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+}
+
 .transfer-submit-btn {
   background: #00b4d8;
   color: #fff;

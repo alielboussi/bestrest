@@ -110,6 +110,7 @@
 
 /* Watermark centered and faint */
 .label-watermark {
+  /* Reverted to original full-area container */
   position: absolute;
   inset: 0;
   display: flex;
@@ -119,7 +120,16 @@
   pointer-events: none;
   z-index: 0;
 }
-.label-watermark img { width: 80%; height: 80%; object-fit: contain; }
+/* Large watermark but clipped away from the bottom-right (price/QR) safe area */
+.label-watermark img {
+  width: 95%;
+  height: 95%;
+  object-fit: contain;
+  /* Remove a bottom-right rectangle (~28% width x ~32% height) */
+  clip-path: polygon(
+    0% 0%, 100% 0%, 100% 68%, 72% 68%, 72% 100%, 0% 100%
+  );
+}
 
 /* Header: logos left/right, company centered */
 .label-header {
@@ -170,6 +180,8 @@
 /* New, large bold price */
 .price-now { font-weight: 900; font-size: var(--price-now-size); color: #111; line-height: 1.05; }
 .price-now-label { font-weight: 800; margin-right: 3mm; color: #222; font-size: calc(var(--price-old-size) * 0.9); }
+/* Promo variant: slightly smaller and slanted to avoid QR overlap and add emphasis */
+.price-now.promo { font-size: calc(var(--price-now-size) * 0.85); transform: skewX(-6deg); transform-origin: right center; }
 
 /* Digital stamp: tasteful placement mid-right behind content */
 .label-stamp {

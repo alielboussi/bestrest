@@ -95,7 +95,7 @@ const Categories = () => {
         if (isSimilar(formattedName, uniqueCategories)) continue;
         uniqueCategories.push({
           name: formattedName,
-          id: row.id,
+          // Do NOT pass id. Let DB generate primary key to avoid collisions.
           created_at: row.created_at && row.created_at !== '' ? row.created_at : new Date().toISOString(),
           updated_at: row.updated_at && row.updated_at !== '' ? row.updated_at : new Date().toISOString()
         });
@@ -109,7 +109,7 @@ const Categories = () => {
       const cleanCategories = uniqueCategories.map(cat => {
         const obj = {};
         if (cat.name) obj.name = cat.name;
-        if (cat.id) obj.id = cat.id;
+        // Never send id; DB should auto-generate
         if (cat.created_at) obj.created_at = cat.created_at;
         if (cat.updated_at) obj.updated_at = cat.updated_at;
         return obj;

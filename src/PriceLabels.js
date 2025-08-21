@@ -134,8 +134,8 @@ const PriceLabels = () => {
 
           {/* Price line(s) */}
           {hasPromo ? (
-            <div className="price-now">
-              <span className="price-now-label">Promotional Price:</span> {formatCurrency(promoPrice)}
+            <div className="price-now promo">
+              <span className="price-now-label">PROMO PRICE:</span> {formatCurrency(promoPrice)}!
             </div>
           ) : (
             <div className="price-now">

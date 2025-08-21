@@ -137,7 +137,8 @@ export default function PriceLabelMobile() {
 
   // Exact desktop label card (uses PriceLabels.css classes)
   const LabelCardA4 = ({ item }) => {
-    if (!item) return null;
+    // Render a blank card when there's no item so the second half stays visible (cut line included)
+    if (!item) return <div className="label-card" />;
     const isProduct = item.type === 'product';
     const data = item.data;
     const components = item.type === 'set' ? getComboComponents(item.id) : getProductComboComponents(data);
@@ -186,7 +187,7 @@ export default function PriceLabelMobile() {
           ) : null}
 
           {hasPromo ? (
-            <div className="price-now"><span className="price-now-label">Promotional Price:</span> {formatCurrency(promoPrice)}</div>
+            <div className="price-now promo"><span className="price-now-label">PROMO PRICE:</span> {formatCurrency(promoPrice)}!</div>
           ) : (
             <div className="price-now"><span className="price-now-label">Price:</span> {formatCurrency(oldPrice)}</div>
           )}

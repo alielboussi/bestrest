@@ -134,6 +134,85 @@ useEffect(() => {
     loadPeriod();
   }, [locationFilter]);
 
+    // Compute Layby due totals (K, USD) across all active laybys
+    const computeLaybyDueTotals = React.useCallback(async () => {
+      try {
+        // 1) Active laybys
+        const { data: laybys, error: layErr } = await supabase
+          .from('laybys')
+          .select('id, customer_id, sale_id, total_amount, status')
+          .not('status', 'eq', 'completed');
+        if (layErr) throw layErr;
+        const saleIds = (laybys || []).map(l => Number(l.sale_id)).filter(id => !isNaN(id));
+
+        // Short-circuit
+        if (!saleIds.length) { setDueTotals({ K: 0, USD: 0 }); return; }
+
+        // 2) Down payments on sales
+        const { data: sales, error: salesErr } = await supabase
+          .from('sales')
+          .select('id, down_payment')
+          .in('id', saleIds);
+        if (salesErr) throw salesErr;
+        const downMap = (sales || []).reduce((acc, s) => { acc[Number(s.id)] = Number(s.down_payment || 0); return acc; }, {});
+
+        // 3) All payments per sale
+        const { data: pays, error: payErr } = await supabase
+          .from('sales_payments')
+          .select('sale_id, amount')
+          .in('sale_id', saleIds);
+        if (payErr) throw payErr;
+        const paymentsMap = (pays || []).reduce((acc, p) => {
+          const sid = Number(p.sale_id);
+          acc[sid] = (acc[sid] || 0) + Number(p.amount || 0);
+          return acc;
+        }, {});
+
+        // 4) Customers for currency
+        const customerIds = Array.from(new Set((laybys || []).map(l => l.customer_id).filter(Boolean)));
+        let customersMap = {};
+        if (customerIds.length) {
+          const { data: customers, error: custErr } = await supabase
+            .from('customers')
+            .select('id, currency')
+            .in('id', customerIds);
+          if (custErr) throw custErr;
+          customersMap = (customers || []).reduce((acc, c) => { acc[c.id] = c; return acc; }, {});
+        }
+
+        // 5) Aggregate outstanding by currency
+        const totals = { K: 0, USD: 0 };
+        (laybys || []).forEach(l => {
+          const sid = Number(l.sale_id);
+          const down = downMap[sid] || 0;
+          const paid = down + (paymentsMap[sid] || 0);
+          const outstanding = Math.max(0, Number(l.total_amount || 0) - paid);
+          const cur = customersMap[l.customer_id]?.currency || 'K';
+          const code = (cur === '$' || String(cur).toUpperCase() === 'USD') ? 'USD' : 'K';
+          totals[code] += outstanding;
+        });
+        setDueTotals({ K: totals.K, USD: totals.USD });
+      } catch (e) {
+        console.warn('computeLaybyDueTotals failed:', e?.message || e);
+        // Do not throw; keep last known totals
+      }
+    }, []);
+
+    // Initial fetch and realtime updates for layby dues
+    useEffect(() => {
+      computeLaybyDueTotals();
+      const channel = supabase.channel('dashboard-layby-dues');
+      const handler = () => { computeLaybyDueTotals(); };
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_payments' }, handler)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'laybys' }, handler)
+        .on('postgres_changes', { event: 'update', schema: 'public', table: 'sales' }, handler)
+        .subscribe();
+      return () => {
+        try { supabase.removeChannel(channel); } catch {}
+      };
+    }, [computeLaybyDueTotals]);
+
   // Fetch live stats for dashboard: inventory totals, layby dues, last stocktake date, total sales (K)
   useEffect(() => {
     async function fetchStats() {
@@ -173,11 +252,7 @@ useEffect(() => {
         .select('id', { count: 'exact', head: true });
     setProductStats({ qty: productCount || 0, costK, costUSD, unitsOnHand });
 
-  // 2) Layby dues by currency (use shared statistics for consistency)
-  const laybyByCurrency = sharedStats?.laybyByCurrency || {};
-  const dueK = Object.entries(laybyByCurrency).reduce((acc, [cur, amt]) => acc + ((cur.toUpperCase() === 'K') ? Number(amt) : 0), 0);
-  const dueUSD = Object.entries(laybyByCurrency).reduce((acc, [cur, amt]) => acc + (((cur === '$') || (cur.toUpperCase() === 'USD')) ? Number(amt) : 0), 0);
-  setDueTotals({ K: dueK, USD: dueUSD });
+  // Layby due totals are computed separately and updated in realtime
 
       // 3) Last stocktake date (prefer latest closing; fallback to latest opening)
       let closingQ = supabase
