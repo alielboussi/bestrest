@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FaCashRegister, FaPlus } from 'react-icons/fa';
 import supabase from './supabase';
 import { getMaxSetQty, selectPrice } from './utils/setInventoryUtils';
 import './POS.css';
 
 export default function OpeningBalanceEntry() {
+  const location = useLocation();
   // Core state
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
@@ -53,6 +55,14 @@ export default function OpeningBalanceEntry() {
       ]);
       setLocations(locs || []);
       setCustomers(custs || []);
+      // If a customer query param is provided, preselect it
+      try {
+        const qs = new URLSearchParams(location.search);
+        const custId = qs.get('customer');
+        if (custId && (custs || []).some(c => String(c.id) === String(custId))) {
+          setSelectedCustomer(String(custId));
+        }
+      } catch {}
     })();
   }, []);
 

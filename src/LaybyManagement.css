@@ -123,9 +123,9 @@
   inset: 0;
   background: rgba(0,0,0,0.55);
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 10vh;
+  align-items: center; /* center vertically */
+  justify-content: center; /* center horizontally */
+  padding: 0; /* no offset so it stays in the middle */
   z-index: 10000;
 }
 .layby-modal-content {

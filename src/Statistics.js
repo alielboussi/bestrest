@@ -76,7 +76,7 @@ const Statistics = () => {
             </div>
             <div className="stats-card">
               <h3>Customer Due Total ($)</h3>
-              <p>{stats.due$.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $</p>
+              <p>{(stats.due$ || stats.dueUSD || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $</p>
             </div>
             <div className="stats-card">
               <h3>Total Customers</h3>

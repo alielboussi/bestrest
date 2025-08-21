@@ -36,6 +36,8 @@ export default function LaybyManagement() {
   const [search, setSearch] = useState("");
   const [showPdfPrompt, setShowPdfPrompt] = useState(false);
   const [totals, setTotals] = useState({ K: 0, USD: 0 });
+  // Opening Balance filter: all | amount-only | products
+  const [obFilter, setObFilter] = useState('all');
   // Payments editor modal state
   const [paymentEditLayby, setPaymentEditLayby] = useState(null); // layby object
   const [paymentRows, setPaymentRows] = useState([]);
@@ -163,6 +165,30 @@ export default function LaybyManagement() {
         }, {});
       }
 
+      // 3b. Fetch sale items to detect Opening Balance type (amount-only vs products)
+      let saleItemsFlags = {};
+      if (saleIds.length) {
+        const { data: items, error: itemsError } = await supabase
+          .from('sales_items')
+          .select('sale_id, product_id, display_name')
+          .in('sale_id', saleIds);
+        if (itemsError) {
+          console.error('Supabase sale items query error:', itemsError.message);
+        }
+        // For each sale, mark flags
+        saleItemsFlags = (items || []).reduce((acc, it) => {
+          const sid = Number(it.sale_id);
+          const hasProducts = !!it.product_id; // any real product line
+          const isAmountOnlyLine = !it.product_id && String(it.display_name || '').toLowerCase().includes('opening balance');
+          const prev = acc[sid] || { hasProducts: false, hasAmountOnly: false };
+          acc[sid] = {
+            hasProducts: prev.hasProducts || hasProducts,
+            hasAmountOnly: prev.hasAmountOnly || isAmountOnlyLine,
+          };
+          return acc;
+        }, {});
+      }
+
       // 4. Get all customers for these laybys
       const customerIds = Array.from(new Set((laybys || []).map(l => l.customer_id).filter(Boolean)));
       let customersMap = {};
@@ -190,6 +216,7 @@ export default function LaybyManagement() {
         if (payments) {
           paid += Number(payments);
         }
+        const flags = saleItemsFlags[saleIdNum] || { hasProducts: false, hasAmountOnly: false };
         return {
           ...layby,
           total_amount: layby.total_amount,
@@ -197,6 +224,8 @@ export default function LaybyManagement() {
           outstanding: Number(layby.total_amount) - paid,
           reminder_date: sale.reminder_date,
           customerInfo: customersMap[layby.customer_id] || {},
+          obHasProducts: !!flags.hasProducts,
+          obHasAmountOnly: !!flags.hasAmountOnly,
         };
       });
       setLaybys(laybyList);
@@ -313,6 +342,12 @@ export default function LaybyManagement() {
         name.includes(search.toLowerCase()) ||
         phone.includes(search.toLowerCase())
       );
+    })
+    .filter(layby => {
+      if (obFilter === 'all') return true;
+      if (obFilter === 'amount') return layby.obHasAmountOnly && !layby.obHasProducts;
+      if (obFilter === 'products') return layby.obHasProducts; // include mixed
+      return true;
     })
   .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
 
@@ -446,6 +481,11 @@ export default function LaybyManagement() {
           onChange={e => setSearch(e.target.value)}
           style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '1rem', minWidth: 220 }}
         />
+        <select value={obFilter} onChange={e => setObFilter(e.target.value)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #333', background: '#23272f', color: '#fff', fontSize: '1rem' }}>
+          <option value="all">All</option>
+          <option value="amount">OB Amount Only</option>
+          <option value="products">OB Products</option>
+        </select>
       </div>
       {error && <div style={{ color: "#ff5252", marginBottom: 10 }}>{error}</div>}
       {success && <div style={{ color: "#4caf50", marginBottom: 10 }}>{success}</div>}
@@ -490,6 +530,14 @@ export default function LaybyManagement() {
           >
             Edit Payments
           </button>
+                  <button
+                    style={{ background: '#ff8c00', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 180 }}
+                    title="Edit customer's opening balance (add/remove items and adjust amount)"
+                    onClick={() => navigate(`/opening-balance-entry?customer=${encodeURIComponent(layby.customer_id)}`)}
+                    disabled={(JSON.parse(localStorage.getItem('user'))?.role === 'user')}
+                  >
+                    Edit Opening Balance
+                  </button>
                 </td>
                 <td className="export-col">
           <button
@@ -506,37 +554,39 @@ export default function LaybyManagement() {
           </tbody>
         </table>
       </div>
-      {selectedLayby && addAnchor && (
+      {selectedLayby && (
         <div className="layby-modal-overlay" onClick={(e) => { if (e.target.classList.contains('layby-modal-overlay')) { setSelectedLayby(null); setAddAnchor(null); } }}>
-          <form className="layby-popover" onSubmit={handleAddPayment} style={{ position: 'absolute', top: addAnchor.top, left: addAnchor.left, transform: 'translate(-10%, -110%)', zIndex: 10001 }}>
+          <div className="layby-modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0, marginBottom: 12 }}>Add Payment – {selectedLayby.customerInfo?.name}</h3>
-            <div className="layby-form-grid">
-              <div className="layby-form-field">
-                <label>Amount</label>
-                <input type="number" step="0.01" placeholder="0.00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required />
+            <form onSubmit={handleAddPayment}>
+              <div className="layby-form-grid">
+                <div className="layby-form-field">
+                  <label>Amount</label>
+                  <input type="number" step="0.01" placeholder="0.00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required />
+                </div>
+                <div className="layby-form-field">
+                  <label>Date</label>
+                  <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
+                </div>
+                <div className="layby-form-field">
+                  <label>Type</label>
+                  <select value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+                    {allowedPaymentTypes.map(t => (
+                      <option key={t} value={t}>{paymentTypeLabels[t]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="layby-form-field">
+                  <label>Receipt #</label>
+                  <input type="text" placeholder="Optional" value={receipt} onChange={e => setReceipt(e.target.value)} />
+                </div>
               </div>
-              <div className="layby-form-field">
-                <label>Date</label>
-                <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button type="button" onClick={() => { setSelectedLayby(null); setAddAnchor(null); }} style={{ background: '#444' }}>Cancel</button>
+                <button type="submit" disabled={loading}>{loading ? 'Processing…' : 'Add Payment'}</button>
               </div>
-              <div className="layby-form-field">
-                <label>Type</label>
-                <select value={paymentType} onChange={e => setPaymentType(e.target.value)}>
-                  {allowedPaymentTypes.map(t => (
-                    <option key={t} value={t}>{paymentTypeLabels[t]}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="layby-form-field">
-                <label>Receipt #</label>
-                <input type="text" placeholder="Optional" value={receipt} onChange={e => setReceipt(e.target.value)} />
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-              <button type="button" onClick={() => { setSelectedLayby(null); setAddAnchor(null); }} style={{ background: '#444' }}>Cancel</button>
-              <button type="submit" disabled={loading}>{loading ? 'Processing…' : 'Add Payment'}</button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
       {paymentEditLayby && (
