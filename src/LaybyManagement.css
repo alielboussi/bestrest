@@ -31,6 +31,19 @@
   margin-bottom: 20px;
   font-size: 1.6rem;
 }
+
+/* Total Due banner (desktop) */
+.layby-total-due-banner {
+  background: #2a1b1b;
+  border: 1px solid #5a2b2b;
+  color: #ff6b6b;
+  font-weight: 800;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin: 6px auto 14px auto;
+  max-width: 560px;
+}
 .layby-mgmt-container table {
   width: 100%;
   border-collapse: collapse;

@@ -35,6 +35,7 @@ export default function LaybyManagement() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showPdfPrompt, setShowPdfPrompt] = useState(false);
+  const [totalDue, setTotalDue] = useState(0);
   // Payments editor modal state
   const [paymentEditLayby, setPaymentEditLayby] = useState(null); // layby object
   const [paymentRows, setPaymentRows] = useState([]);
@@ -165,6 +166,8 @@ export default function LaybyManagement() {
         };
       });
       setLaybys(laybyList);
+  const sum = (laybyList || []).reduce((acc, l) => acc + Number(l.outstanding || 0), 0);
+  setTotalDue(sum);
     }
     fetchLaybys();
   }, [success]);
@@ -389,6 +392,7 @@ export default function LaybyManagement() {
   return (
     <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
       <h2 style={{ fontSize: '1.6rem', color: '#4caf50', textAlign: 'center', marginBottom: 20 }}>Layby Management</h2>
+  <div className="layby-total-due-banner">Total Layby Due: {formatCurrency(totalDue)}</div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <input
           type="text"

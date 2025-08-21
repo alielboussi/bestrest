@@ -16,6 +16,7 @@ function LaybyManagementMobile() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [totalDue, setTotalDue] = useState(0);
 
   // Simple currency formatter
   const formatCurrency = (amount, currency = 'K') => {
@@ -105,6 +106,12 @@ function LaybyManagementMobile() {
     }
     fetchLaybys();
   }, [locked]);
+
+  // Recompute total outstanding whenever laybys change
+  useEffect(() => {
+    const sum = (laybys || []).reduce((acc, l) => acc + Number(l.outstanding || 0), 0);
+    setTotalDue(sum);
+  }, [laybys]);
 
 
   // Password check handler
@@ -213,6 +220,7 @@ function LaybyManagementMobile() {
   return (
     <div className="layby-mobile-container">
       <div className="layby-mobile-title">Laybys (Mobile)</div>
+  <div className="layby-mobile-total-due">Total Layby Due: {formatCurrency(totalDue)}</div>
   {/* Backfill button removed — new Opening Balance flow already creates laybys */}
       <div className="layby-mobile-search">
         <input

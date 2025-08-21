@@ -12,13 +12,36 @@ export function buildLaybyPdfNaming(layby, customerName) {
   return { bucket, fileName, filePath };
 }
 
-function openUrl(url) {
+async function downloadFromUrl(url, fileName) {
+  // Try to fetch and force a blob download (works better on Android WebView)
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (res && res.ok) {
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName || 'Layby.pdf';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try { URL.revokeObjectURL(objectUrl); } catch {}
+        a.remove();
+      }, 4000);
+      return true;
+    }
+  } catch {
+    // ignore and fallback
+  }
+  // Fallback: try opening the signed URL directly
   try {
     const opened = window.open(url, '_blank');
     if (!opened) window.location.href = url;
   } catch {
     window.location.href = url;
   }
+  return false;
 }
 
 // Opens the existing layby PDF if present; otherwise generates, uploads, then opens it.
@@ -32,7 +55,7 @@ export async function openOrCreateLaybyPdf(layby, customersMap = {}) {
       .from(bucket)
       .createSignedUrl(filePath, 7 * 24 * 60 * 60);
     if (signed?.signedUrl) {
-      openUrl(signed.signedUrl);
+      await downloadFromUrl(signed.signedUrl, fileName);
       return signed.signedUrl;
     }
   } catch {
@@ -101,7 +124,7 @@ export async function openOrCreateLaybyPdf(layby, customersMap = {}) {
   try { await supabase.from('layby_view').update({ Layby_URL: finalUrl }).eq('id', layby.id); } catch {}
 
   if (finalUrl) {
-    openUrl(finalUrl);
+    await downloadFromUrl(finalUrl, fileName);
     return finalUrl;
   }
 
