@@ -204,19 +204,26 @@
 }
 
 /* Total Due banner (mobile) */
-.layby-mobile-total-due {
+.layby-mobile-totals {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
   margin: 8px auto 10px auto;
   max-width: 430px;
   width: 100%;
+}
+.layby-mobile-total-box {
+  flex: 1 1 0;
   background: #2a1b1b;
   border: 1px solid #5a2b2b;
-  color: #ff5252;
+  color: #ff6b6b;
   font-weight: 800;
-  text-align: center;
   padding: 8px 10px;
   border-radius: 8px;
   box-sizing: border-box;
 }
+.layby-mobile-total-box.k { text-align: left; }
+.layby-mobile-total-box.usd { text-align: right; }
 .layby-mobile-search-input {
   width: 100%;
   box-sizing: border-box;

@@ -33,17 +33,24 @@
 }
 
 /* Total Due banner (desktop) */
-.layby-total-due-banner {
+.layby-total-due-banner-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px auto 14px auto;
+  max-width: 760px;
+}
+.layby-total-box {
+  flex: 1 1 0;
   background: #2a1b1b;
   border: 1px solid #5a2b2b;
   color: #ff6b6b;
   font-weight: 800;
-  text-align: center;
   padding: 10px 12px;
   border-radius: 10px;
-  margin: 6px auto 14px auto;
-  max-width: 560px;
 }
+.layby-total-box.k { text-align: left; }
+.layby-total-box.usd { text-align: right; }
 .layby-mgmt-container table {
   width: 100%;
   border-collapse: collapse;

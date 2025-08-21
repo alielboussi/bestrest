@@ -1,6 +1,8 @@
 import supabase from './supabase';
 import { exportLaybyPDF } from './exportLaybyUtils';
 
+const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 // Utility to build safe filename and storage path for a layby PDF
 export function buildLaybyPdfNaming(layby, customerName) {
   const safeName = (customerName || 'Customer')
@@ -12,36 +14,28 @@ export function buildLaybyPdfNaming(layby, customerName) {
   return { bucket, fileName, filePath };
 }
 
+function withDownloadParam(url, fileName) {
+  const param = 'download=' + encodeURIComponent(fileName || 'Layby.pdf');
+  return url.includes('?') ? `${url}&${param}` : `${url}?${param}`;
+}
+
 async function downloadFromUrl(url, fileName) {
-  // Try to fetch and force a blob download (works better on Android WebView)
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (res && res.ok) {
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = fileName || 'Layby.pdf';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        try { URL.revokeObjectURL(objectUrl); } catch {}
-        a.remove();
-      }, 4000);
-      return true;
-    }
-  } catch {
-    // ignore and fallback
+  const urlWithDownload = withDownloadParam(url, fileName);
+  if (isAndroid) {
+    // Most reliable on Android WebView: navigate current tab to a URL that forces download
+    window.location.href = urlWithDownload;
+    return true;
   }
-  // Fallback: try opening the signed URL directly
-  try {
-    const opened = window.open(url, '_blank');
-    if (!opened) window.location.href = url;
-  } catch {
-    window.location.href = url;
-  }
-  return false;
+  // Desktop and other browsers: try anchor download first
+  const a = document.createElement('a');
+  a.href = urlWithDownload;
+  a.download = fileName || 'Layby.pdf';
+  a.rel = 'noopener noreferrer';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 2000);
+  return true;
 }
 
 // Opens the existing layby PDF if present; otherwise generates, uploads, then opens it.

@@ -35,7 +35,7 @@ export default function LaybyManagement() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showPdfPrompt, setShowPdfPrompt] = useState(false);
-  const [totalDue, setTotalDue] = useState(0);
+  const [totals, setTotals] = useState({ K: 0, USD: 0 });
   // Payments editor modal state
   const [paymentEditLayby, setPaymentEditLayby] = useState(null); // layby object
   const [paymentRows, setPaymentRows] = useState([]);
@@ -85,6 +85,39 @@ export default function LaybyManagement() {
     const formatted = n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return `${currency} ${formatted}`;
   };
+
+  // After any payment change, check whether the layby is fully paid and flip statuses accordingly
+  async function reconcileLaybyStatus(laybyLike) {
+    try {
+      const saleId = Number(laybyLike.sale_id);
+      // Fetch sale with down payment and total
+      const [{ data: saleRow }, { data: pays }] = await Promise.all([
+        supabase.from('sales').select('id, total_amount, down_payment, status').eq('id', saleId).single(),
+        supabase.from('sales_payments').select('amount').eq('sale_id', saleId),
+      ]);
+      const total = Number(saleRow?.total_amount || 0);
+      const down = Number(saleRow?.down_payment || 0);
+      const paidExtra = (pays || []).reduce((acc, r) => acc + Number(r.amount || 0), 0);
+      const outstanding = total - (down + paidExtra);
+      const isCleared = outstanding <= 0.009; // small epsilon for rounding
+
+      if (isCleared) {
+        // Mark sale as completed and layby as completed
+        await Promise.all([
+          supabase.from('sales').update({ status: 'completed' }).eq('id', saleId),
+          supabase.from('laybys').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', laybyLike.id),
+        ]);
+      } else {
+        // Ensure sale/layby show as active layby
+        await Promise.all([
+          supabase.from('sales').update({ status: 'layby' }).eq('id', saleId),
+          supabase.from('laybys').update({ status: 'active', updated_at: new Date().toISOString() }).eq('id', laybyLike.id),
+        ]);
+      }
+    } catch (e) {
+      console.warn('reconcileLaybyStatus failed:', e?.message || e);
+    }
+  }
 
   // Fetch all layby sales with outstanding balances
   useEffect(() => {
@@ -166,8 +199,13 @@ export default function LaybyManagement() {
         };
       });
       setLaybys(laybyList);
-  const sum = (laybyList || []).reduce((acc, l) => acc + Number(l.outstanding || 0), 0);
-  setTotalDue(sum);
+      const t = { K: 0, USD: 0 };
+      (laybyList || []).forEach(l => {
+        const cur = l.customerInfo?.currency || 'K';
+        const code = (cur === '$' || cur === 'USD') ? 'USD' : 'K';
+        t[code] += Number(l.outstanding || 0);
+      });
+      setTotals(t);
     }
     fetchLaybys();
   }, [success]);
@@ -236,8 +274,9 @@ export default function LaybyManagement() {
         if (upErr) throw upErr;
       }
 
-      // Touch layby updated_at so ordering refreshes
-      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', selectedLayby.id);
+  // Touch layby and reconcile statuses
+  await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', selectedLayby.id);
+  await reconcileLaybyStatus(selectedLayby);
 
       setSuccess('Payment added!');
     } catch (ex) {
@@ -358,8 +397,9 @@ export default function LaybyManagement() {
           .eq('id', id);
         if (upErr) throw upErr;
       }
-      // Touch layby updated_at so list refreshes calculations
-      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+  // Touch layby and reconcile statuses
+  await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+  await reconcileLaybyStatus(paymentEditLayby);
       setSuccess('Payments updated.');
       setPaymentEditLayby(null);
       setPaymentRows([]);
@@ -380,7 +420,8 @@ export default function LaybyManagement() {
       const { error } = await supabase.from('sales_payments').delete().eq('id', id);
       if (error) throw error;
       setPaymentRows(prev => prev.filter(r => r.id !== id));
-      await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+  await supabase.from('laybys').update({ updated_at: new Date().toISOString() }).eq('id', paymentEditLayby.id);
+  await reconcileLaybyStatus(paymentEditLayby);
       setSuccess('Payment deleted.');
     } catch (e) {
       setPaymentsErr(e?.message || 'Failed to delete payment');
@@ -392,7 +433,10 @@ export default function LaybyManagement() {
   return (
     <div className="layby-mgmt-container" style={{ maxWidth: 1050, margin: '32px auto', background: '#181c20', borderRadius: 14, padding: '24px 12px 18px 12px', boxShadow: '0 2px 12px rgba(0,0,0,0.13)' }}>
       <h2 style={{ fontSize: '1.6rem', color: '#4caf50', textAlign: 'center', marginBottom: 20 }}>Layby Management</h2>
-  <div className="layby-total-due-banner">Total Layby Due: {formatCurrency(totalDue)}</div>
+      <div className="layby-total-due-banner-row">
+        <div className="layby-total-box k">K {Number(totals.K || 0).toLocaleString()}</div>
+        <div className="layby-total-box usd">$ {Number(totals.USD || 0).toLocaleString()}</div>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <input
           type="text"

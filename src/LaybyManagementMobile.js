@@ -16,7 +16,7 @@ function LaybyManagementMobile() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [totalDue, setTotalDue] = useState(0);
+  const [totals, setTotals] = useState({ K: 0, USD: 0 });
 
   // Simple currency formatter
   const formatCurrency = (amount, currency = 'K') => {
@@ -107,10 +107,15 @@ function LaybyManagementMobile() {
     fetchLaybys();
   }, [locked]);
 
-  // Recompute total outstanding whenever laybys change
+  // Recompute totals by currency whenever laybys change
   useEffect(() => {
-    const sum = (laybys || []).reduce((acc, l) => acc + Number(l.outstanding || 0), 0);
-    setTotalDue(sum);
+    const next = { K: 0, USD: 0 };
+    (laybys || []).forEach(l => {
+      const cur = l.sale_currency || l.customerInfo?.currency || 'K';
+      const code = (cur === '$' || cur === 'USD') ? 'USD' : 'K';
+      next[code] += Number(l.outstanding || 0);
+    });
+    setTotals(next);
   }, [laybys]);
 
 
@@ -220,7 +225,10 @@ function LaybyManagementMobile() {
   return (
     <div className="layby-mobile-container">
       <div className="layby-mobile-title">Laybys (Mobile)</div>
-  <div className="layby-mobile-total-due">Total Layby Due: {formatCurrency(totalDue)}</div>
+      <div className="layby-mobile-totals">
+        <div className="layby-mobile-total-box k">K {Number(totals.K || 0).toLocaleString()}</div>
+        <div className="layby-mobile-total-box usd">$ {Number(totals.USD || 0).toLocaleString()}</div>
+      </div>
   {/* Backfill button removed — new Opening Balance flow already creates laybys */}
       <div className="layby-mobile-search">
         <input
