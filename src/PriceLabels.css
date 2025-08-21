@@ -25,13 +25,29 @@
 /* Print-only layout */
 @media print {
   html, body, .price-labels-page { background: #fff !important; color: #111 !important; }
+  .price-labels-page { padding: 0 !important; }
   /* Ensure colors render as-designed */
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* Remove any default margins browsers might inject */
-  body { margin: 0 !important; }
+  html, body { margin: 0 !important; padding: 0 !important; }
+  /* Remove scrollbars in print */
+  html, body { overflow: hidden !important; height: auto !important; }
+  .price-labels-page, .labels-a4 { overflow: visible !important; }
+  *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+  * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
   /* hide UI chrome */
   .label-search-bar, .label-selected-table, .label-actions { display: none !important; }
-  .labels-a4 { display: block !important; }
+  /* hide the global Back to Dashboard floating button */
+  button[aria-label="Back to Dashboard"], button[title="Back to Dashboard"] { display: none !important; }
+  .labels-a4 { display: block !important; width: 210mm !important; margin: 0 auto !important; padding: 0 !important; }
+  /* Prevent splitting of sheet/labels in some engines */
+  .a4-pair { page-break-inside: avoid !important; break-inside: avoid-page !important; height: 297mm !important; }
+  .a4-label { page-break-inside: avoid !important; break-inside: avoid !important; }
+  /* Avoid overflow from decorative elements in print */
+  .a4-label + .a4-label::before { display: none !important; }
+  /* Page breaks only between non-last pages to avoid trailing blanks */
+  .a4-pair { break-after: auto !important; page-break-after: auto !important; }
+  .a4-pair:not(:last-child) { break-after: page !important; page-break-after: always !important; }
 }
 
 /* A4 page container (one physical sheet) */
@@ -42,14 +58,13 @@
   box-sizing: border-box;
   background: #fff;
   display: block; /* avoid flex rounding in some print engines */
-  break-after: page; /* modern equivalent of page-break-after */
   overflow: hidden; /* prevent bleed */
 }
 
 /* Each label is exactly half the A4 height */
 .a4-label {
   width: 100%;
-  height: 148.5mm; /* exactly half of A4 (297/2) */
+  height: 148mm; /* half of adjusted A4 height */
   box-sizing: border-box;
   display: block; /* stable block sizing in print */
   position: relative;
@@ -59,9 +74,7 @@
 }
 
 /* Cut line between labels on each page */
-.a4-label + .a4-label {
-  border-top: 0.6mm dashed rgba(0,0,0,0.35);
-}
+.a4-label + .a4-label { border-top: 0.6mm dashed rgba(0,0,0,0.35); }
 /* Scissors icon on the cut line */
 .a4-label + .a4-label::before {
   content: '✂';

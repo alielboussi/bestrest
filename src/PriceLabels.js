@@ -33,16 +33,9 @@ const PriceLabels = () => {
     const q = search.toLowerCase();
     const p = products.filter((x) => (x.name || '').toLowerCase().includes(q));
     const s = combos.filter((c) => (c.combo_name || '').toLowerCase().includes(q));
-    // Build quick matchers to avoid duplicates: if a combo matches the same SKU or exact name, prefer the set
-    const comboNames = new Set(s.map(c => (c.combo_name || '').toLowerCase()));
-    const comboSkus = new Set(s.map(c => (c.sku || '').toString()));
-    const pFiltered = p.filter(prod => {
-      const n = (prod.name || '').toLowerCase();
-      const sku = (prod.sku || '').toString();
-      return !(comboNames.has(n) || (sku && comboSkus.has(sku)));
-    });
+    // Do not de-duplicate; allow selecting both a product and a set even if names/SKUs match
     setSearchResults([
-      ...pFiltered.map((x) => ({ type: 'product', id: x.id, data: x })),
+      ...p.map((x) => ({ type: 'product', id: x.id, data: x })),
       ...s.map((c) => ({ type: 'set', id: c.id, data: c })),
     ]);
   }, [search, products, combos]);
@@ -63,14 +56,7 @@ const PriceLabels = () => {
 
   const getComboComponents = (comboId) => comboItems.filter((c) => c.combo_id === comboId);
 
-  // If a product corresponds to a combo (by matching SKU or name), return its components
-  const getProductComboComponents = (product) => {
-    if (!product) return [];
-    const bySku = (product.sku && combos.find((c) => (c.sku || '').toString() === (product.sku || '').toString())) || null;
-    const byName = (!bySku && product.name && combos.find((c) => (c.combo_name || '').toLowerCase() === (product.name || '').toLowerCase())) || null;
-    const matched = bySku || byName;
-    return matched ? getComboComponents(matched.id) : [];
-  };
+  // Note: Do not infer combo components for standalone products. Only explicit sets show components.
 
   const formatCurrency = (v) => (v === null || v === undefined || v === '' ? '' : `K ${Number(v).toLocaleString()}`);
   const getDiscountPercent = (oldP, promoP) => {
@@ -80,16 +66,22 @@ const PriceLabels = () => {
   };
 
   // Expand selection by qty and create label pairs (2 per page)
+  // - Mix products and sets in sequence
+  // - If total is odd, the last page will contain a single label (second half blank)
   const expanded = selected.flatMap((s) => Array(s.qty || 1).fill(s));
   const pairs = [];
-  for (let i = 0; i < expanded.length; i += 2) pairs.push(expanded.slice(i, i + 2));
+  for (let i = 0; i < expanded.length; i += 2) pairs.push([expanded[i], expanded[i + 1] || null]);
+
+  // Always render two halves per sheet; if the second item is null we render an empty placeholder.
+  // This guarantees the dashed cut line appears even when only one label is selected.
 
   // Render a single label - matches CSS layout
   const LabelCard = ({ item }) => {
-    if (!item) return <div className="label-card" />;
-    const isProduct = item.type === 'product';
-    const data = item.data;
-  const components = item.type === 'set' ? getComboComponents(item.id) : getProductComboComponents(data);
+  if (!item) return <div className="label-card" />; // placeholder to keep half-page blank only on last page
+  const isProduct = item.type === 'product';
+  const data = item.data;
+  // Only show components when the selected item is a set
+  const components = item.type === 'set' ? getComboComponents(item.id) : [];
     const oldPrice = isProduct ? data.price : data.standard_price || data.combo_price;
     const promoPrice = data.promotional_price;
     const hasPromo = promoPrice || promoPrice === 0;

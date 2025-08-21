@@ -88,10 +88,10 @@
   line-height: 1.1;
 }
 /* Explicit column widths for compactness */
-.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { width: 90px; max-width: 100px; }
-.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { width: 60px; max-width: 70px; }
-.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { width: 60px; max-width: 70px; }
-.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { width: 60px; max-width: 70px; }
+.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { width: 40%; }
+.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { width: 20%; }
+.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { width: 20%; }
+.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { width: 20%; }
 
 .transfer-table th {
   background: #23272f;
@@ -121,10 +121,12 @@
   text-align: center;
 }
 /* Compact columns for no slider */
-.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { max-width: 60px; }
-.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { max-width: 30px; }
-.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { max-width: 28px; }
-.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { max-width: 50px; }
+/* Relax compact overrides to allow the Add button */
+.transfer-table th:nth-child(1), .transfer-table td:nth-child(1) { max-width: none; }
+.transfer-table th:nth-child(2), .transfer-table td:nth-child(2) { max-width: none; }
+.transfer-table th:nth-child(3), .transfer-table td:nth-child(3) { max-width: none; }
+.transfer-table th:nth-child(4), .transfer-table td:nth-child(4) { max-width: none; }
+/* removed 5th column */
 
 .transfer-submit-btn {
   background: #00b4d8;
