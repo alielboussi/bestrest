@@ -41,6 +41,7 @@ export default function LaybyManagement() {
   const [paymentRows, setPaymentRows] = useState([]);
   const [paymentsBusy, setPaymentsBusy] = useState(false);
   const [paymentsErr, setPaymentsErr] = useState('');
+  const [addAnchor, setAddAnchor] = useState(null); // {top, left, width, height}
   // Helper: upload generated PDF to Supabase storage and try to cache its public URL
   const uploadLaybyPDF = async (layby, doc, customersMapLike) => {
     let triggered = false;
@@ -474,9 +475,9 @@ export default function LaybyManagement() {
                 <td className="num-col">{formatCurrency(layby.paid, layby.customerInfo?.currency || 'K')}</td>
                 <td className="num-col">{formatCurrency(layby.outstanding, layby.customerInfo?.currency || 'K')}</td>
         <td className="actions-col" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <button
-          style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 100, maxWidth: 120 }}
-                    onClick={() => setSelectedLayby(layby)}
+      <button
+    style={{ background: '#00bfff', color: '#fff', borderRadius: 4, padding: '2px 6px', fontWeight: 600, fontSize: '0.78rem', minWidth: 100, maxWidth: 120 }}
+        onClick={(e) => { setSelectedLayby(layby); const r = e.currentTarget.getBoundingClientRect(); setAddAnchor({ top: r.top + window.scrollY, left: r.left + window.scrollX, width: r.width, height: r.height }); }}
                     disabled={(layby.outstanding === 0 && !(Number(layby.customerInfo?.opening_balance || 0) > 0)) || (JSON.parse(localStorage.getItem('user'))?.role === 'user')}
                   >
                     Add Payment
@@ -505,22 +506,38 @@ export default function LaybyManagement() {
           </tbody>
         </table>
       </div>
-      {selectedLayby && (
-        <form onSubmit={handleAddPayment} style={{ marginTop: 24, background: '#23272f', padding: 18, borderRadius: 8 }}>
-          <h3>Add Payment for {selectedLayby.customerInfo?.name}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
-            <input type="number" placeholder="Amount" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required style={{ width: '100%' }} />
-            <input type="date" placeholder="Date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required style={{ width: '100%' }} />
-            <select value={paymentType} onChange={e => setPaymentType(e.target.value)} style={{ width: '100%' }}>
-              {allowedPaymentTypes.map(t => (
-                <option key={t} value={t}>{paymentTypeLabels[t]}</option>
-              ))}
-            </select>
-            <input type="text" placeholder="Receipt #" value={receipt} onChange={e => setReceipt(e.target.value)} style={{ width: '100%' }} />
-          </div>
-          <button type="submit" disabled={loading}>{loading ? "Processing..." : "Add Payment"}</button>
-          <button type="button" style={{ marginLeft: 8 }} onClick={() => setSelectedLayby(null)}>Cancel</button>
-        </form>
+      {selectedLayby && addAnchor && (
+        <div className="layby-modal-overlay" onClick={(e) => { if (e.target.classList.contains('layby-modal-overlay')) { setSelectedLayby(null); setAddAnchor(null); } }}>
+          <form className="layby-popover" onSubmit={handleAddPayment} style={{ position: 'absolute', top: addAnchor.top, left: addAnchor.left, transform: 'translate(-10%, -110%)', zIndex: 10001 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Add Payment – {selectedLayby.customerInfo?.name}</h3>
+            <div className="layby-form-grid">
+              <div className="layby-form-field">
+                <label>Amount</label>
+                <input type="number" step="0.01" placeholder="0.00" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} required />
+              </div>
+              <div className="layby-form-field">
+                <label>Date</label>
+                <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} required />
+              </div>
+              <div className="layby-form-field">
+                <label>Type</label>
+                <select value={paymentType} onChange={e => setPaymentType(e.target.value)}>
+                  {allowedPaymentTypes.map(t => (
+                    <option key={t} value={t}>{paymentTypeLabels[t]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="layby-form-field">
+                <label>Receipt #</label>
+                <input type="text" placeholder="Optional" value={receipt} onChange={e => setReceipt(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button type="button" onClick={() => { setSelectedLayby(null); setAddAnchor(null); }} style={{ background: '#444' }}>Cancel</button>
+              <button type="submit" disabled={loading}>{loading ? 'Processing…' : 'Add Payment'}</button>
+            </div>
+          </form>
+        </div>
       )}
       {paymentEditLayby && (
         <div className="pdf-modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

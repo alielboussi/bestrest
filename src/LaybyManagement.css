@@ -116,6 +116,59 @@
 .layby-mgmt-container button:hover {
   background: #0099cc;
 }
+
+/* Add Payment Modal */
+.layby-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+  z-index: 10000;
+}
+.layby-modal-content {
+  background: #23272f;
+  border-radius: 10px;
+  width: min(680px, 92vw);
+  padding: 16px;
+  box-shadow: 0 2px 18px rgba(0,0,0,0.3);
+}
+.layby-popover {
+  background: #23272f;
+  border-radius: 10px;
+  width: 520px;
+  max-width: 96vw;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  border: 1px solid #333;
+}
+.layby-popover::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 18%;
+  border-width: 8px 8px 0 8px;
+  border-style: solid;
+  border-color: #23272f transparent transparent transparent;
+  filter: drop-shadow(0 -1px 0 #333);
+}
+.layby-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.layby-form-field { display: flex; flex-direction: column; gap: 6px; }
+.layby-form-field label { font-size: 0.9rem; color: #9aa4b2; }
+.layby-form-field input, .layby-form-field select {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1f2430;
+  color: #fff;
+}
+@media (max-width: 640px) { .layby-form-grid { grid-template-columns: 1fr; } }
 @media (max-width: 900px) {
   .layby-mgmt-container {
     padding: 2vw 1vw;
