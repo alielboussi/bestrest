@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getMaxSetQty as calcMaxSetQty, selectPrice, formatAmount } from './utils/setInventoryUtils';
 import supabase from './supabase';
 import './StockReportMobile.css';
@@ -55,12 +55,12 @@ const StockReportMobile = () => {
     const loc = locId === undefined || locId === null ? '' : locId;
     // Sum from product_locations
     const fromPL = productLocations
-      .filter(pl => pl.product_id === productId && (!loc || pl.location_id == loc))
+      .filter(pl => String(pl.product_id) === String(productId) && (!loc || String(pl.location_id) === String(loc)))
       .reduce((sum, pl) => sum + (Number(pl.quantity) || 0), 0);
     if (fromPL > 0) return fromPL;
     // Fallback to inventory table (supports fields: location or location_id)
     const fromInv = inventory
-      .filter(inv => inv.product_id === productId && (!loc || inv.location == loc || inv.location_id == loc))
+      .filter(inv => String(inv.product_id) === String(productId) && (!loc || String(inv.location) === String(loc) || String(inv.location_id) === String(loc)))
       .reduce((sum, inv) => sum + (Number(inv.quantity) || 0), 0);
     return fromInv;
   }
@@ -95,33 +95,41 @@ const StockReportMobile = () => {
   }
 
   // Filter products: only show if stock remains after sets
-  const filteredProducts = products.filter(p => {
-    const totalStock = getStockForProduct(p.id, location || '');
-    // Hide a component if all its stock would be consumed by buildable sets
-    const isSetComponent = comboItems.some(ci => ci.product_id === p.id && comboSetQty.has(ci.combo_id));
-    if (isSetComponent) {
-      const remaining = totalStock - (usedStock[p.id] || 0);
-      if (remaining <= 0) return false;
-    }
-    const matchesCategory = !category || p.category_id === Number(category);
-    const searchValue = search.trim().toLowerCase();
-    const matchesSearch = !searchValue || (p.name && p.name.toLowerCase().includes(searchValue));
-    return matchesCategory && matchesSearch;
-  });
+  const filteredProducts = useMemo(() => {
+    const searchValue = (search || '').trim().toLowerCase();
+    return products.filter(p => {
+      const totalStock = getStockForProduct(p.id, location || '');
+      // Hide a component if all its stock would be consumed by buildable sets
+      const isSetComponent = comboItems.some(ci => String(ci.product_id) === String(p.id) && comboSetQty.has(ci.combo_id));
+      if (isSetComponent) {
+        const remaining = totalStock - (usedStock[p.id] || 0);
+        if (remaining <= 0) return false;
+      }
+      const matchesCategory = !category || String(p.category_id) === String(category);
+      const matchesSearch = !searchValue || (p.name && p.name.toLowerCase().includes(searchValue));
+      return matchesCategory && matchesSearch;
+    });
+  }, [products, comboItems, comboSetQty, usedStock, getStockForProduct, location, category, search]);
 
   // Filter combos: show sets available at location (if selected) and matching search
-  const filteredCombos = combos.filter(c => {
-    if (location) {
-      const linked = (comboLocations || []).some(cl => String(cl.combo_id) === String(c.id) && String(cl.location_id) === String(location));
-      if (!linked) return false;
-    }
-    const searchValue = search.trim().toLowerCase();
-    if (searchValue) {
-      const matches = (c.combo_name && c.combo_name.toLowerCase().includes(searchValue)) || (c.sku && c.sku.toLowerCase().includes(searchValue));
-      if (!matches) return false;
-    }
-    return true;
-  });
+  const filteredCombos = useMemo(() => {
+    const searchValue = (search || '').trim().toLowerCase();
+    return combos.filter(c => {
+      if (location) {
+        const linked = (comboLocations || []).some(cl => String(cl.combo_id) === String(c.id) && String(cl.location_id) === String(location));
+        if (!linked) return false;
+      }
+      // Combos have their own categories: show only if All Categories is selected or category matches combo.category_id
+      if (category) {
+        if (String(c.category_id) !== String(category)) return false;
+      }
+      if (searchValue) {
+        const matches = (c.combo_name && c.combo_name.toLowerCase().includes(searchValue)) || (c.sku && c.sku.toLowerCase().includes(searchValue));
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [combos, comboLocations, location, category, search]);
 
   const toggleComboExpanded = (id) => {
     setExpandedCombos(prev => {
