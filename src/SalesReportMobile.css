@@ -61,6 +61,39 @@
   font-weight: 700;
   padding: 10px 14px;
 }
+/* Summary cards */
+.sr-mobile-summary {
+  padding: 12px 3vw 4px 3vw;
+}
+.sr-mobile-summary-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.sr-mobile-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.sr-mobile-summary-card {
+  background: #1a1f29;
+  border-radius: 8px;
+  border: 1px solid #334;
+  padding: 10px;
+  color: #e8eef7;
+}
+.sr-mobile-summary-card .curr {
+  color: #00bfff;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.sr-mobile-summary-card .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 2px 0;
+}
+.sr-mobile-summary-card .row.total b { color: #00e676; }
 @media (max-width: 430px) {
   .sr-mobile-filters { grid-template-columns: 1fr; }
   .sr-mobile-table { width: 760px; }

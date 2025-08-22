@@ -1,3 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">BestrestSales</string>
+    <string name="app_name">Bestrest Sales</string>
+    <string name="sales_url">https://bestrest-delta.vercel.app/sales-report-mobile</string>
 </resources>

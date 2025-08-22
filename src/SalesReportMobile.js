@@ -13,6 +13,8 @@ export default function SalesReportMobile() {
   const [receiptNumber, setReceiptNumber] = useState('');
   const [paymentType, setPaymentType] = useState('all');
   const [locations, setLocations] = useState([]);
+  const [laybyPaidMap, setLaybyPaidMap] = useState({}); // sale_id -> paid (down + payments)
+  const [laybyTotalMap, setLaybyTotalMap] = useState({}); // sale_id -> layby total_amount
 
   useEffect(() => {
     (async () => {
@@ -24,6 +26,35 @@ export default function SalesReportMobile() {
       setCustomers(custs || []);
       setSales(salesRows || []);
       setLocations(locs || []);
+
+      // Build layby payment/total maps for quick lookup
+      const saleIds = Array.from(new Set((salesRows || []).map(r => Number(r.id)).filter(id => !isNaN(id))));
+      if (saleIds.length) {
+        const [{ data: laybys }, { data: pays }, { data: downs }] = await Promise.all([
+          supabase.from('laybys').select('sale_id, total_amount').in('sale_id', saleIds),
+          supabase.from('sales_payments').select('sale_id, amount').in('sale_id', saleIds),
+          supabase.from('sales').select('id, down_payment').in('id', saleIds),
+        ]);
+        const paymentsMap = (pays || []).reduce((acc, p) => {
+          const sid = Number(p.sale_id);
+          acc[sid] = (acc[sid] || 0) + Number(p.amount || 0);
+          return acc;
+        }, {});
+        const downMap = (downs || []).reduce((acc, s) => {
+          acc[Number(s.id)] = Number(s.down_payment || 0);
+          return acc;
+        }, {});
+        const totalsMap = (laybys || []).reduce((acc, l) => {
+          acc[Number(l.sale_id)] = Number(l.total_amount || 0);
+          return acc;
+        }, {});
+        const paidMap = Object.fromEntries(saleIds.map(id => [id, (downMap[id] || 0) + (paymentsMap[id] || 0)]));
+        setLaybyPaidMap(paidMap);
+        setLaybyTotalMap(totalsMap);
+      } else {
+        setLaybyPaidMap({});
+        setLaybyTotalMap({});
+      }
     })();
   }, []);
 
@@ -49,6 +80,18 @@ export default function SalesReportMobile() {
       return true;
     });
   }, [sales, dateFrom, dateTo, locationId, receiptNumber, customer, paymentType, search]);
+
+  // Helpers for layby amounts
+  function getPaidAmount(sale) {
+    if ((sale.status || '').toLowerCase() !== 'layby') return 0;
+    return Number(laybyPaidMap[Number(sale.id)] || 0);
+  }
+  function getPendingAmount(sale) {
+    if ((sale.status || '').toLowerCase() !== 'layby') return 0;
+    const total = Number(laybyTotalMap[Number(sale.id)] || sale.total_amount || 0);
+    const paid = getPaidAmount(sale);
+    return Math.max(0, total - paid);
+  }
 
   return (
     <div className="sr-mobile-container">
@@ -99,6 +142,43 @@ export default function SalesReportMobile() {
           </tbody>
         </table>
       </div>
+
+      {/* Summary by currency: Sales (Completed), Layby (Paid), Layby Pending, Total */}
+      {filtered.length > 0 && (
+        (() => {
+          const salesTotals = {}; // completed only
+          const laybyPaidTotals = {};
+          const laybyPendingTotals = {};
+          const amountTotals = {};
+          filtered.forEach(sale => {
+            const curr = sale.currency || 'N/A';
+            amountTotals[curr] = (amountTotals[curr] || 0) + (Number(sale.total_amount) || 0);
+            if ((sale.status || '').toLowerCase() === 'completed') {
+              salesTotals[curr] = (salesTotals[curr] || 0) + (Number(sale.total_amount) || 0);
+            } else if ((sale.status || '').toLowerCase() === 'layby') {
+              laybyPaidTotals[curr] = (laybyPaidTotals[curr] || 0) + getPaidAmount(sale);
+              laybyPendingTotals[curr] = (laybyPendingTotals[curr] || 0) + getPendingAmount(sale);
+            }
+          });
+          const currencies = Object.keys(amountTotals);
+          return (
+            <div className="sr-mobile-summary">
+              <div className="sr-mobile-summary-title">Totals by Currency</div>
+              <div className="sr-mobile-summary-grid">
+                {currencies.map(curr => (
+                  <div key={curr} className="sr-mobile-summary-card">
+                    <div className="curr">{curr}</div>
+                    <div className="row"><span>Sales (Completed)</span><b>{curr} {(salesTotals[curr] || 0).toLocaleString()}</b></div>
+                    <div className="row"><span>Layby (Paid)</span><b>{curr} {(laybyPaidTotals[curr] || 0).toLocaleString()}</b></div>
+                    <div className="row"><span>Layby Pending</span><b>{laybyPendingTotals[curr] ? `${curr} ${laybyPendingTotals[curr].toLocaleString()}` : '-'}</b></div>
+                    <div className="row total"><span>Total Amount</span><b>{curr} {amountTotals[curr].toLocaleString()}</b></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()
+      )}
 
       <div className="sr-mobile-actions">
         <button onClick={() => window.history.back()}>Back</button>
