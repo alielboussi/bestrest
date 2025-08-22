@@ -318,6 +318,7 @@ const SalesReport = () => {
         <thead>
           <tr>
             <th>Date</th>
+            <th>Receipt #</th>
             <th>Customer</th>
             <th>Total Amount</th>
             <th>Paid Amount</th>
@@ -343,9 +344,11 @@ const SalesReport = () => {
           {filteredSales.map((sale, idx) => {
             const isLayby = sale.status === 'layby';
             const paidAmount = isLayby ? getPaidAmount(sale) : (sale.status === 'completed' ? sale.total_amount : 0);
+      const receiptDisplay = sale.receipt_number || sale.id;
             return (
               <tr key={sale.id}>
                 <td>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
+        <td>{receiptDisplay}</td>
                 <td>{sale.customer?.name || ''}</td>
                 <td>{sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`}</td>
                 <td>{sale.currency && paidAmount ? `${sale.currency} ${Number(paidAmount).toLocaleString()}` : (sale.status === 'completed' ? (sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`) : '-')}</td>
@@ -388,6 +391,7 @@ const SalesReport = () => {
               const currencies = Object.keys(currencyTotals);
               return (
                 <tr style={{ background: '#ffe4e4', color: '#dc2626', fontWeight: 'bold' }}>
+                  <td></td>
                   <td></td>
                   <td>Total</td>
                   <td>{currencies.length === 1

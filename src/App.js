@@ -85,6 +85,7 @@ function App() {
   <Route path="/stocktake-report" element={<StocktakeReport />} />
   <Route path="/price-labels" element={<PriceLabels />} />
   <Route path="/price-labels-mobile" element={<PriceLabelMobile />} />
+  <Route path="/sales-report-mobile" element={React.createElement(require('./SalesReportMobile').default)} />
   {/* Removed desktop StockReport route; use /stock-report-mobile instead */}
   <Route path="/incomplete-packages" element={<IncompletePackages />} />
         <Route path="/transfer" element={<Transfer />} />
