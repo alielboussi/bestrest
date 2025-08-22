@@ -31,22 +31,54 @@ export default function PriceLabelMobile() {
     })();
   }, []);
 
-  // simple search with duplicate suppression when a product also exists as a set
+  // Enhanced search: by name, set name, SKU, and price (standard/promotional)
   useEffect(() => {
-    if (!search.trim()) return setSearchResults([]);
-    const q = search.toLowerCase();
-    const p = products.filter((x) => (x.name || '').toLowerCase().includes(q));
-    const s = combos.filter((c) => (c.combo_name || '').toLowerCase().includes(q));
-    const comboNames = new Set(s.map(c => (c.combo_name || '').toLowerCase()));
-    const comboSkus = new Set(s.map(c => (c.sku || '').toString()));
-    const pFiltered = p.filter(prod => {
+    const term = search.trim();
+    if (!term) { setSearchResults([]); return; }
+    const q = term.toLowerCase();
+    const digits = term.replace(/[^0-9.]/g, '');
+
+    const matchPrice = (val) => {
+      if (digits.length === 0) return false;
+      const n = Number(val);
+      if (isNaN(n)) return false;
+      const asRaw = String(Math.round(n * 100) / 100).replace(/\D/g, '');
+      const qRaw = digits.replace(/\D/g, '');
+      // loose match: substring of number without formatting
+      return asRaw.includes(qRaw);
+    };
+
+    const productMatches = (x) => {
+      const byName = (x.name || '').toLowerCase().includes(q);
+      const bySku = (x.sku || '').toString().toLowerCase().includes(q);
+      const byStd = matchPrice(x.price);
+      const byPromo = matchPrice(x.promotional_price);
+      return byName || bySku || byStd || byPromo;
+    };
+
+    const comboMatches = (c) => {
+      const byName = (c.combo_name || '').toLowerCase().includes(q);
+      const bySku = (c.sku || '').toString().toLowerCase().includes(q);
+      const byStd = matchPrice(c.standard_price || c.combo_price);
+      const byPromo = matchPrice(c.promotional_price);
+      return byName || bySku || byStd || byPromo;
+    };
+
+    const matchedProducts = products.filter(productMatches);
+    const matchedCombos = combos.filter(comboMatches);
+
+    // suppress duplicates where a product matches a set by same name or SKU
+    const comboNames = new Set(matchedCombos.map(c => (c.combo_name || '').toLowerCase()));
+    const comboSkus = new Set(matchedCombos.map(c => (c.sku || '').toString().toLowerCase()));
+    const pFiltered = matchedProducts.filter(prod => {
       const n = (prod.name || '').toLowerCase();
-      const sku = (prod.sku || '').toString();
+      const sku = (prod.sku || '').toString().toLowerCase();
       return !(comboNames.has(n) || (sku && comboSkus.has(sku)));
     });
+
     setSearchResults([
       ...pFiltered.map((x) => ({ type: 'product', id: x.id, data: x })),
-      ...s.map((c) => ({ type: 'set', id: c.id, data: c })),
+      ...matchedCombos.map((c) => ({ type: 'set', id: c.id, data: c })),
     ]);
   }, [search, products, combos]);
 
@@ -80,7 +112,7 @@ export default function PriceLabelMobile() {
   // Refs to label nodes for PDF
   const hiddenRenderRef = useRef(null);
 
-  const generateAndSharePdf = async ({ share = false } = {}) => {
+  const generatePdf = async () => {
     const container = hiddenRenderRef.current;
     if (!container) return;
     // Capture each A4 page (pair of labels) to keep layout identical to desktop at high resolution (~300 DPI)
@@ -119,19 +151,6 @@ export default function PriceLabelMobile() {
       doc.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm);
     }
 
-    if (share && navigator.canShare) {
-      const blob = doc.output('blob');
-      const file = new File([blob], 'price-labels.pdf', { type: 'application/pdf' });
-      try {
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ title: 'Price Labels', text: 'Price labels PDF', files: [file] });
-          return;
-        }
-      } catch (_) {
-        // fall through to download
-      }
-    }
-    // Fallback: download
     doc.save('price-labels.pdf');
   };
 
@@ -254,7 +273,7 @@ export default function PriceLabelMobile() {
       </section>
 
       <footer className="plm-actions">
-        <button disabled={expanded.length === 0} className="plm-btn primary" onClick={() => generateAndSharePdf({ share: true })}>Share as PDF</button>
+        <button disabled={expanded.length === 0} className="plm-btn primary" onClick={generatePdf}>Download PDF</button>
       </footer>
     </div>
   );
