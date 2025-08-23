@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import supabase from './supabase';
 import './SalesReportMobile.css';
 
+const noResultsStyle = { color: '#9aa4b2', textAlign: 'center' };
+
 export default function SalesReportMobile() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -66,13 +68,18 @@ export default function SalesReportMobile() {
     })();
   }, []);
 
+  // Helper to get the location ID from a sale object
+  function getLocationId(sale) {
+    return sale.location_id || (sale.location && sale.location.id) || '';
+  }
+
   const filtered = useMemo(() => {
     // Only show results when Receipt # is provided
     if (!receiptNumber) return [];
     return (sales || []).filter(sale => {
       if (dateFrom && sale.sale_date < dateFrom) return false;
       if (dateTo && sale.sale_date > dateTo) return false;
-      if (locationId && String(sale.location_id || sale.location?.id || '') !== String(locationId)) return false;
+      if (locationId && String(getLocationId(sale)) !== String(locationId)) return false;
       const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
       if (!rec.includes(receiptNumber.toLowerCase())) return false;
       return true;
@@ -102,9 +109,9 @@ export default function SalesReportMobile() {
         </select>
 
         <div className="date-field">
-          <label>From Date</label>
+            <span className="icon" aria-hidden="true">📅</span>
           <div className="date-input">
-            <span className="icon" aria-hidden>📅</span>
+            <span className="icon" aria-hidden="true">📅</span>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
           </div>
         </div>
@@ -169,7 +176,7 @@ export default function SalesReportMobile() {
                 <td>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
                 <td>{sale.receipt_number || sale.id}</td>
                 <td>{sale.customer?.name || ''}</td>
-                <td>{sale.currency ? `${sale.currency} ${Number(sale.total_amount).toLocaleString()}` : `N/A ${Number(sale.total_amount).toLocaleString()}`}</td>
+              <tr><td colSpan={5} style={noResultsStyle}>{receiptNumber ? 'No results' : 'Enter a Receipt # to search'}</td></tr>
                 <td>{sale.status}</td>
               </tr>
             ))}
