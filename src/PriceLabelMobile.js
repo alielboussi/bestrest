@@ -117,44 +117,61 @@ export default function PriceLabelMobile() {
     if (isGenerating) return;
     setIsGenerating(true);
     const container = hiddenRenderRef.current;
-    if (!container) return;
-    // Capture each A4 page (pair of labels) to keep layout identical to desktop at high resolution (~300 DPI)
+    if (!container) { setIsGenerating(false); return; }
     const labelNodes = Array.from(container.querySelectorAll('.a4-pair'));
     if (labelNodes.length === 0) { setIsGenerating(false); return; }
 
+    // Page constants
     const pageWidthMm = 210;
     const pageHeightMm = 297;
-    const targetDpi = 300; // High-resolution target
+    const targetDpi = 180; // Safer on mobile to avoid hangs (≈ 150–200 DPI is fine for labels)
     const mmToInch = (mm) => mm / 25.4;
-    const targetWidthPx = Math.round(mmToInch(pageWidthMm) * targetDpi);  // ≈ 2480
-    const targetHeightPx = Math.round(mmToInch(pageHeightMm) * targetDpi); // ≈ 3508
+    const targetWidthPx = Math.round(mmToInch(pageWidthMm) * targetDpi);
+    const targetHeightPx = Math.round(mmToInch(pageHeightMm) * targetDpi);
 
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  doc.setProperties({ title: 'Price Labels' });
-
-    let first = true;
-    for (const node of labelNodes) {
-      // Compute scale so the rendered canvas width matches our target 300 DPI width
-      const nodeWidthPx = node.offsetWidth || targetWidthPx; // fallback if not measurable
-      const scale = nodeWidthPx ? targetWidthPx / nodeWidthPx : 3; // default to x3 if unknown
-
-      const canvas = await html2canvas(node, {
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        foreignObjectRendering: true,
-        imageTimeout: 0,
-        scale,
-      });
-      // Convert to PNG for best clarity (avoids JPEG artifacts on text/QR)
-      const imgData = canvas.toDataURL('image/png');
-
-      if (!first) doc.addPage();
-      first = false;
-      // Full-bleed A4 page
-      doc.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm);
-    }
+    // Helper to render a node with a safe scale and a fallback path
+    const renderNode = async (node) => {
+      const nodeWidthPx = node.offsetWidth || targetWidthPx;
+      const computedScale = nodeWidthPx ? targetWidthPx / nodeWidthPx : 2;
+      const scale = Math.min(2.2, Math.max(1.5, computedScale));
+      try {
+        return await html2canvas(node, {
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          foreignObjectRendering: true,
+          imageTimeout: 0,
+          scale,
+        });
+      } catch (e) {
+        // Fallback: turn off foreignObjectRendering for better stability
+        return await html2canvas(node, {
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          allowTaint: true,
+          foreignObjectRendering: false,
+          imageTimeout: 0,
+          scale: Math.max(1.25, scale - 0.5),
+        });
+      }
+    };
 
     try {
+      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      doc.setProperties({ title: 'Price Labels' });
+
+      let first = true;
+      for (const node of labelNodes) {
+        // Yield to UI loop to avoid long blocking on mobile
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 0));
+        // eslint-disable-next-line no-await-in-loop
+        const canvas = await renderNode(node);
+        const imgData = canvas.toDataURL('image/png');
+        if (!first) doc.addPage();
+        first = false;
+        doc.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm, undefined, 'FAST');
+      }
+
       // Build a Blob of the PDF
       const pdfBlob = doc.output('blob');
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -167,17 +184,21 @@ export default function PriceLabelMobile() {
         .upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf', cacheControl: '3600' });
       if (upErr) throw upErr;
 
-      // Get a public URL (if bucket is public) or a signed URL
-      let url = supabase.storage.from('labels').getPublicUrl(path)?.data?.publicUrl || '';
-      if (!url) {
-        const { data: signed, error: signErr } = await supabase.storage.from('labels').createSignedUrl(path, 60 * 60);
-        if (signErr) throw signErr;
+      // Always use a signed URL to avoid public policy ambiguity
+      let url = '';
+      const { data: signed, error: signErr } = await supabase.storage.from('labels').createSignedUrl(path, 60 * 60);
+      if (signErr) {
+        // Fallback to public URL if signing fails (e.g., public bucket)
+        url = supabase.storage.from('labels').getPublicUrl(path)?.data?.publicUrl || '';
+        if (!url) throw signErr;
+      } else {
         url = signed.signedUrl;
       }
 
       // Trigger download on the phone; fetch to bypass cross-origin download attribute limitations
       try {
         const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`Download HTTP ${resp.status}`);
         const fetchedBlob = await resp.blob();
         const dlUrl = URL.createObjectURL(fetchedBlob);
         const a = document.createElement('a');

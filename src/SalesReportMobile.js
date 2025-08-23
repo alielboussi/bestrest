@@ -8,10 +8,10 @@ export default function SalesReportMobile() {
   // Customers filter removed per request
   const [sales, setSales] = useState([]);
   const [locationId, setLocationId] = useState('');
-  const [receiptNumber, setReceiptNumber] = useState('');
   const [locations, setLocations] = useState([]);
   const [laybyPaidMap, setLaybyPaidMap] = useState({}); // sale_id -> paid (down + payments)
   const [laybyTotalMap, setLaybyTotalMap] = useState({}); // sale_id -> layby total_amount
+  const [salesCostMap, setSalesCostMap] = useState({}); // sale_id -> { currency: costSum }
 
   useEffect(() => {
     (async () => {
@@ -67,9 +67,40 @@ export default function SalesReportMobile() {
         const paidMap = Object.fromEntries(saleIds.map(id => [id, (downMap[id] || 0) + (paymentsMap[id] || 0)]));
         setLaybyPaidMap(paidMap);
         setLaybyTotalMap(totalsMap);
+
+        // Build sale cost map (COGS): sum of product cost_price * quantity per sale and currency
+        const { data: saleItems } = await supabase
+          .from('sales_items')
+          .select('sale_id, product_id, quantity')
+          .in('sale_id', saleIds);
+        const productIds = Array.from(new Set((saleItems || []).map(it => it.product_id).filter(Boolean)));
+        let productsMap = {};
+        if (productIds.length) {
+          const { data: prods } = await supabase
+            .from('products')
+            .select('id, cost_price, currency')
+            .in('id', productIds);
+          productsMap = (prods || []).reduce((acc, p) => {
+            acc[p.id] = { cost: Number(p.cost_price || 0), currency: p.currency || 'N/A' };
+            return acc;
+          }, {});
+        }
+        const costMap = {};
+        (saleItems || []).forEach(it => {
+          const sid = Number(it.sale_id);
+          const prod = productsMap[it.product_id];
+          if (!prod) return;
+          const qty = Number(it.quantity || 0);
+          const cost = (prod.cost || 0) * (isNaN(qty) ? 0 : qty);
+          const curr = prod.currency || 'N/A';
+          if (!costMap[sid]) costMap[sid] = {};
+          costMap[sid][curr] = (costMap[sid][curr] || 0) + cost;
+        });
+        setSalesCostMap(costMap);
       } else {
         setLaybyPaidMap({});
         setLaybyTotalMap({});
+        setSalesCostMap({});
       }
     })();
   }, []);
@@ -92,15 +123,7 @@ export default function SalesReportMobile() {
     });
   }, [sales, dateFrom, dateTo, locationId]);
 
-  const receiptMatches = useMemo(() => {
-    // Optional receipt lookup: independent of totals
-    if (!receiptNumber) return [];
-    const recLower = receiptNumber.toLowerCase();
-    return rangeLocFiltered.filter(sale => {
-      const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
-      return rec.includes(recLower);
-    });
-  }, [rangeLocFiltered, receiptNumber]);
+  // Receipt search removed per request
 
   const selectedLocationName = useMemo(() => {
     if (!locationId) return 'All Locations';
@@ -146,7 +169,7 @@ export default function SalesReportMobile() {
           </div>
         </div>
 
-        <input type="text" value={receiptNumber} onChange={e => setReceiptNumber(e.target.value)} placeholder="Receipt #" className="full" />
+        {/* Receipt # field removed */}
       </div>
 
       {/* Summary by currency: computed from date/location filters only (not receipt) */}
@@ -154,11 +177,17 @@ export default function SalesReportMobile() {
         const salesTotals = {}; // completed sales
         const laybyPaidTotals = {}; // paid on layby (down + payments)
         const laybyDueTotals = {}; // remaining on layby
+        const costTotals = {}; // COGS for completed sales
         rangeLocFiltered.forEach(sale => {
           const curr = sale.currency || 'N/A';
           const status = (sale.status || '').toLowerCase();
           if (status === 'completed') {
             salesTotals[curr] = (salesTotals[curr] || 0) + (Number(sale.total_amount) || 0);
+            // add costs for this sale across its item currencies
+            const costByCurr = salesCostMap[Number(sale.id)] || {};
+            Object.entries(costByCurr).forEach(([c, v]) => {
+              costTotals[c] = (costTotals[c] || 0) + (Number(v) || 0);
+            });
           } else if (status === 'layby') {
             const paid = getPaidAmount(sale);
             const due = getPendingAmount(sale);
@@ -170,6 +199,7 @@ export default function SalesReportMobile() {
           ...Object.keys(salesTotals),
           ...Object.keys(laybyPaidTotals),
           ...Object.keys(laybyDueTotals),
+          ...Object.keys(costTotals),
         ]));
         const combinedTotals = Object.fromEntries(
           currencies.map(c => [c, (salesTotals[c] || 0) + (laybyPaidTotals[c] || 0)])
@@ -184,6 +214,7 @@ export default function SalesReportMobile() {
                   <div key={curr} className="sr-mobile-summary-card">
                     <div className="curr">{curr}</div>
                     <div className="row total"><span>Sales + Completed Laybys</span><b>{curr} {combinedTotals[curr].toLocaleString()}</b></div>
+                    <div className="row"><span>Total Cost (Sales)</span><b>{costTotals[curr] ? `${curr} ${costTotals[curr].toLocaleString()}` : '-'}</b></div>
                   </div>
                 ))}
               </div>
@@ -196,6 +227,7 @@ export default function SalesReportMobile() {
                   <div className="row"><span>Total Sales</span><b>{curr} {(salesTotals[curr] || 0).toLocaleString()}</b></div>
                   <div className="row"><span>Completed Laybys</span><b>{curr} {(laybyPaidTotals[curr] || 0).toLocaleString()}</b></div>
                   <div className="row"><span>Laybys Due</span><b>{laybyDueTotals[curr] ? `${curr} ${laybyDueTotals[curr].toLocaleString()}` : '-'}</b></div>
+                  <div className="row"><span>Total Cost (Sales)</span><b>{costTotals[curr] ? `${curr} ${costTotals[curr].toLocaleString()}` : '-'}</b></div>
                   <div className="row total"><span>Sales + Completed Laybys</span><b>{curr} {combinedTotals[curr].toLocaleString()}</b></div>
                 </div>
               ))}
@@ -203,10 +235,6 @@ export default function SalesReportMobile() {
           </div>
         );
       })()}
-
-      {receiptNumber && receiptMatches.length === 0 && (
-        <div className="sr-hint">No matching receipts found.</div>
-      )}
 
       <div className="sr-mobile-actions">
         <button onClick={() => window.history.back()}>Back</button>

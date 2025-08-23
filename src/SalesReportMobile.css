@@ -6,6 +6,7 @@
   padding: calc(env(safe-area-inset-top, 0px) + 10px) 0 calc(env(safe-area-inset-bottom, 0px) + 40px) 0;
   font-family: 'Segoe UI', Arial, sans-serif;
   overflow-x: hidden;
+  overscroll-behavior-y: contain; /* prevent pull-to-refresh on Android browsers */
 }
 .sr-mobile-filters {
   position: sticky;
@@ -37,7 +38,7 @@
 .sr-mobile-table-wrap {
   display: none; /* table removed */
 }
-.sr-hint { color: #9aa4b2; text-align: center; padding: 12px 3vw; }
+/* .sr-hint removed with receipt search */
 .sr-mobile-actions {
   display: flex;
   gap: 10px;
