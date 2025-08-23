@@ -35,6 +35,7 @@ function Dashboard() {
   const [dueTotals, setDueTotals] = useState({ K: 0, USD: 0 });
   const [lastStockDate, setLastStockDate] = useState(null);
   const [totalSalesK, setTotalSalesK] = useState(0);
+  const [totalSalesUSD, setTotalSalesUSD] = useState(0);
   const [incompleteCount, setIncompleteCount] = useState(0);
   const { stats: sharedStats } = useStatistics({ dateFrom, dateTo, locationFilter });
   const [showReset, setShowReset] = useState(false);
@@ -213,7 +214,7 @@ useEffect(() => {
       };
     }, [computeLaybyDueTotals]);
 
-  // Fetch live stats for dashboard: inventory totals, layby dues, last stocktake date, total sales (K)
+  // Fetch live stats for dashboard: inventory totals, layby dues, last stocktake date, total sales (K, $)
   useEffect(() => {
     async function fetchStats() {
       // Helper to resolve a location filter ID (string id or name)
@@ -275,10 +276,55 @@ useEffect(() => {
         setLastStockDate(lastOpen && lastOpen.length > 0 ? lastOpen[0].started_at : null);
       }
 
-    // 4) Total Sales (K) using shared stats
-    const salesByCurrency = sharedStats?.salesByCurrency || {};
-    const sumK = Object.entries(salesByCurrency).reduce((acc, [cur, amt]) => acc + ((cur.toUpperCase() === 'K') ? Number(amt) : 0), 0);
-    setTotalSalesK(sumK);
+    // 4) Total Sales (K, $) = Completed Sales + Completed Laybys (paid)
+    try {
+      let sQuery = supabase
+        .from('sales')
+        .select('id, total_amount, status, sale_date, currency, location_id, down_payment');
+      if (dateFrom) sQuery = sQuery.gte('sale_date', dateFrom);
+      if (dateTo) sQuery = sQuery.lte('sale_date', dateTo);
+      if (locationId) sQuery = sQuery.eq('location_id', locationId);
+      const { data: salesRows } = await sQuery;
+      const completedByCur = { K: 0, USD: 0 };
+      const laybyIds = [];
+      (salesRows || []).forEach(s => {
+        const curRaw = s.currency || 'K';
+        const cur = (curRaw === '$' || String(curRaw).toUpperCase() === 'USD') ? 'USD' : 'K';
+        if ((s.status || '').toLowerCase() === 'completed') {
+          completedByCur[cur] += Number(s.total_amount || 0);
+        } else if ((s.status || '').toLowerCase() === 'layby') {
+          laybyIds.push(Number(s.id));
+        }
+      });
+      let paidMap = {};
+      if (laybyIds.length) {
+        const { data: payRows } = await supabase
+          .from('sales_payments')
+          .select('sale_id, amount')
+          .in('sale_id', laybyIds);
+        paidMap = (payRows || []).reduce((acc, p) => {
+          const sid = Number(p.sale_id);
+          acc[sid] = (acc[sid] || 0) + Number(p.amount || 0);
+          return acc;
+        }, {});
+      }
+      const laybyPaidByCur = { K: 0, USD: 0 };
+      (salesRows || []).forEach(s => {
+        if ((s.status || '').toLowerCase() !== 'layby') return;
+        const curRaw = s.currency || 'K';
+        const cur = (curRaw === '$' || String(curRaw).toUpperCase() === 'USD') ? 'USD' : 'K';
+        const down = Number(s.down_payment || 0);
+        const paid = down + (paidMap[Number(s.id)] || 0);
+        laybyPaidByCur[cur] += paid;
+      });
+      const totalK = (completedByCur.K || 0) + (laybyPaidByCur.K || 0);
+      const totalUSD = (completedByCur.USD || 0) + (laybyPaidByCur.USD || 0);
+      setTotalSalesK(totalK);
+      setTotalSalesUSD(totalUSD);
+    } catch (_) {
+      setTotalSalesK(0);
+      setTotalSalesUSD(0);
+    }
 
   // 5) Incomplete Packages count (filtered by location when selected)
   let ipQuery = supabase.from('incomplete_packages').select('id', { count: 'exact', head: true });
@@ -612,10 +658,16 @@ useEffect(() => {
                 value: dueTotals.USD.toLocaleString() + ' $'
               },
               {
-                key: 'Total Sales Stat',
+                key: 'Total Sales (K) Stat',
                 icon: <FaChartLine size={28} color="#FFD700" />,
                 title: 'Total Sales',
                 value: totalSalesK.toLocaleString() + ' K'
+              },
+              {
+                key: 'Total Sales ($) Stat',
+                icon: <FaChartLine size={28} color="#FFD700" />,
+                title: 'Total Sales ($)',
+                value: totalSalesUSD.toLocaleString() + ' $'
               },
               {
                 key: 'Incomplete Packages Stat',
