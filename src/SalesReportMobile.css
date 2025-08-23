@@ -35,24 +35,9 @@
 .sr-mobile-filters .date-input .icon { font-size: 16px; opacity: 0.9; }
 .sr-mobile-filters .date-input input { flex: 1; }
 .sr-mobile-table-wrap {
-  overflow-x: auto;
-  padding: 0 2vw;
+  display: none; /* table removed */
 }
-.sr-mobile-table {
-  width: 820px; /* fixed logical width to allow horizontal scroll */
-  border-collapse: collapse;
-  background: #222;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.sr-mobile-table th, .sr-mobile-table td {
-  padding: 10px 8px;
-  border-bottom: 1px solid #333;
-  text-align: left;
-  white-space: nowrap;
-  color: #fff;
-}
-.sr-mobile-table th { color: #00bfff; }
+.sr-hint { color: #9aa4b2; text-align: center; padding: 12px 3vw; }
 .sr-mobile-actions {
   display: flex;
   gap: 10px;
@@ -75,6 +60,8 @@
   font-weight: 700;
   margin-bottom: 8px;
 }
+.sr-mobile-grand { margin-bottom: 8px; }
+.sr-mobile-grand .title { font-weight: 800; color: #00e676; margin: 0 0 6px 0; }
 .sr-mobile-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

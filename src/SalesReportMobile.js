@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import supabase from './supabase';
 import './SalesReportMobile.css';
 
-const noResultsStyle = { color: '#9aa4b2', textAlign: 'center' };
-
 export default function SalesReportMobile() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -21,21 +19,29 @@ export default function SalesReportMobile() {
       const [{ data: salesRows }, { data: locs }] = await Promise.all([
         supabase
           .from('sales')
-          .select('*, customer:customer_id(id,name), location:location_id(id, location_name, name)'),
-        supabase.from('locations').select('id, location_name, name'),
+          .select('*, customer:customer_id(id,name), location:location_id(id, name)'),
+        supabase.from('locations').select('id, name'),
       ]);
       setSales(salesRows || []);
 
-      // Prefer explicit locations; if empty, derive from sales join as fallback
-      const derivedLocs = Array.from(
-        new Map(
-          (salesRows || [])
-            .map(r => r.location || {})
-            .filter(l => l && l.id)
-            .map(l => [l.id, { id: l.id, location_name: l.location_name, name: l.name }])
-        ).values()
+      // Build a robust locations list: prefer fetched locs; else derive from sales (location_id + joined names)
+      const locsById = new Map((locs || []).map(l => [String(l.id), { id: l.id, name: l.name }]));
+      const joinedNameById = new Map(
+        (salesRows || [])
+          .filter(r => r.location && r.location.id)
+          .map(r => [String(r.location.id), r.location.name])
       );
-      setLocations((locs && locs.length ? locs : derivedLocs) || []);
+      const saleLocIds = Array.from(
+        new Set((salesRows || []).map(r => r.location_id).filter(Boolean).map(id => String(id)))
+      );
+      const derivedLocs = saleLocIds.map(id => {
+        const fromFetch = locsById.get(id);
+        if (fromFetch) return fromFetch;
+        const joinedName = joinedNameById.get(id);
+        return { id, name: joinedName || `#${id.slice(0, 8)}` };
+      });
+      const finalLocs = (locs && locs.length) ? locs.map(l => ({ id: l.id, name: l.name })) : derivedLocs;
+      setLocations(finalLocs || []);
 
       // Build layby payment/total maps for quick lookup
       const saleIds = Array.from(new Set((salesRows || []).map(r => Number(r.id)).filter(id => !isNaN(id))));
@@ -76,9 +82,12 @@ export default function SalesReportMobile() {
   const filtered = useMemo(() => {
     // Only show results when Receipt # is provided
     if (!receiptNumber) return [];
+    const fromTime = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : null;
+    const toTime = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null;
     return (sales || []).filter(sale => {
-      if (dateFrom && sale.sale_date < dateFrom) return false;
-      if (dateTo && sale.sale_date > dateTo) return false;
+      const saleTime = sale.sale_date ? new Date(sale.sale_date).getTime() : null;
+      if (fromTime !== null && (saleTime === null || saleTime < fromTime)) return false;
+      if (toTime !== null && (saleTime === null || saleTime > toTime)) return false;
       if (locationId && String(getLocationId(sale)) !== String(locationId)) return false;
       const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
       if (!rec.includes(receiptNumber.toLowerCase())) return false;
@@ -109,7 +118,7 @@ export default function SalesReportMobile() {
         </select>
 
         <div className="date-field">
-            <span className="icon" aria-hidden="true">📅</span>
+          <label>From Date</label>
           <div className="date-input">
             <span className="icon" aria-hidden="true">📅</span>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
@@ -127,31 +136,53 @@ export default function SalesReportMobile() {
         <input type="text" value={receiptNumber} onChange={e => setReceiptNumber(e.target.value)} placeholder="Receipt #" className="full" />
       </div>
 
-      {/* Summary by currency moved above table; show Completed and Layby totals */}
+      {/* Summary by currency moved above table; show Completed, Completed Laybys (paid), Laybys Due, and Combined */}
       {filtered.length > 0 && (() => {
-        const completedTotals = {};
-        const laybyTotals = {};
+        const salesTotals = {}; // completed sales
+        const laybyPaidTotals = {}; // paid on layby (down + payments)
+        const laybyDueTotals = {}; // remaining on layby
         filtered.forEach(sale => {
           const curr = sale.currency || 'N/A';
           const status = (sale.status || '').toLowerCase();
           if (status === 'completed') {
-            completedTotals[curr] = (completedTotals[curr] || 0) + (Number(sale.total_amount) || 0);
+            salesTotals[curr] = (salesTotals[curr] || 0) + (Number(sale.total_amount) || 0);
           } else if (status === 'layby') {
-            // Sum the layby total amount
-            const total = Number(laybyTotalMap[Number(sale.id)] || sale.total_amount || 0);
-            laybyTotals[curr] = (laybyTotals[curr] || 0) + total;
+            const paid = getPaidAmount(sale);
+            const due = getPendingAmount(sale);
+            laybyPaidTotals[curr] = (laybyPaidTotals[curr] || 0) + paid;
+            laybyDueTotals[curr] = (laybyDueTotals[curr] || 0) + due;
           }
         });
-        const currencies = Array.from(new Set([...Object.keys(completedTotals), ...Object.keys(laybyTotals)]));
+        const currencies = Array.from(new Set([
+          ...Object.keys(salesTotals),
+          ...Object.keys(laybyPaidTotals),
+          ...Object.keys(laybyDueTotals),
+        ]));
+        const combinedTotals = Object.fromEntries(
+          currencies.map(c => [c, (salesTotals[c] || 0) + (laybyPaidTotals[c] || 0)])
+        );
         return (
           <div className="sr-mobile-summary">
+            <div className="sr-mobile-grand">
+              <div className="title">Grand Totals</div>
+              <div className="sr-mobile-summary-grid">
+                {currencies.map(curr => (
+                  <div key={curr} className="sr-mobile-summary-card">
+                    <div className="curr">{curr}</div>
+                    <div className="row total"><span>Sales + Completed Laybys</span><b>{curr} {combinedTotals[curr].toLocaleString()}</b></div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="sr-mobile-summary-title">Totals by Currency</div>
             <div className="sr-mobile-summary-grid">
               {currencies.map(curr => (
                 <div key={curr} className="sr-mobile-summary-card">
                   <div className="curr">{curr}</div>
-                  <div className="row"><span>Completed</span><b>{curr} {(completedTotals[curr] || 0).toLocaleString()}</b></div>
-                  <div className="row total"><span>Layby</span><b>{curr} {(laybyTotals[curr] || 0).toLocaleString()}</b></div>
+                  <div className="row"><span>Total Sales</span><b>{curr} {(salesTotals[curr] || 0).toLocaleString()}</b></div>
+                  <div className="row"><span>Completed Laybys</span><b>{curr} {(laybyPaidTotals[curr] || 0).toLocaleString()}</b></div>
+                  <div className="row"><span>Laybys Due</span><b>{laybyDueTotals[curr] ? `${curr} ${laybyDueTotals[curr].toLocaleString()}` : '-'}</b></div>
+                  <div className="row total"><span>Sales + Completed Laybys</span><b>{curr} {combinedTotals[curr].toLocaleString()}</b></div>
                 </div>
               ))}
             </div>
@@ -159,33 +190,9 @@ export default function SalesReportMobile() {
         );
       })()}
 
-      <div className="sr-mobile-table-wrap">
-        <table className="sr-mobile-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Receipt #</th>
-              <th>Customer</th>
-              <th>Total</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(sale => (
-              <tr key={sale.id}>
-                <td>{sale.sale_date ? new Date(sale.sale_date).toLocaleDateString() : ''}</td>
-                <td>{sale.receipt_number || sale.id}</td>
-                <td>{sale.customer?.name || ''}</td>
-              <tr><td colSpan={5} style={noResultsStyle}>{receiptNumber ? 'No results' : 'Enter a Receipt # to search'}</td></tr>
-                <td>{sale.status}</td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={5} style={{ color: '#9aa4b2', textAlign: 'center' }}>{receiptNumber ? 'No results' : 'Enter a Receipt # to search'}</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {filtered.length === 0 && (
+        <div className="sr-hint">{receiptNumber ? 'No matching receipts found.' : 'Enter a Receipt # to see totals.'}</div>
+      )}
 
       <div className="sr-mobile-actions">
         <button onClick={() => window.history.back()}>Back</button>
