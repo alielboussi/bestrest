@@ -56,6 +56,7 @@
 .sr-mobile-summary {
   padding: 12px 3vw 8px 3vw;
 }
+.sr-mobile-scope { color: #8fd7ff; margin: 0 0 6px 0; font-size: 13px; }
 .sr-mobile-summary-title {
   font-weight: 700;
   margin-bottom: 8px;

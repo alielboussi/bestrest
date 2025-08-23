@@ -16,6 +16,7 @@ export default function PriceLabelMobile() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selected, setSelected] = useState([]); // { type, id, data, qty }
+  const [isGenerating, setIsGenerating] = useState(false);
   // no bottom sheet; search stays at top
 
   useEffect(() => {
@@ -113,11 +114,13 @@ export default function PriceLabelMobile() {
   const hiddenRenderRef = useRef(null);
 
   const generatePdf = async () => {
+    if (isGenerating) return;
+    setIsGenerating(true);
     const container = hiddenRenderRef.current;
     if (!container) return;
     // Capture each A4 page (pair of labels) to keep layout identical to desktop at high resolution (~300 DPI)
     const labelNodes = Array.from(container.querySelectorAll('.a4-pair'));
-    if (labelNodes.length === 0) return;
+    if (labelNodes.length === 0) { setIsGenerating(false); return; }
 
     const pageWidthMm = 210;
     const pageHeightMm = 297;
@@ -126,8 +129,8 @@ export default function PriceLabelMobile() {
     const targetWidthPx = Math.round(mmToInch(pageWidthMm) * targetDpi);  // ≈ 2480
     const targetHeightPx = Math.round(mmToInch(pageHeightMm) * targetDpi); // ≈ 3508
 
-    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    doc.setProperties({ title: 'Price Labels' });
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  doc.setProperties({ title: 'Price Labels' });
 
     let first = true;
     for (const node of labelNodes) {
@@ -151,7 +154,50 @@ export default function PriceLabelMobile() {
       doc.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm);
     }
 
-    doc.save('price-labels.pdf');
+    try {
+      // Build a Blob of the PDF
+      const pdfBlob = doc.output('blob');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `price-labels-${ts}.pdf`;
+      const path = `mobile/${filename}`;
+
+      // Upload to Supabase Storage (labels bucket)
+      const { error: upErr } = await supabase.storage
+        .from('labels')
+        .upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf', cacheControl: '3600' });
+      if (upErr) throw upErr;
+
+      // Get a public URL (if bucket is public) or a signed URL
+      let url = supabase.storage.from('labels').getPublicUrl(path)?.data?.publicUrl || '';
+      if (!url) {
+        const { data: signed, error: signErr } = await supabase.storage.from('labels').createSignedUrl(path, 60 * 60);
+        if (signErr) throw signErr;
+        url = signed.signedUrl;
+      }
+
+      // Trigger download on the phone; fetch to bypass cross-origin download attribute limitations
+      try {
+        const resp = await fetch(url);
+        const fetchedBlob = await resp.blob();
+        const dlUrl = URL.createObjectURL(fetchedBlob);
+        const a = document.createElement('a');
+        a.href = dlUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(dlUrl);
+      } catch (_) {
+        // Fallback to local save if direct fetch-download fails
+        doc.save(filename);
+      }
+    } catch (err) {
+      console.error('PDF upload/download error:', err);
+      // Last-resort fallback to local download
+      try { doc.save('price-labels.pdf'); } catch (_) {}
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // Exact desktop label card (uses PriceLabels.css classes)
@@ -273,7 +319,9 @@ export default function PriceLabelMobile() {
       </section>
 
       <footer className="plm-actions">
-        <button disabled={expanded.length === 0} className="plm-btn primary" onClick={generatePdf}>Download PDF</button>
+        <button disabled={expanded.length === 0 || isGenerating} className="plm-btn primary" onClick={generatePdf} aria-busy={isGenerating}>
+          {isGenerating ? 'Saving…' : 'Download PDF'}
+        </button>
       </footer>
     </div>
   );

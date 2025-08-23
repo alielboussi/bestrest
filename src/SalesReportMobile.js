@@ -79,9 +79,8 @@ export default function SalesReportMobile() {
     return sale.location_id || (sale.location && sale.location.id) || '';
   }
 
-  const filtered = useMemo(() => {
-    // Only show results when Receipt # is provided
-    if (!receiptNumber) return [];
+  const rangeLocFiltered = useMemo(() => {
+    // Dataset for totals: filter only by date and location
     const fromTime = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : null;
     const toTime = dateTo ? new Date(dateTo + 'T23:59:59').getTime() : null;
     return (sales || []).filter(sale => {
@@ -89,11 +88,25 @@ export default function SalesReportMobile() {
       if (fromTime !== null && (saleTime === null || saleTime < fromTime)) return false;
       if (toTime !== null && (saleTime === null || saleTime > toTime)) return false;
       if (locationId && String(getLocationId(sale)) !== String(locationId)) return false;
-      const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
-      if (!rec.includes(receiptNumber.toLowerCase())) return false;
       return true;
     });
-  }, [sales, dateFrom, dateTo, locationId, receiptNumber]);
+  }, [sales, dateFrom, dateTo, locationId]);
+
+  const receiptMatches = useMemo(() => {
+    // Optional receipt lookup: independent of totals
+    if (!receiptNumber) return [];
+    const recLower = receiptNumber.toLowerCase();
+    return rangeLocFiltered.filter(sale => {
+      const rec = (String(sale.receipt_number || '') || String(sale.id || '')).toLowerCase();
+      return rec.includes(recLower);
+    });
+  }, [rangeLocFiltered, receiptNumber]);
+
+  const selectedLocationName = useMemo(() => {
+    if (!locationId) return 'All Locations';
+    const found = (locations || []).find(l => String(l.id) === String(locationId));
+    return found?.name || `Location ${String(locationId).slice(0, 8)}`;
+  }, [locations, locationId]);
 
   // Helpers for layby amounts
   function getPaidAmount(sale) {
@@ -136,12 +149,12 @@ export default function SalesReportMobile() {
         <input type="text" value={receiptNumber} onChange={e => setReceiptNumber(e.target.value)} placeholder="Receipt #" className="full" />
       </div>
 
-      {/* Summary by currency moved above table; show Completed, Completed Laybys (paid), Laybys Due, and Combined */}
-      {filtered.length > 0 && (() => {
+      {/* Summary by currency: computed from date/location filters only (not receipt) */}
+      {(() => {
         const salesTotals = {}; // completed sales
         const laybyPaidTotals = {}; // paid on layby (down + payments)
         const laybyDueTotals = {}; // remaining on layby
-        filtered.forEach(sale => {
+        rangeLocFiltered.forEach(sale => {
           const curr = sale.currency || 'N/A';
           const status = (sale.status || '').toLowerCase();
           if (status === 'completed') {
@@ -163,6 +176,7 @@ export default function SalesReportMobile() {
         );
         return (
           <div className="sr-mobile-summary">
+            <div className="sr-mobile-scope">Scope: {selectedLocationName}</div>
             <div className="sr-mobile-grand">
               <div className="title">Grand Totals</div>
               <div className="sr-mobile-summary-grid">
@@ -190,8 +204,8 @@ export default function SalesReportMobile() {
         );
       })()}
 
-      {filtered.length === 0 && (
-        <div className="sr-hint">{receiptNumber ? 'No matching receipts found.' : 'Enter a Receipt # to see totals.'}</div>
+      {receiptNumber && receiptMatches.length === 0 && (
+        <div className="sr-hint">No matching receipts found.</div>
       )}
 
       <div className="sr-mobile-actions">
