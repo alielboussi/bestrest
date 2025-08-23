@@ -155,8 +155,9 @@ export default function PriceLabelMobile() {
       }
     };
 
+    let doc;
     try {
-      const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
       doc.setProperties({ title: 'Price Labels' });
 
       let first = true;
@@ -215,7 +216,7 @@ export default function PriceLabelMobile() {
     } catch (err) {
       console.error('PDF upload/download error:', err);
       // Last-resort fallback to local download
-      try { doc.save('price-labels.pdf'); } catch (_) {}
+      try { if (doc) doc.save('price-labels.pdf'); } catch (_) {}
     } finally {
       setIsGenerating(false);
     }
