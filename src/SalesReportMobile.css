@@ -28,6 +28,12 @@
   width: 100%;
   box-sizing: border-box;
 }
+/* Date field with label and calendar icon */
+.sr-mobile-filters .date-field { display: flex; flex-direction: column; gap: 6px; }
+.sr-mobile-filters .date-field label { font-size: 12px; color: #8fd7ff; padding-left: 2px; }
+.sr-mobile-filters .date-input { display: flex; align-items: center; gap: 8px; }
+.sr-mobile-filters .date-input .icon { font-size: 16px; opacity: 0.9; }
+.sr-mobile-filters .date-input input { flex: 1; }
 .sr-mobile-table-wrap {
   overflow-x: auto;
   padding: 0 2vw;
@@ -63,7 +69,7 @@
 }
 /* Summary cards */
 .sr-mobile-summary {
-  padding: 12px 3vw 4px 3vw;
+  padding: 12px 3vw 8px 3vw;
 }
 .sr-mobile-summary-title {
   font-weight: 700;
